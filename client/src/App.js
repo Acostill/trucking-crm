@@ -1,0 +1,306 @@
+import React, { useState } from 'react';
+import './App.css';
+import QuoteCard from './components/QuoteCard';
+
+function App() {
+  const [pickupCity, setPickupCity] = useState('Chicago');
+  const [pickupState, setPickupState] = useState('IL');
+  const [pickupZip, setPickupZip] = useState('60605');
+  const [pickupCountry, setPickupCountry] = useState('US');
+  const [pickupDate, setPickupDate] = useState('2024-12-31T16:00:00.000Z');
+
+  const [deliveryCity, setDeliveryCity] = useState('Atlanta');
+  const [deliveryState, setDeliveryState] = useState('GA');
+  const [deliveryZip, setDeliveryZip] = useState('30303');
+  const [deliveryCountry, setDeliveryCountry] = useState('US');
+
+  const [piecesUnit, setPiecesUnit] = useState('in');
+  const [piecesQuantity, setPiecesQuantity] = useState('2');
+  const [part1Length, setPart1Length] = useState('74');
+  const [part1Width, setPart1Width] = useState('51');
+  const [part1Height, setPart1Height] = useState('67');
+  const [part2Length, setPart2Length] = useState('75');
+  const [part2Width, setPart2Width] = useState('51');
+  const [part2Height, setPart2Height] = useState('67');
+
+  const [weightUnit, setWeightUnit] = useState('lbs');
+  const [weightValue, setWeightValue] = useState('999');
+
+  const [hazardousUnNumbersText, setHazardousUnNumbersText] = useState('UN3508, UN3530, UN3536, UN3548');
+  const [accessorialCodesText, setAccessorialCodesText] = useState('CALLDEL, DEBRISREM, UPK');
+
+  const [shipmentId, setShipmentId] = useState('1');
+  const [referenceNumber, setReferenceNumber] = useState('Reference12345');
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+
+  function buildPayload() {
+    return {
+      pickup: {
+        location: {
+          city: pickupCity,
+          state: pickupState,
+          zip: pickupZip,
+          country: pickupCountry
+        },
+        date: pickupDate
+      },
+      delivery: {
+        location: {
+          city: deliveryCity,
+          state: deliveryState,
+          zip: deliveryZip,
+          country: deliveryCountry
+        }
+      },
+      pieces: {
+        unit: piecesUnit,
+        quantity: Number(piecesQuantity),
+        parts: [
+          {
+            length: Number(part1Length),
+            width: Number(part1Width),
+            height: Number(part1Height)
+          },
+          {
+            length: Number(part2Length),
+            width: Number(part2Width),
+            height: Number(part2Height)
+          }
+        ]
+      },
+      weight: {
+        unit: weightUnit,
+        value: Number(weightValue)
+      },
+      hazardousMaterial: {
+        unNumbers: hazardousUnNumbersText
+          .split(',')
+          .map(function(s) { return s.trim(); })
+          .filter(function(s) { return s.length > 0; })
+      },
+      accessorialCodes: accessorialCodesText
+        .split(',')
+        .map(function(s) { return s.trim(); })
+        .filter(function(s) { return s.length > 0; }),
+      shipmentId: shipmentId,
+      referenceNumber: referenceNumber
+    };
+  }
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    var payload = buildPayload();
+
+    try {
+      var response = await fetch('http://localhost:3001/calculate-rate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      var contentType = response.headers.get('content-type') || '';
+      var data = contentType.indexOf('application/json') > -1
+        ? await response.json()
+        : await response.text();
+
+      if (!response.ok) {
+        throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
+      }
+
+      setResult(data);
+    } catch (err) {
+      setError(err && err.message ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="shell">
+      <div className="topbar">
+        <div className="brand">
+          <div className="brand-badge"></div>
+          Calculate Rate
+        </div>
+      </div>
+      <div className="container">
+        <div className="card">
+          <div className="card-header">
+            <h2 className="title">Shipment details</h2>
+            <div className="subtitle">Enter pickup, delivery and freight info</div>
+          </div>
+          <div className="card-body">
+            <form onSubmit={onSubmit} className="form-grid">
+        <fieldset>
+          <legend>Pickup</legend>
+          <div className="row-4">
+            <label>
+              City
+              <input value={pickupCity} onChange={function(e){ setPickupCity(e.target.value); }} />
+            </label>
+            <label>
+              State
+              <input value={pickupState} onChange={function(e){ setPickupState(e.target.value); }} />
+            </label>
+            <label>
+              Zip
+              <input value={pickupZip} onChange={function(e){ setPickupZip(e.target.value); }} />
+            </label>
+            <label>
+              Country
+              <input value={pickupCountry} onChange={function(e){ setPickupCountry(e.target.value); }} />
+            </label>
+          </div>
+          <label>
+            Date (ISO)
+            <input value={pickupDate} onChange={function(e){ setPickupDate(e.target.value); }} />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Delivery</legend>
+          <div className="row-4">
+            <label>
+              City
+              <input value={deliveryCity} onChange={function(e){ setDeliveryCity(e.target.value); }} />
+            </label>
+            <label>
+              State
+              <input value={deliveryState} onChange={function(e){ setDeliveryState(e.target.value); }} />
+            </label>
+            <label>
+              Zip
+              <input value={deliveryZip} onChange={function(e){ setDeliveryZip(e.target.value); }} />
+            </label>
+            <label>
+              Country
+              <input value={deliveryCountry} onChange={function(e){ setDeliveryCountry(e.target.value); }} />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Pieces</legend>
+          <div className="row-2">
+            <label>
+              Unit
+              <input value={piecesUnit} onChange={function(e){ setPiecesUnit(e.target.value); }} />
+            </label>
+            <label>
+              Quantity
+              <input type="number" value={piecesQuantity} onChange={function(e){ setPiecesQuantity(e.target.value); }} />
+            </label>
+          </div>
+          <div>
+            <div className="section-title">Part 1</div>
+            <div className="row-3">
+              <label>
+                Length
+                <input type="number" value={part1Length} onChange={function(e){ setPart1Length(e.target.value); }} />
+              </label>
+              <label>
+                Width
+                <input type="number" value={part1Width} onChange={function(e){ setPart1Width(e.target.value); }} />
+              </label>
+              <label>
+                Height
+                <input type="number" value={part1Height} onChange={function(e){ setPart1Height(e.target.value); }} />
+              </label>
+            </div>
+          </div>
+          <div>
+            <div className="section-title">Part 2</div>
+            <div className="row-3">
+              <label>
+                Length
+                <input type="number" value={part2Length} onChange={function(e){ setPart2Length(e.target.value); }} />
+              </label>
+              <label>
+                Width
+                <input type="number" value={part2Width} onChange={function(e){ setPart2Width(e.target.value); }} />
+              </label>
+              <label>
+                Height
+                <input type="number" value={part2Height} onChange={function(e){ setPart2Height(e.target.value); }} />
+              </label>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Weight</legend>
+          <div className="row-2">
+            <label>
+              Unit
+              <input value={weightUnit} onChange={function(e){ setWeightUnit(e.target.value); }} />
+            </label>
+            <label>
+              Value
+              <input type="number" value={weightValue} onChange={function(e){ setWeightValue(e.target.value); }} />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Hazardous Material</legend>
+          <label>
+            UN Numbers (comma separated)
+            <input value={hazardousUnNumbersText} onChange={function(e){ setHazardousUnNumbersText(e.target.value); }} />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Accessorial Codes</legend>
+          <label>
+            Codes (comma separated)
+            <input value={accessorialCodesText} onChange={function(e){ setAccessorialCodesText(e.target.value); }} />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Identifiers</legend>
+          <div className="row-2">
+            <label>
+              Shipment ID
+              <input value={shipmentId} onChange={function(e){ setShipmentId(e.target.value); }} />
+            </label>
+            <label>
+              Reference Number
+              <input value={referenceNumber} onChange={function(e){ setReferenceNumber(e.target.value); }} />
+            </label>
+          </div>
+        </fieldset>
+
+        <div className="actions">
+          <button className="btn" type="submit" disabled={loading}>
+            {loading ? 'Submitting…' : 'Submit'}
+          </button>
+        </div>
+      </form>
+
+      <div className="status">
+        {error && (
+          <div className="error">Error: {error}</div>
+        )}
+        {result && typeof result === 'object' && !Array.isArray(result) && (
+          <QuoteCard quote={result} />
+        )}
+        {result && (typeof result === 'string' || Array.isArray(result)) && (
+          <div className="response">{typeof result === 'string' ? result : JSON.stringify(result)}</div>
+        )}
+      </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
