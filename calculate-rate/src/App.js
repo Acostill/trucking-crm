@@ -35,6 +35,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [forwardResult, setForwardResult] = useState(null);
 
   function buildPayload() {
     return {
@@ -95,26 +96,120 @@ function App() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setForwardResult(null);
 
     var payload = buildPayload();
 
     try {
-      var response = await fetch('http://localhost:3001/calculate-rate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      var [calcResp, fwdResp] = await Promise.all([
+        fetch('http://localhost:3001/calculate-rate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }),
+        fetch('http://localhost:3001/forwardair-quote', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+      ]);
 
-      var contentType = response.headers.get('content-type') || '';
-      var data = contentType.indexOf('application/json') > -1
-        ? await response.json()
-        : await response.text();
-
-      if (!response.ok) {
-        throw new Error(typeof data === 'string' ? data : JSON.stringify(data));
+      // Calculate-rate handling
+      var calcCT = calcResp.headers.get('content-type') || '';
+      var calcData = calcCT.indexOf('application/json') > -1
+        ? await calcResp.json()
+        : await calcResp.text();
+      if (!calcResp.ok) {
+        throw new Error(typeof calcData === 'string' ? calcData : JSON.stringify(calcData));
       }
+      setResult(calcData);
 
-      setResult(data);
+      // Forward Air handling
+      var fwdCT = fwdResp.headers.get('content-type') || '';
+      var fwdData = fwdCT.indexOf('application/json') > -1
+        ? await fwdResp.json()
+        : await fwdResp.text();
+      if (!fwdResp.ok) {
+        throw new Error(typeof fwdData === 'string' ? fwdData : JSON.stringify(fwdData));
+      }
+      // Map Forward Air response into QuoteCard-friendly shape when possible
+      function coerceNumber(value) {
+        if (typeof value === 'number') return value;
+        if (typeof value === 'string') {
+          var n = Number(value.replace(/[^0-9.\-]/g, ''));
+          return Number.isNaN(n) ? undefined : n;
+        }
+        return undefined;
+      }
+      function findNumberByKeys(obj, keyCandidates) {
+        if (!obj || typeof obj !== 'object') return undefined;
+        for (var i = 0; i < keyCandidates.length; i++) {
+          var key = keyCandidates[i];
+          for (var k in obj) {
+            if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+            if (k.toLowerCase().indexOf(key.toLowerCase()) > -1) {
+              var num = coerceNumber(obj[k]);
+              if (typeof num === 'number') return num;
+            }
+          }
+        }
+        for (var k2 in obj) {
+          if (!Object.prototype.hasOwnProperty.call(obj, k2)) continue;
+          var v = obj[k2];
+          if (v && typeof v === 'object') {
+            var found = findNumberByKeys(v, keyCandidates);
+            if (typeof found === 'number') return found;
+          }
+        }
+        return undefined;
+      }
+      function findArrayByKeys(obj, keyCandidates) {
+        if (!obj || typeof obj !== 'object') return undefined;
+        for (var i = 0; i < keyCandidates.length; i++) {
+          var key = keyCandidates[i];
+          for (var k in obj) {
+            if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+            if (k.toLowerCase().indexOf(key.toLowerCase()) > -1 && Array.isArray(obj[k])) {
+              return obj[k];
+            }
+          }
+        }
+        for (var k2 in obj) {
+          if (!Object.prototype.hasOwnProperty.call(obj, k2)) continue;
+          var v = obj[k2];
+          if (v && typeof v === 'object') {
+            var found = findArrayByKeys(v, keyCandidates);
+            if (Array.isArray(found)) return found;
+          }
+        }
+        return undefined;
+      }
+      var mapped = {
+        rate: {
+          priceLineHaul: findNumberByKeys(fwdData, ['linehaul', 'line_haul', 'base', 'basecharge'])
+        },
+        priceTotal: findNumberByKeys(fwdData, ['total', 'grandtotal', 'quoteamount', 'amountdue']),
+        priceAccessorials: []
+      };
+      var accessorialArrays = findArrayByKeys(fwdData, ['accessorial', 'accessorials', 'charges', 'surcharges', 'fees']);
+      if (Array.isArray(accessorialArrays)) {
+        mapped.priceAccessorials = accessorialArrays.map(function(item) {
+          var price = findNumberByKeys(item, ['price', 'amount', 'charge']);
+          var desc = (function(it){
+            if (!it || typeof it !== 'object') return undefined;
+            if (typeof it.description === 'string') return it.description;
+            for (var kk in it) {
+              if (!Object.prototype.hasOwnProperty.call(it, kk)) continue;
+              if (kk.toLowerCase().indexOf('description') > -1 || kk.toLowerCase().indexOf('code') > -1) {
+                if (typeof it[kk] === 'string') return it[kk];
+              }
+            }
+            return undefined;
+          })(item);
+          return { description: desc || 'Accessorial', price: price || 0 };
+        });
+      }
+      setForwardResult(mapped);
     } catch (err) {
       setError(err && err.message ? err.message : String(err));
     } finally {
@@ -291,6 +386,9 @@ function App() {
         )}
         {result && typeof result === 'object' && !Array.isArray(result) && (
           <QuoteCard quote={result} />
+        )}
+        {forwardResult && typeof forwardResult === 'object' && !Array.isArray(forwardResult) && (
+          <QuoteCard quote={forwardResult} />
         )}
         {result && (typeof result === 'string' || Array.isArray(result)) && (
           <div className="response">{typeof result === 'string' ? result : JSON.stringify(result)}</div>
