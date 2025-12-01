@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import './App.css';
+import { BrowserRouter, Link, Route, Routes } from 'react-router-dom';
 import NewLoadModal from './components/NewLoadModal';
 import LoadsTable from './components/LoadsTable';
 import { useEffect } from 'react';
 import AuthForm from './components/AuthForm';
+import QueuePage from './pages/QueuePage';
 
 function App() {
   const [showModal, setShowModal] = useState(false);
@@ -81,36 +83,45 @@ function App() {
 
   return (
     <div className="shell">
-      <div className="topbar">
-        <div className="brand">
-          <div className="brand-badge"></div>
-          Active Loads
-        </div>
-        <div>
-          <span style={{ marginRight: 12 }}>{user.email}</span>
-          <button className="btn btn-secondary" onClick={handleSignOut}>Sign out</button>
-        </div>
-      </div>
-      <div className="container">
-        <div className="card">
-          <div className="card-header">
-            <h2 className="title">Manage loads</h2>
-            <div className="subtitle">Create and track active loads</div>
+      <BrowserRouter>
+        <div className="topbar">
+          <div className="brand">
+            <div className="brand-badge"></div>
+            Loads
           </div>
-          <div className="card-body">
-            <div className="actions">
-              <button className="btn" onClick={() => setShowModal(true)}>New Active Load</button>
-            </div>
-            <LoadsTable rows={rows} />
+          <div className="actions">
+            <Link className="btn" to="/">Active</Link>
+            <Link className="btn" to="/queue">Queue</Link>
+            <span style={{ marginLeft: 12, marginRight: 12 }}>{user.email}</span>
+            <button className="btn btn-secondary" onClick={handleSignOut}>Sign out</button>
           </div>
         </div>
-      </div>
-      {showModal && (
-        <NewLoadModal
-          onClose={() => setShowModal(false)}
-          onSave={handleSave}
-        />
-      )}
+        <div className="container">
+          <Routes>
+            <Route path="/" element={
+              <div className="card">
+                <div className="card-header">
+                  <h2 className="title">Manage loads</h2>
+                  <div className="subtitle">Create and track active loads</div>
+                </div>
+                <div className="card-body">
+                  <div className="actions">
+                    <button className="btn" onClick={() => setShowModal(true)}>New Active Load</button>
+                  </div>
+                  <LoadsTable rows={rows} />
+                </div>
+              </div>
+            } />
+            <Route path="/queue" element={<QueuePage />} />
+          </Routes>
+        </div>
+        {showModal && (
+          <NewLoadModal
+            onClose={() => setShowModal(false)}
+            onSave={handleSave}
+          />
+        )}
+      </BrowserRouter>
     </div>
   );
 }

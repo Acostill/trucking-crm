@@ -96,7 +96,29 @@ router.post('/', async function(req, res, next) {
       data.delivery_notes
     ];
     var result = await db.query(insert, params);
-    res.status(201).json(toClientRow(result.rows[0]));
+    var saved = result.rows[0];
+
+    // Also persist to queue if new load is active and has a delivery date
+    try {
+      var normalizedStatus = (data.status || '').toLowerCase();
+      var isActive = !normalizedStatus || normalizedStatus === 'active' || normalizedStatus === 'open';
+      if (isActive && data.delivery_date) {
+        // Insert as queued; do nothing if an active queue row already exists
+        var qsql =
+          `INSERT INTO load_queue (load_number, delivery_date, status)
+           SELECT $1, $2::date, $3
+           WHERE NOT EXISTS (
+             SELECT 1 FROM load_queue WHERE load_number = $1 AND status IN ('queued','in_progress')
+           )`;
+        await db.query(qsql, [data.load_number, data.delivery_date, 'queued']);
+      }
+    } catch (queueErr) {
+      // eslint-disable-next-line no-console
+      console.warn('Failed to insert into load_queue:', queueErr && queueErr.message ? queueErr.message : queueErr);
+      // Do not fail the main request on queue failure
+    }
+
+    res.status(201).json(toClientRow(saved));
   } catch (err) {
     // Handle unique violations on load_number gracefully
     if (err && err.code === '23505') {

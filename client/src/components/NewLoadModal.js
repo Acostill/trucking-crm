@@ -13,7 +13,7 @@ function NewLoadModal({ onClose, onSave }) {
       loadNumber: '1001',
       billTo: 'Acme Corp',
       dispatcher: 'Dispatcher 1',
-      status: 'Open',
+      status: 'Active',
       type: 'Line Haul',
       rate: '1500',
       currency: 'USD',
@@ -92,6 +92,7 @@ function NewLoadModal({ onClose, onSave }) {
               <label>
                 Status
                 <select name="status" value={form.status} onChange={handleChange}>
+                  <option>Active</option>
                   <option>Open</option>
                   <option>Pending</option>
                   <option>Closed</option>
