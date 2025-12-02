@@ -10,6 +10,8 @@
   --primary-700: #474be7;
   --border: #1f2937;
   --ring: rgba(99, 102, 241, 0.35);
+  --success: #22c55e;
+  --danger: #ef4444;
 }
 
 html, body, #root {
@@ -106,12 +108,86 @@ body {
 }
 .btn:hover { transform: translateY(-1px); }
 .btn:disabled { opacity: 0.65; cursor: not-allowed; }
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  box-shadow: none;
+}
+.btn-secondary:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
 
 .actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
   margin-bottom: 12px;
+}
+
+.calculate-rate-page .form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.calculate-rate-page fieldset {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.calculate-rate-page legend {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.calculate-rate-page .row-2 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.calculate-rate-page .row-3 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calculate-rate-page .row-4 {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.calculate-rate-page label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.calculate-rate-page input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #0b1225;
+  color: var(--text);
+  outline: none;
+  transition: box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.calculate-rate-page input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.calculate-rate-page .section-title {
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 /* Table in dark theme */
@@ -133,4 +209,343 @@ body {
   position: sticky;
   top: 0;
   color: var(--muted);
+}
+
+/* Email paste page */
+.email-paste-card {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.email-form {
+  display: grid;
+  gap: 16px;
+}
+
+.email-label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.email-textarea {
+  min-height: 260px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 16px;
+  background: #0b1225;
+  color: var(--text);
+  font-size: 14px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.email-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px var(--ring);
+}
+
+.email-meta {
+  margin-top: 12px;
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.email-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.email-message {
+  font-size: 13px;
+}
+
+.email-message.success {
+  color: var(--success);
+}
+
+.email-message.error {
+  color: var(--danger);
+}
+
+.email-helper {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Quote & rate UI */
+.calculate-rate-page .status {
+  margin-top: 16px;
+}
+
+.calculate-rate-page .error {
+  color: var(--danger);
+}
+
+.calculate-rate-page .success {
+  margin-top: 12px;
+  color: var(--success);
+}
+
+.calculate-rate-page .response {
+  margin-top: 12px;
+  background: #0b1225;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  overflow: auto;
+}
+
+.calculate-rate-page .btn-outline {
+  background: transparent;
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.calculate-rate-page .btn-outline:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.calculate-rate-page .btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text);
+}
+
+.calculate-rate-page .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.calculate-rate-page .quote-card {
+  margin-top: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.calculate-rate-page .quote-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calculate-rate-page .quote-total .label {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.calculate-rate-page .quote-total .value {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.calculate-rate-page .quote-badges {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calculate-rate-page .badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #0b1225;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.calculate-rate-page .badge.muted {
+  color: var(--muted);
+}
+
+.calculate-rate-page .grid-2 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.calculate-rate-page .panel {
+  background: rgba(11, 18, 37, 0.6);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.calculate-rate-page .panel-title {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.calculate-rate-page .kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.calculate-rate-page .kv.total .k {
+  font-weight: 700;
+}
+
+.calculate-rate-page .divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+
+.calculate-rate-page .table {
+  display: grid;
+  gap: 8px;
+}
+
+.calculate-rate-page .thead,
+.calculate-rate-page .tfoot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  padding: 8px 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.calculate-rate-page .tfoot {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+}
+
+.calculate-rate-page .tbody {
+  display: grid;
+  gap: 8px;
+}
+
+.calculate-rate-page .tr {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+
+.calculate-rate-page .desc {
+  font-weight: 500;
+}
+
+.calculate-rate-page .sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.calculate-rate-page .amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.calculate-rate-page .quote-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.calculate-rate-page .modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 19, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.calculate-rate-page .modal {
+  width: 100%;
+  max-width: 420px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 15px 45px rgba(0, 0, 0, 0.45);
+}
+
+.calculate-rate-page .modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calculate-rate-page .modal-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.calculate-rate-page .modal-subtitle {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.calculate-rate-page .icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.calculate-rate-page .icon-button:hover {
+  border-color: var(--primary);
+  color: var(--text);
+}
+
+.calculate-rate-page .modal-body {
+  margin-top: 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.calculate-rate-page .modal-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #0b1225;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.calculate-rate-page .modal-summary .label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.calculate-rate-page .modal-summary .value {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.calculate-rate-page .modal-form {
+  display: grid;
+  gap: 12px;
+}
+
+.calculate-rate-page .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
 }

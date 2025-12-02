@@ -1,7 +1,9 @@
 var express = require('express');
+var http = require('http');
 var https = require('https');
 var xml2js = require('xml2js');
 var router = express.Router();
+var URL = require('url').URL;
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
@@ -186,6 +188,73 @@ router.post('/forwardair-quote', function(req, res, next) {
 
   apiReq.write(xmlBody);
   apiReq.end();
+});
+
+router.post('/api/email-paste', function(req, res, next) {
+  var emailContent = (req.body && req.body.content) || '';
+  if (typeof emailContent !== 'string' || emailContent.trim().length === 0) {
+    res.status(400).json({ error: 'Email content is required' });
+    return;
+  }
+
+  var n8nUrl = process.env.N8N_URL;
+  if (!n8nUrl) {
+    res.status(500).json({ error: 'N8N_URL env variable is not configured' });
+    return;
+  }
+
+  var targetUrl;
+  try {
+    targetUrl = new URL(n8nUrl);
+  } catch (_err) {
+    res.status(500).json({ error: 'Invalid N8N_URL value' });
+    return;
+  }
+
+  var payload = JSON.stringify({
+    content: emailContent,
+    meta: {
+      length: emailContent.length,
+      receivedAt: new Date().toISOString()
+    }
+  });
+
+  var transport = targetUrl.protocol === 'https:' ? https : http;
+  var options = {
+    method: 'POST',
+    hostname: targetUrl.hostname,
+    port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+    path: targetUrl.pathname + targetUrl.search,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload)
+    }
+  };
+
+  var upstreamReq = transport.request(options, function(upstreamRes) {
+    var data = '';
+    upstreamRes.on('data', function(chunk) { data += chunk; });
+    upstreamRes.on('end', function() {
+      var contentType = upstreamRes.headers && upstreamRes.headers['content-type'] || 'application/json';
+      var statusCode = upstreamRes.statusCode || 500;
+      if (contentType.indexOf('application/json') > -1) {
+        try {
+          res.status(statusCode).json(data ? JSON.parse(data) : {});
+        } catch (_err) {
+          res.status(statusCode).send(data);
+        }
+      } else {
+        res.status(statusCode).type(contentType).send(data);
+      }
+    });
+  });
+
+  upstreamReq.on('error', function(err) {
+    next(err);
+  });
+
+  upstreamReq.write(payload);
+  upstreamReq.end();
 });
 
 module.exports = router;

@@ -5,7 +5,7 @@ function formatCurrency(value) {
   try {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
   } catch (_e) {
-    return `$${value.toFixed(2)}`;
+    return `$${Number(value).toFixed(2)}`;
   }
 }
 
@@ -111,5 +111,4 @@ export default function QuoteCard(props) {
     </div>
   );
 }
-
 

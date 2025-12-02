@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import './App.css';
 import NewLoadModal from './components/NewLoadModal';
 import LoadsTable from './components/LoadsTable';
-import { useEffect } from 'react';
 import AuthForm from './components/AuthForm';
+import EmailPastePage from './pages/EmailPastePage';
+import CalculateRatePage from './pages/CalculateRatePage';
 
-function App() {
+function DashboardApp() {
   const [showModal, setShowModal] = useState(false);
   const [rows, setRows] = useState([]);
   const [user, setUser] = useState(null);
@@ -112,6 +114,16 @@ function App() {
         />
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/email-paste" element={<EmailPastePage />} />
+      <Route path="/calculate-rate" element={<CalculateRatePage />} />
+      <Route path="/*" element={<DashboardApp />} />
+    </Routes>
   );
 }
 
