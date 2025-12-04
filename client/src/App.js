@@ -6,6 +6,7 @@ import LoadsTable from './components/LoadsTable';
 import AuthForm from './components/AuthForm';
 import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
+import { buildApiUrl } from './config';
 
 function DashboardApp() {
   const [showModal, setShowModal] = useState(false);
@@ -16,7 +17,7 @@ function DashboardApp() {
   useEffect(function() {
     async function checkAuth() {
       try {
-        const meResp = await fetch('http://localhost:3001/api/auth/me', { credentials: 'include' });
+        const meResp = await fetch(buildApiUrl('/api/auth/me'), { credentials: 'include' });
         if (meResp.ok) {
           const me = await meResp.json();
           setUser(me && me.user ? me.user : null);
@@ -36,7 +37,7 @@ function DashboardApp() {
     async function fetchLoads() {
       if (!user) return;
       try {
-        const resp = await fetch('http://localhost:3001/api/loads', { credentials: 'include' });
+        const resp = await fetch(buildApiUrl('/api/loads'), { credentials: 'include' });
         const data = await resp.json();
         if (Array.isArray(data)) {
           setRows(data);
@@ -50,7 +51,7 @@ function DashboardApp() {
   }, [user]);
 
   async function handleSave(row) {
-    const resp = await fetch('http://localhost:3001/api/loads', {
+    const resp = await fetch(buildApiUrl('/api/loads'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -65,7 +66,7 @@ function DashboardApp() {
   }
 
   async function handleSignOut() {
-    await fetch('http://localhost:3001/api/auth/signout', { method: 'POST', credentials: 'include' });
+    await fetch(buildApiUrl('/api/auth/signout'), { method: 'POST', credentials: 'include' });
     setUser(null);
   }
 

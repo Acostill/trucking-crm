@@ -232,6 +232,7 @@ body {
 .email-textarea {
   min-height: 260px;
   width: 100%;
+  box-sizing: border-box;
   border-radius: 12px;
   border: 1px solid var(--border);
   padding: 16px;

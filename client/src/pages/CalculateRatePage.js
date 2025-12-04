@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import QuoteCard from '../components/QuoteCard';
+import { buildApiUrl } from '../config';
 
 export default function CalculateRatePage() {
   const [pickupCity, setPickupCity] = useState('Chicago');
@@ -156,12 +157,12 @@ export default function CalculateRatePage() {
 
     try {
       var [calcResp, fwdResp] = await Promise.all([
-        fetch('http://localhost:3001/calculate-rate', {
+        fetch(buildApiUrl('/calculate-rate'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         }),
-        fetch('http://localhost:3001/forwardair-quote', {
+        fetch(buildApiUrl('/forwardair-quote'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './App.css';
 import QuoteCard from './components/QuoteCard';
+import { buildApiUrl } from './config';
 
 function App() {
   const [pickupCity, setPickupCity] = useState('Chicago');
@@ -157,12 +158,12 @@ function App() {
 
     try {
       var [calcResp, fwdResp] = await Promise.all([
-        fetch('http://localhost:3001/calculate-rate', {
+        fetch(buildApiUrl('/calculate-rate'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         }),
-        fetch('http://localhost:3001/forwardair-quote', {
+        fetch(buildApiUrl('/forwardair-quote'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)

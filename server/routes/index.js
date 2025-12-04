@@ -4,6 +4,118 @@ var https = require('https');
 var xml2js = require('xml2js');
 var router = express.Router();
 var URL = require('url').URL;
+var db = require('../db');
+
+function generateLoadNumber() {
+  var random = Math.floor(Math.random() * 900) + 100; // 3-digit entropy
+  return 'EMAIL-' + Date.now() + '-' + random;
+}
+
+function formatLocation(location) {
+  if (!location || typeof location !== 'object') return null;
+  var segments = [];
+  if (location.city) segments.push(location.city);
+  if (location.state) segments.push(location.state);
+  var cityState = segments.length ? segments.join(', ') : null;
+  var zip = location.zip ? String(location.zip) : null;
+  if (cityState && zip) return cityState + ' ' + zip;
+  return cityState || zip || null;
+}
+
+function buildLoadRecordFromOutput(output) {
+  if (!output || typeof output !== 'object') return null;
+  var shipment = output.shipment || {};
+  var pickup = shipment.pickup || {};
+  var delivery = shipment.delivery || {};
+
+  var customer = output.client_name || output.sender;
+  if (!customer) return null;
+
+  var rateValue = shipment.rate;
+  var numericRate = typeof rateValue === 'number' ? rateValue : Number(rateValue);
+  if (Number.isNaN(numericRate)) numericRate = null;
+
+  return {
+    customer: customer,
+    load_number: generateLoadNumber(),
+    bill_to: output.sender || null,
+    status: 'Pending',
+    type: shipment.rate_type || 'Email Import',
+    rate: numericRate,
+    currency: 'USD',
+    shipper: pickup.address || 'Pickup location pending',
+    shipper_location: formatLocation(pickup),
+    consignee: delivery.address || 'Consignee location pending',
+    consignee_location: formatLocation(delivery),
+    description: 'Auto-imported from Email Paste workflow',
+    delivery_notes: output.contact_email ? 'Primary contact: ' + output.contact_email : null
+  };
+}
+
+function extractOutputsFromAutomation(payload) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) {
+    return payload
+      .map(function(item) {
+        if (!item || typeof item !== 'object') return null;
+        if (item.output && typeof item.output === 'object') return item.output;
+        return item;
+      })
+      .filter(Boolean);
+  }
+  if (payload.output && typeof payload.output === 'object') {
+    return [payload.output];
+  }
+  if (typeof payload === 'object') {
+    return [payload];
+  }
+  return [];
+}
+
+async function persistAutomationLoads(payload) {
+  var outputs = extractOutputsFromAutomation(payload);
+  if (!outputs.length) {
+    throw new Error('Automation response did not include any load payloads.');
+  }
+
+  var saved = [];
+  for (var i = 0; i < outputs.length; i++) {
+    var record = buildLoadRecordFromOutput(outputs[i]);
+    if (!record) {
+      continue;
+    }
+
+    var columns = Object.keys(record);
+    var values = columns.map(function(key) { return record[key]; });
+    var placeholders = columns.map(function(_val, idx) { return '$' + (idx + 1); });
+    var insertSql =
+      'INSERT INTO loads (' + columns.join(',') + ') VALUES (' + placeholders.join(',') + ') RETURNING *';
+
+    var attempts = 0;
+    while (attempts < 3) {
+      try {
+        var result = await db.query(insertSql, values);
+        saved.push(result.rows[0]);
+        break;
+      } catch (err) {
+        if (err && err.code === '23505') {
+          record.load_number = generateLoadNumber();
+          var loadIndex = columns.indexOf('load_number');
+          values[loadIndex] = record.load_number;
+          attempts += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  if (!saved.length) {
+    throw new Error('Automation response could not be mapped to a load record.');
+  }
+
+  return saved;
+}
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
@@ -234,18 +346,34 @@ router.post('/api/email-paste', function(req, res, next) {
   var upstreamReq = transport.request(options, function(upstreamRes) {
     var data = '';
     upstreamRes.on('data', function(chunk) { data += chunk; });
-    upstreamRes.on('end', function() {
+    upstreamRes.on('end', async function() {
       var contentType = upstreamRes.headers && upstreamRes.headers['content-type'] || 'application/json';
       var statusCode = upstreamRes.statusCode || 500;
-      if (contentType.indexOf('application/json') > -1) {
-        try {
-          res.status(statusCode).json(data ? JSON.parse(data) : {});
-        } catch (_err) {
-          res.status(statusCode).send(data);
-        }
-      } else {
+      var isJson = contentType.indexOf('application/json') > -1;
+
+      if (!isJson) {
         res.status(statusCode).type(contentType).send(data);
+        return;
       }
+
+      var parsed;
+      try {
+        parsed = data ? JSON.parse(data) : {};
+      } catch (_err) {
+        res.status(statusCode).send(data);
+        return;
+      }
+
+      if (statusCode >= 200 && statusCode < 300) {
+        try {
+          await persistAutomationLoads(parsed);
+        } catch (err) {
+          next(err);
+          return;
+        }
+      }
+
+      res.status(statusCode).json(parsed);
     });
   });
 

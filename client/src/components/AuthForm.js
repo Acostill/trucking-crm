@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { buildApiUrl } from '../config';
 
 export default function AuthForm(props) {
   var onAuthed = props.onAuthed;
@@ -21,7 +22,7 @@ export default function AuthForm(props) {
         body.firstName = firstName;
         body.lastName = lastName;
       }
-      var resp = await fetch('http://localhost:3001' + endpoint, {
+      var resp = await fetch(buildApiUrl(endpoint), {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

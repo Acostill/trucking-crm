@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { buildApiUrl } from '../config';
 
 export default function EmailPastePage() {
   const [emailBody, setEmailBody] = useState('');
@@ -27,7 +28,7 @@ export default function EmailPastePage() {
     setSubmitError(null);
     setSubmitSuccess(null);
     try {
-      const resp = await fetch('http://localhost:3001/api/email-paste', {
+      const resp = await fetch(buildApiUrl('/api/email-paste'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: emailBody })
