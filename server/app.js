@@ -12,10 +12,30 @@ var cors = require('cors');
 
 var app = express();
 
-app.use(cors({
-  origin: 'http://localhost:3000',
+function parseCorsOrigins(value) {
+  if (!value || typeof value !== 'string') {
+    return ['http://localhost:3000'];
+  }
+  return value
+    .split(',')
+    .map(function(entry) { return entry.trim(); })
+    .filter(Boolean);
+}
+
+var allowedOrigins = parseCorsOrigins(process.env.CORS_ORIGINS);
+var allowAllOrigins = allowedOrigins.indexOf('*') > -1;
+var corsOptions = {
+  origin: function(origin, callback) {
+    if (!origin || allowAllOrigins || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
-}));
+};
+
+app.use(cors(corsOptions));
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
