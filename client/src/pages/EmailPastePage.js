@@ -52,7 +52,7 @@ export default function EmailPastePage() {
           <div className="brand-badge"></div>
           Email Paste
         </div>
-        <Link className="btn btn-secondary" to="/">
+        <Link className="btn btn-secondary" to="/loads">
           Back to loads
         </Link>
       </div>

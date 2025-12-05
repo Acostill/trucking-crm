@@ -111,9 +111,17 @@ router.post('/signin', async function(req, res, next) {
     var ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
     await db.query('UPDATE public.users SET last_login_at = NOW() WHERE id = $1', [user.id]);
+    var rolesRes = await db.query(
+      `SELECT r.name
+       FROM public.user_roles ur
+       JOIN public.roles r ON r.id = ur.role_id
+       WHERE ur.user_id = $1`,
+      [user.id]
+    );
+    var roles = rolesRes.rows.map(function(row) { return row.name; });
     var session = await createSession(user.id);
     res.cookie(SESSION_COOKIE, session.token, makeCookieOptions());
-    res.json({ user: { id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name } });
+    res.json({ user: { id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, roles: roles } });
   } catch (err) {
     next(err);
   }

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Link, Navigate } from 'react-router-dom';
 import './App.css';
 import NewLoadModal from './components/NewLoadModal';
 import LoadsTable from './components/LoadsTable';
 import AuthForm from './components/AuthForm';
 import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
+import AdminPortalPage from './pages/AdminPortalPage';
 import { buildApiUrl } from './config';
 
 function DashboardApp() {
@@ -82,6 +83,8 @@ function DashboardApp() {
     return <AuthForm onAuthed={function(u){ setUser(u); }} />;
   }
 
+  var isAdmin = Array.isArray(user.roles) && user.roles.indexOf('admin') > -1;
+
   return (
     <div className="shell">
       <div className="topbar">
@@ -89,8 +92,13 @@ function DashboardApp() {
           <div className="brand-badge"></div>
           Active Loads
         </div>
-        <div>
-          <span style={{ marginRight: 12 }}>{user.email}</span>
+        <div className="topbar-actions">
+          {isAdmin && (
+            <Link className="btn btn-secondary admin-link" to="/admin-portal">
+              Admin Portal
+            </Link>
+          )}
+          <span className="user-email">{user.email}</span>
           <button className="btn btn-secondary" onClick={handleSignOut}>Sign out</button>
         </div>
       </div>
@@ -123,7 +131,10 @@ function App() {
     <Routes>
       <Route path="/email-paste" element={<EmailPastePage />} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
-      <Route path="/*" element={<DashboardApp />} />
+      <Route path="/admin-portal" element={<AdminPortalPage />} />
+      <Route path="/loads" element={<DashboardApp />} />
+      <Route path="/" element={<Navigate to="/loads" replace />} />
+      <Route path="*" element={<Navigate to="/loads" replace />} />
     </Routes>
   );
 }

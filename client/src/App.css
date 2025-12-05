@@ -45,6 +45,21 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-actions .admin-link {
+  text-decoration: none;
+}
+
+.topbar-actions .user-email {
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .brand {
   display: flex;
   gap: 12px;
@@ -278,6 +293,83 @@ body {
   margin-top: 16px;
   font-size: 13px;
   color: var(--muted);
+}
+
+/* Admin portal */
+.admin-portal .admin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-message {
+  font-size: 13px;
+}
+
+.admin-message.success {
+  color: var(--success);
+}
+
+.admin-message.error {
+  color: var(--danger);
+}
+
+.admin-table-wrapper {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-table th,
+.admin-table td {
+  border: 1px solid var(--border);
+  padding: 12px;
+  vertical-align: top;
+}
+
+.admin-table th {
+  background: #0b1225;
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.user-primary {
+  font-weight: 600;
+}
+
+.user-secondary {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.role-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.role-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.role-checkbox input {
+  accent-color: var(--primary);
+}
+
+.admin-row-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 /* Quote & rate UI */
