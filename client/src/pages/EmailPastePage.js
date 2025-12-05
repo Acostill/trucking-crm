@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import GlobalTopbar from '../components/GlobalTopbar';
 import { buildApiUrl } from '../config';
 
 export default function EmailPastePage() {
@@ -47,15 +47,7 @@ export default function EmailPastePage() {
 
   return (
     <div className="shell">
-      <div className="topbar">
-        <div className="brand">
-          <div className="brand-badge"></div>
-          Email Paste
-        </div>
-        <Link className="btn btn-secondary" to="/loads">
-          Back to loads
-        </Link>
-      </div>
+      <GlobalTopbar />
       <div className="container">
         <div className="card email-paste-card">
           <div className="card-header">

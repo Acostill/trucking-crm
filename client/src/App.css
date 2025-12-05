@@ -45,6 +45,19 @@ body {
   border-bottom: 1px solid var(--border);
 }
 
+.global-topbar {
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.topbar-nav-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -295,6 +308,11 @@ body {
   color: var(--muted);
 }
 
+.nav-links {
+  display: flex;
+  gap: 10px;
+}
+
 /* Admin portal */
 .admin-portal .admin-body {
   display: flex;
@@ -312,6 +330,12 @@ body {
 
 .admin-message.error {
   color: var(--danger);
+}
+
+.admin-header-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .admin-table-wrapper {

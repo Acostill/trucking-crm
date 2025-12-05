@@ -2,6 +2,7 @@ var express = require('express');
 var http = require('http');
 var https = require('https');
 var xml2js = require('xml2js');
+var util = require('util');
 var router = express.Router();
 var URL = require('url').URL;
 var db = require('../db');
@@ -22,33 +23,112 @@ function formatLocation(location) {
   return cityState || zip || null;
 }
 
+function normalizeUpper(obj) {
+  return obj && typeof obj === 'object' && !Array.isArray(obj)
+    ? Object.keys(obj).reduce(function(acc, key) {
+      acc[key.toLowerCase()] = obj[key];
+      return acc;
+    }, {})
+    : {};
+}
+
 function buildLoadRecordFromOutput(output) {
   if (!output || typeof output !== 'object') return null;
-  var shipment = output.shipment || {};
-  var pickup = shipment.pickup || {};
-  var delivery = shipment.delivery || {};
 
-  var customer = output.client_name || output.sender;
+  // Accept multiple shapes: legacy { shipment: { ... } } and new { body: { shipment_details: { ... } } }
+  var shipment =
+    output.shipment ||
+    (output.body && output.body.shipment_details) ||
+    {};
+
+  var pickup =
+    shipment.pickup ||
+    (shipment.shipment && shipment.shipment.pickup) ||
+    {};
+  var delivery =
+    shipment.delivery ||
+    (shipment.shipment && shipment.shipment.delivery) ||
+    {};
+
+  var shipmentInfo = shipment.shipment_info || shipment.shipmentInfo || {};
+  var billing = output.billing || {};
+  var dimensions = shipment.dimensions || shipmentInfo.dimensions || {};
+
+  var customer =
+    output.client_name ||
+    (output.sender && (output.sender.company || output.sender.name)) ||
+    output.sender;
   if (!customer) return null;
 
-  var rateValue = shipment.rate;
+  var rateValue =
+    shipment.rate != null
+      ? shipment.rate
+      : billing.rate != null
+        ? billing.rate
+        : shipment.payment_terms && shipment.payment_terms.rate;
   var numericRate = typeof rateValue === 'number' ? rateValue : Number(rateValue);
   if (Number.isNaN(numericRate)) numericRate = null;
+
+  var weightValue =
+    shipment.shipment_weight_lbs != null
+      ? shipment.shipment_weight_lbs
+      : shipmentInfo.weight_lbs != null
+        ? shipmentInfo.weight_lbs
+        : shipment.weight;
+  var numericWeight = typeof weightValue === 'number' ? weightValue : Number(weightValue);
+  if (Number.isNaN(numericWeight)) numericWeight = null;
+
+  var qtyValue =
+    dimensions.pallets != null
+      ? dimensions.pallets
+      : (dimensions.quantity != null ? dimensions.quantity : null);
+  var numericQty = typeof qtyValue === 'number' ? qtyValue : Number(qtyValue);
+  if (Number.isNaN(numericQty)) numericQty = null;
+
+  var description =
+    shipment.commodity ||
+    shipmentInfo.commodity ||
+    output.description ||
+    'Auto-imported from Email Paste workflow';
+
+  // Prefer explicit addresses; fall back to city/state/zip
+  var shipperAddress =
+    pickup.address ||
+    (pickup.street ? pickup.street : null) ||
+    [pickup.city, pickup.state, pickup.zip].filter(Boolean).join(', ');
+  var consigneeAddress =
+    delivery.address ||
+    (delivery.street ? delivery.street : null) ||
+    [delivery.city, delivery.state, delivery.zip].filter(Boolean).join(', ');
 
   return {
     customer: customer,
     load_number: generateLoadNumber(),
-    bill_to: output.sender || null,
+    bill_to: output.sender && output.sender.email ? output.sender.email : (output.sender || null),
+    dispatcher: output.recipient && output.recipient.company ? output.recipient.company : null,
     status: 'Pending',
-    type: shipment.rate_type || 'Email Import',
+    type: shipment.rate_type || billing.rate_type || 'Email Import',
     rate: numericRate,
     currency: 'USD',
-    shipper: pickup.address || 'Pickup location pending',
+    carrier_or_driver: null,
+    equipment_type:
+      shipment.truck_type ||
+      shipmentInfo.truck_type ||
+      output.truck_type ||
+      null,
+    shipper: shipperAddress || 'Pickup location pending',
     shipper_location: formatLocation(pickup),
-    consignee: delivery.address || 'Consignee location pending',
+    ship_date: pickup.date_time || pickup.requested_date_time || null,
+    show_ship_time: true,
+    description: description,
+    qty: numericQty,
+    weight: numericWeight,
+    value: null,
+    consignee: consigneeAddress || 'Consignee location pending',
     consignee_location: formatLocation(delivery),
-    description: 'Auto-imported from Email Paste workflow',
-    delivery_notes: output.contact_email ? 'Primary contact: ' + output.contact_email : null
+    delivery_date: delivery.expected_date || delivery.date || null,
+    show_delivery_time: true,
+    delivery_notes: output.contact_email || (output.sender && output.sender.email) || null
   };
 }
 
@@ -363,6 +443,20 @@ router.post('/api/email-paste', function(req, res, next) {
         res.status(statusCode).send(data);
         return;
       }
+
+      // Log the parsed automation response for debugging ingestion issues
+      // eslint-disable-next-line no-console
+      console.log(
+        '[email-paste] n8n response',
+        util.inspect(
+          {
+            statusCode: statusCode,
+            contentType: contentType,
+            parsedSample: parsed
+          },
+          { depth: null, maxArrayLength: null, breakLength: 120 }
+        )
+      );
 
       if (statusCode >= 200 && statusCode < 300) {
         try {

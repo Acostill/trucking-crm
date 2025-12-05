@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { buildApiUrl } from '../config';
+import GlobalTopbar from '../components/GlobalTopbar';
 
 function normalizeRoles(list) {
   return Array.isArray(list) ? list.slice().sort().join('|') : '';
@@ -127,25 +127,17 @@ export default function AdminPortalPage() {
 
   return (
     <div className="shell admin-portal">
-      <div className="topbar">
-        <div className="brand">
-          <div className="brand-badge"></div>
-          Admin Portal
-        </div>
-        <div className="topbar-actions">
-          <button className="btn btn-secondary" onClick={fetchUsers} disabled={loading}>
-            Refresh
-          </button>
-          <Link className="btn btn-secondary" to="/loads">
-            Back to loads
-          </Link>
-        </div>
-      </div>
+      <GlobalTopbar />
       <div className="container">
         <div className="card">
           <div className="card-header">
             <h2 className="title">Manage users</h2>
             <div className="subtitle">Assign roles to manage permissions.</div>
+            <div className="admin-header-actions">
+              <button className="btn btn-secondary" onClick={fetchUsers} disabled={loading}>
+                Refresh
+              </button>
+            </div>
           </div>
           <div className="card-body admin-body">
             {loading && <div className="admin-message">Loading users…</div>}

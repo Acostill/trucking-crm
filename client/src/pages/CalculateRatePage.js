@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import QuoteCard from '../components/QuoteCard';
 import { buildApiUrl } from '../config';
+import GlobalTopbar from '../components/GlobalTopbar';
 
 export default function CalculateRatePage() {
   const [pickupCity, setPickupCity] = useState('Chicago');
@@ -272,12 +273,7 @@ export default function CalculateRatePage() {
 
   return (
     <div className="shell calculate-rate-page">
-      <div className="topbar">
-        <div className="brand">
-          <div className="brand-badge"></div>
-          Calculate Rate
-        </div>
-      </div>
+      <GlobalTopbar />
       <div className="container">
         <div className="card">
           <div className="card-header">

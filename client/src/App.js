@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, Navigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 import NewLoadModal from './components/NewLoadModal';
 import LoadsTable from './components/LoadsTable';
@@ -8,31 +8,13 @@ import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
 import AdminPortalPage from './pages/AdminPortalPage';
 import { buildApiUrl } from './config';
+import GlobalTopbar from './components/GlobalTopbar';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 function DashboardApp() {
+  const { user, checking, setUser, signOut } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [rows, setRows] = useState([]);
-  const [user, setUser] = useState(null);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-
-  useEffect(function() {
-    async function checkAuth() {
-      try {
-        const meResp = await fetch(buildApiUrl('/api/auth/me'), { credentials: 'include' });
-        if (meResp.ok) {
-          const me = await meResp.json();
-          setUser(me && me.user ? me.user : null);
-        } else {
-          setUser(null);
-        }
-      } catch (_e) {
-        setUser(null);
-      } finally {
-        setCheckingAuth(false);
-      }
-    }
-    checkAuth();
-  }, []);
 
   useEffect(function() {
     async function fetchLoads() {
@@ -67,13 +49,13 @@ function DashboardApp() {
   }
 
   async function handleSignOut() {
-    await fetch(buildApiUrl('/api/auth/signout'), { method: 'POST', credentials: 'include' });
-    setUser(null);
+    await signOut();
   }
 
-  if (checkingAuth) {
+  if (checking) {
     return (
       <div className="shell">
+        <GlobalTopbar />
         <div className="container" style={{ padding: 40 }}>Checking session…</div>
       </div>
     );
@@ -83,25 +65,9 @@ function DashboardApp() {
     return <AuthForm onAuthed={function(u){ setUser(u); }} />;
   }
 
-  var isAdmin = Array.isArray(user.roles) && user.roles.indexOf('admin') > -1;
-
   return (
     <div className="shell">
-      <div className="topbar">
-        <div className="brand">
-          <div className="brand-badge"></div>
-          Active Loads
-        </div>
-        <div className="topbar-actions">
-          {isAdmin && (
-            <Link className="btn btn-secondary admin-link" to="/admin-portal">
-              Admin Portal
-            </Link>
-          )}
-          <span className="user-email">{user.email}</span>
-          <button className="btn btn-secondary" onClick={handleSignOut}>Sign out</button>
-        </div>
-      </div>
+      <GlobalTopbar />
       <div className="container">
         <div className="card">
           <div className="card-header">
@@ -126,16 +92,24 @@ function DashboardApp() {
   );
 }
 
-function App() {
+function AppRoutes() {
   return (
     <Routes>
-      <Route path="/email-paste" element={<EmailPastePage />} />
+      <Route path="/" element={<CalculateRatePage />} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
+      <Route path="/email-paste" element={<EmailPastePage />} />
       <Route path="/admin-portal" element={<AdminPortalPage />} />
       <Route path="/loads" element={<DashboardApp />} />
-      <Route path="/" element={<Navigate to="/loads" replace />} />
-      <Route path="*" element={<Navigate to="/loads" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }
 
