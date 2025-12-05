@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import GlobalTopbar from '../components/GlobalTopbar';
+import CalculateRatePage from './CalculateRatePage';
 import { buildApiUrl } from '../config';
 
 export default function EmailPastePage() {
@@ -7,6 +8,7 @@ export default function EmailPastePage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(null);
+  const [ratePrefill, setRatePrefill] = useState(null);
 
   const lineCount = emailBody.length ? emailBody.split(/\r?\n/).length : 0;
   const charCount = emailBody.length;
@@ -38,6 +40,46 @@ export default function EmailPastePage() {
         throw new Error(text || 'Failed to submit email');
       }
       setSubmitSuccess('Email sent to automations.');
+
+      // Attempt to prefill the embedded rate calculator from the automation response
+      try {
+        const data = text ? JSON.parse(text) : {};
+        const payload = data && data.output ? data.output : data;
+        const body = payload && payload.body ? payload.body : {};
+        const shipmentDetails = body.shipment_details || payload.shipment || {};
+        const pickup = shipmentDetails.pickup || {};
+        const delivery = shipmentDetails.delivery || {};
+        const shipmentInfo = shipmentDetails.shipment_info || {};
+        const dims = shipmentInfo.dimensions || {};
+
+        setRatePrefill({
+          pickupCity: pickup.city || '',
+          pickupState: pickup.state || '',
+          pickupZip: pickup.zip || '',
+          pickupCountry: 'US',
+          pickupDate: pickup.requested_date_time || '',
+          deliveryCity: delivery.city || '',
+          deliveryState: delivery.state || '',
+          deliveryZip: delivery.zip || '',
+          deliveryCountry: 'US',
+          piecesUnit: 'in',
+          piecesQuantity: dims.pallets != null ? String(dims.pallets) : '',
+          part1Length: dims.length_in != null ? String(dims.length_in) : '',
+          part1Width: dims.width_in != null ? String(dims.width_in) : '',
+          part1Height: dims.height_in != null ? String(dims.height_in) : '',
+          part2Length: '',
+          part2Width: '',
+          part2Height: '',
+          weightUnit: shipmentInfo.weight_lbs ? 'lbs' : '',
+          weightValue: shipmentInfo.weight_lbs ? String(shipmentInfo.weight_lbs) : '',
+          hazardousUnNumbersText: '',
+          accessorialCodesText: '',
+          shipmentId: '',
+          referenceNumber: ''
+        });
+      } catch (_err) {
+        // ignore parse errors; prefill is best-effort
+      }
     } catch (err) {
       setSubmitError(err && err.message ? err.message : 'Failed to submit email');
     } finally {
@@ -82,6 +124,15 @@ export default function EmailPastePage() {
                 Tip: you can keep this tab open while working through inbox responses.
               </div>
             </form>
+          </div>
+        </div>
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="card-header">
+            <h2 className="title">Calculate rate</h2>
+            <div className="subtitle">Get a quote without leaving this page.</div>
+          </div>
+          <div className="card-body">
+            <CalculateRatePage embedded initialValues={{}} prefill={ratePrefill} />
           </div>
         </div>
       </div>

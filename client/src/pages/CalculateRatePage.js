@@ -3,35 +3,134 @@ import QuoteCard from '../components/QuoteCard';
 import { buildApiUrl } from '../config';
 import GlobalTopbar from '../components/GlobalTopbar';
 
-export default function CalculateRatePage() {
-  const [pickupCity, setPickupCity] = useState('Chicago');
-  const [pickupState, setPickupState] = useState('IL');
-  const [pickupZip, setPickupZip] = useState('60605');
-  const [pickupCountry, setPickupCountry] = useState('US');
-  const [pickupDate, setPickupDate] = useState('2024-12-31T16:00:00.000Z');
+const DEFAULT_INITIAL_VALUES = {
+  pickupCity: 'Chicago',
+  pickupState: 'IL',
+  pickupZip: '60605',
+  pickupCountry: 'US',
+  pickupDate: '2024-12-31T16:00:00.000Z',
+  deliveryCity: 'Atlanta',
+  deliveryState: 'GA',
+  deliveryZip: '30303',
+  deliveryCountry: 'US',
+  piecesUnit: 'in',
+  piecesQuantity: '2',
+  part1Length: '74',
+  part1Width: '51',
+  part1Height: '67',
+  part2Length: '75',
+  part2Width: '51',
+  part2Height: '67',
+  weightUnit: 'lbs',
+  weightValue: '999',
+  hazardousUnNumbersText: 'UN3508, UN3530, UN3536, UN3548',
+  accessorialCodesText: 'CALLDEL, DEBRISREM, UPK',
+  shipmentId: '1',
+  referenceNumber: 'Reference12345'
+};
 
-  const [deliveryCity, setDeliveryCity] = useState('Atlanta');
-  const [deliveryState, setDeliveryState] = useState('GA');
-  const [deliveryZip, setDeliveryZip] = useState('30303');
-  const [deliveryCountry, setDeliveryCountry] = useState('US');
+const EMPTY_INITIAL_VALUES = Object.keys(DEFAULT_INITIAL_VALUES).reduce(function(acc, key) {
+  acc[key] = '';
+  return acc;
+}, {});
 
-  const [piecesUnit, setPiecesUnit] = useState('in');
-  const [piecesQuantity, setPiecesQuantity] = useState('2');
-  const [part1Length, setPart1Length] = useState('74');
-  const [part1Width, setPart1Width] = useState('51');
-  const [part1Height, setPart1Height] = useState('67');
-  const [part2Length, setPart2Length] = useState('75');
-  const [part2Width, setPart2Width] = useState('51');
-  const [part2Height, setPart2Height] = useState('67');
+const EMBEDDED_DEFAULT_VALUES = {
+  pickupCity: '',
+  pickupState: '',
+  pickupZip: '',
+  pickupCountry: '',
+  pickupDate: '',
+  deliveryCity: '',
+  deliveryState: '',
+  deliveryZip: '',
+  deliveryCountry: '',
+  piecesUnit: '',
+  piecesQuantity: '',
+  part1Length: '',
+  part1Width: '',
+  part1Height: '',
+  part2Length: '',
+  part2Width: '',
+  part2Height: '',
+  weightUnit: '',
+  weightValue: '',
+  hazardousUnNumbersText: 'UN3508, UN3530, UN3536, UN3548',
+  accessorialCodesText: 'CALLDEL, DEBRISREM, UPK',
+  shipmentId: '1',
+  referenceNumber: 'Reference12345'
+};
 
-  const [weightUnit, setWeightUnit] = useState('lbs');
-  const [weightValue, setWeightValue] = useState('999');
+export default function CalculateRatePage({ embedded, initialValues, prefill }) {
+  var baseInit = embedded ? EMBEDDED_DEFAULT_VALUES : DEFAULT_INITIAL_VALUES;
+  var init = initialValues ? { ...baseInit, ...initialValues } : baseInit;
 
-  const [hazardousUnNumbersText, setHazardousUnNumbersText] = useState('UN3508, UN3530, UN3536, UN3548');
-  const [accessorialCodesText, setAccessorialCodesText] = useState('CALLDEL, DEBRISREM, UPK');
+  const [pickupCity, setPickupCity] = useState(init.pickupCity);
+  const [pickupState, setPickupState] = useState(init.pickupState);
+  const [pickupZip, setPickupZip] = useState(init.pickupZip);
+  const [pickupCountry, setPickupCountry] = useState(init.pickupCountry);
+  const [pickupDate, setPickupDate] = useState(init.pickupDate);
 
-  const [shipmentId, setShipmentId] = useState('1');
-  const [referenceNumber, setReferenceNumber] = useState('Reference12345');
+  const [deliveryCity, setDeliveryCity] = useState(init.deliveryCity);
+  const [deliveryState, setDeliveryState] = useState(init.deliveryState);
+  const [deliveryZip, setDeliveryZip] = useState(init.deliveryZip);
+  const [deliveryCountry, setDeliveryCountry] = useState(init.deliveryCountry);
+
+  const [piecesUnit, setPiecesUnit] = useState(init.piecesUnit);
+  const [piecesQuantity, setPiecesQuantity] = useState(init.piecesQuantity);
+  const [part1Length, setPart1Length] = useState(init.part1Length);
+  const [part1Width, setPart1Width] = useState(init.part1Width);
+  const [part1Height, setPart1Height] = useState(init.part1Height);
+  const [part2Length, setPart2Length] = useState(init.part2Length);
+  const [part2Width, setPart2Width] = useState(init.part2Width);
+  const [part2Height, setPart2Height] = useState(init.part2Height);
+
+  const [weightUnit, setWeightUnit] = useState(init.weightUnit);
+  const [weightValue, setWeightValue] = useState(init.weightValue);
+
+  const [hazardousUnNumbersText, setHazardousUnNumbersText] = useState(init.hazardousUnNumbersText);
+  const [accessorialCodesText, setAccessorialCodesText] = useState(init.accessorialCodesText);
+
+  const [shipmentId, setShipmentId] = useState(init.shipmentId);
+  const [referenceNumber, setReferenceNumber] = useState(init.referenceNumber);
+
+  // When a prefill object is provided (e.g., from email-paste), update fields
+  React.useEffect(function() {
+    if (!prefill) return;
+    function apply(setter, value) {
+      if (value !== undefined && value !== null && value !== '') {
+        setter(value);
+      }
+    }
+
+    apply(setPickupCity, prefill.pickupCity);
+    apply(setPickupState, prefill.pickupState);
+    apply(setPickupZip, prefill.pickupZip);
+    apply(setPickupCountry, prefill.pickupCountry);
+    apply(setPickupDate, prefill.pickupDate);
+
+    apply(setDeliveryCity, prefill.deliveryCity);
+    apply(setDeliveryState, prefill.deliveryState);
+    apply(setDeliveryZip, prefill.deliveryZip);
+    apply(setDeliveryCountry, prefill.deliveryCountry);
+
+    apply(setPiecesUnit, prefill.piecesUnit);
+    apply(setPiecesQuantity, prefill.piecesQuantity);
+    apply(setPart1Length, prefill.part1Length);
+    apply(setPart1Width, prefill.part1Width);
+    apply(setPart1Height, prefill.part1Height);
+    apply(setPart2Length, prefill.part2Length);
+    apply(setPart2Width, prefill.part2Width);
+    apply(setPart2Height, prefill.part2Height);
+
+    apply(setWeightUnit, prefill.weightUnit);
+    apply(setWeightValue, prefill.weightValue);
+
+    apply(setHazardousUnNumbersText, prefill.hazardousUnNumbersText);
+    apply(setAccessorialCodesText, prefill.accessorialCodesText);
+
+    apply(setShipmentId, prefill.shipmentId);
+    apply(setReferenceNumber, prefill.referenceNumber);
+  }, [prefill]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -271,183 +370,259 @@ export default function CalculateRatePage() {
     }
   }
 
+  var card = (
+    <div className="card">
+      <div className="card-header">
+        <h2 className="title">Shipment details</h2>
+        <div className="subtitle">Enter pickup, delivery and freight info</div>
+      </div>
+      <div className="card-body">
+        <form onSubmit={onSubmit} className="form-grid">
+          <fieldset>
+            <legend>Pickup</legend>
+            <div className="row-4">
+              <label>
+                City
+                <input value={pickupCity} onChange={function(e){ setPickupCity(e.target.value); }} />
+              </label>
+              <label>
+                State
+                <input value={pickupState} onChange={function(e){ setPickupState(e.target.value); }} />
+              </label>
+              <label>
+                Zip
+                <input value={pickupZip} onChange={function(e){ setPickupZip(e.target.value); }} />
+              </label>
+              <label>
+                Country
+                <input value={pickupCountry} onChange={function(e){ setPickupCountry(e.target.value); }} />
+              </label>
+            </div>
+            <label>
+              Date (ISO)
+              <input value={pickupDate} onChange={function(e){ setPickupDate(e.target.value); }} />
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Delivery</legend>
+            <div className="row-4">
+              <label>
+                City
+                <input value={deliveryCity} onChange={function(e){ setDeliveryCity(e.target.value); }} />
+              </label>
+              <label>
+                State
+                <input value={deliveryState} onChange={function(e){ setDeliveryState(e.target.value); }} />
+              </label>
+              <label>
+                Zip
+                <input value={deliveryZip} onChange={function(e){ setDeliveryZip(e.target.value); }} />
+              </label>
+              <label>
+                Country
+                <input value={deliveryCountry} onChange={function(e){ setDeliveryCountry(e.target.value); }} />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Pieces</legend>
+            <div className="row-2">
+              <label>
+                Unit
+                <input value={piecesUnit} onChange={function(e){ setPiecesUnit(e.target.value); }} />
+              </label>
+              <label>
+                Quantity
+                <input type="number" value={piecesQuantity} onChange={function(e){ setPiecesQuantity(e.target.value); }} />
+              </label>
+            </div>
+            <div>
+              <div className="section-title">Part 1</div>
+              <div className="row-3">
+                <label>
+                  Length
+                  <input type="number" value={part1Length} onChange={function(e){ setPart1Length(e.target.value); }} />
+                </label>
+                <label>
+                  Width
+                  <input type="number" value={part1Width} onChange={function(e){ setPart1Width(e.target.value); }} />
+                </label>
+                <label>
+                  Height
+                  <input type="number" value={part1Height} onChange={function(e){ setPart1Height(e.target.value); }} />
+                </label>
+              </div>
+            </div>
+            <div>
+              <div className="section-title">Part 2</div>
+              <div className="row-3">
+                <label>
+                  Length
+                  <input type="number" value={part2Length} onChange={function(e){ setPart2Length(e.target.value); }} />
+                </label>
+                <label>
+                  Width
+                  <input type="number" value={part2Width} onChange={function(e){ setPart2Width(e.target.value); }} />
+                </label>
+                <label>
+                  Height
+                  <input type="number" value={part2Height} onChange={function(e){ setPart2Height(e.target.value); }} />
+                </label>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Weight</legend>
+            <div className="row-2">
+              <label>
+                Unit
+                <input value={weightUnit} onChange={function(e){ setWeightUnit(e.target.value); }} />
+              </label>
+              <label>
+                Value
+                <input type="number" value={weightValue} onChange={function(e){ setWeightValue(e.target.value); }} />
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Hazardous Material</legend>
+            <label>
+              UN Numbers (comma separated)
+              <input value={hazardousUnNumbersText} onChange={function(e){ setHazardousUnNumbersText(e.target.value); }} />
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Accessorial Codes</legend>
+            <label>
+              Codes (comma separated)
+              <input value={accessorialCodesText} onChange={function(e){ setAccessorialCodesText(e.target.value); }} />
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Identifiers</legend>
+            <div className="row-2">
+              <label>
+                Shipment ID
+                <input value={shipmentId} onChange={function(e){ setShipmentId(e.target.value); }} />
+              </label>
+              <label>
+                Reference Number
+                <input value={referenceNumber} onChange={function(e){ setReferenceNumber(e.target.value); }} />
+              </label>
+            </div>
+          </fieldset>
+
+          <div className="actions">
+            <button className="btn" type="submit" disabled={loading}>
+              {loading ? 'Submitting…' : 'Submit'}
+            </button>
+          </div>
+        </form>
+
+        <div className="status">
+          {error && (
+            <div className="error">Error: {error}</div>
+          )}
+          {contactConfirmation && (
+            <div className="success">{contactConfirmation}</div>
+          )}
+          {result && typeof result === 'object' && !Array.isArray(result) && (
+            <QuoteCard quote={result} onSelectQuote={handleSelectQuote} />
+          )}
+          {forwardResult && typeof forwardResult === 'object' && !Array.isArray(forwardResult) && (
+            <QuoteCard quote={forwardResult} onSelectQuote={handleSelectQuote} />
+          )}
+          {result && (typeof result === 'string' || Array.isArray(result)) && (
+            <div className="response">{typeof result === 'string' ? result : JSON.stringify(result)}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="calculate-rate-embedded">
+        <div className="container">
+          {card}
+        </div>
+        {isContactModalOpen && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title">
+            <div className="modal">
+              <div className="modal-header">
+                <div>
+                  <div id="contact-modal-title" className="modal-title">Share your contact details</div>
+                  <div className="modal-subtitle">We’ll follow up about the selected quote.</div>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Close dialog"
+                  onClick={handleCloseContactModal}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="modal-summary">
+                  <div className="label">Quote total</div>
+                  <div className="value">{formatCurrency(selectedQuote && selectedQuote.priceTotal)}</div>
+                </div>
+                <form className="modal-form" onSubmit={handleContactSubmit}>
+                  <label>
+                    Name
+                    <input
+                      value={contactName}
+                      onChange={function(e){ setContactName(e.target.value); }}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Email
+                    <input
+                      type="email"
+                      value={contactEmail}
+                      onChange={function(e){ setContactEmail(e.target.value); }}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Phone
+                    <input
+                      type="tel"
+                      value={contactPhone}
+                      onChange={function(e){ setContactPhone(e.target.value); }}
+                      required
+                    />
+                  </label>
+                  <div className="modal-actions">
+                    <button type="button" className="btn btn-ghost" onClick={handleCloseContactModal}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn">
+                      Submit info
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="shell calculate-rate-page">
       <GlobalTopbar />
       <div className="container">
-        <div className="card">
-          <div className="card-header">
-            <h2 className="title">Shipment details</h2>
-            <div className="subtitle">Enter pickup, delivery and freight info</div>
-          </div>
-          <div className="card-body">
-            <form onSubmit={onSubmit} className="form-grid">
-              <fieldset>
-                <legend>Pickup</legend>
-                <div className="row-4">
-                  <label>
-                    City
-                    <input value={pickupCity} onChange={function(e){ setPickupCity(e.target.value); }} />
-                  </label>
-                  <label>
-                    State
-                    <input value={pickupState} onChange={function(e){ setPickupState(e.target.value); }} />
-                  </label>
-                  <label>
-                    Zip
-                    <input value={pickupZip} onChange={function(e){ setPickupZip(e.target.value); }} />
-                  </label>
-                  <label>
-                    Country
-                    <input value={pickupCountry} onChange={function(e){ setPickupCountry(e.target.value); }} />
-                  </label>
-                </div>
-                <label>
-                  Date (ISO)
-                  <input value={pickupDate} onChange={function(e){ setPickupDate(e.target.value); }} />
-                </label>
-              </fieldset>
-
-              <fieldset>
-                <legend>Delivery</legend>
-                <div className="row-4">
-                  <label>
-                    City
-                    <input value={deliveryCity} onChange={function(e){ setDeliveryCity(e.target.value); }} />
-                  </label>
-                  <label>
-                    State
-                    <input value={deliveryState} onChange={function(e){ setDeliveryState(e.target.value); }} />
-                  </label>
-                  <label>
-                    Zip
-                    <input value={deliveryZip} onChange={function(e){ setDeliveryZip(e.target.value); }} />
-                  </label>
-                  <label>
-                    Country
-                    <input value={deliveryCountry} onChange={function(e){ setDeliveryCountry(e.target.value); }} />
-                  </label>
-                </div>
-              </fieldset>
-
-              <fieldset>
-                <legend>Pieces</legend>
-                <div className="row-2">
-                  <label>
-                    Unit
-                    <input value={piecesUnit} onChange={function(e){ setPiecesUnit(e.target.value); }} />
-                  </label>
-                  <label>
-                    Quantity
-                    <input type="number" value={piecesQuantity} onChange={function(e){ setPiecesQuantity(e.target.value); }} />
-                  </label>
-                </div>
-                <div>
-                  <div className="section-title">Part 1</div>
-                  <div className="row-3">
-                    <label>
-                      Length
-                      <input type="number" value={part1Length} onChange={function(e){ setPart1Length(e.target.value); }} />
-                    </label>
-                    <label>
-                      Width
-                      <input type="number" value={part1Width} onChange={function(e){ setPart1Width(e.target.value); }} />
-                    </label>
-                    <label>
-                      Height
-                      <input type="number" value={part1Height} onChange={function(e){ setPart1Height(e.target.value); }} />
-                    </label>
-                  </div>
-                </div>
-                <div>
-                  <div className="section-title">Part 2</div>
-                  <div className="row-3">
-                    <label>
-                      Length
-                      <input type="number" value={part2Length} onChange={function(e){ setPart2Length(e.target.value); }} />
-                    </label>
-                    <label>
-                      Width
-                      <input type="number" value={part2Width} onChange={function(e){ setPart2Width(e.target.value); }} />
-                    </label>
-                    <label>
-                      Height
-                      <input type="number" value={part2Height} onChange={function(e){ setPart2Height(e.target.value); }} />
-                    </label>
-                  </div>
-                </div>
-              </fieldset>
-
-              <fieldset>
-                <legend>Weight</legend>
-                <div className="row-2">
-                  <label>
-                    Unit
-                    <input value={weightUnit} onChange={function(e){ setWeightUnit(e.target.value); }} />
-                  </label>
-                  <label>
-                    Value
-                    <input type="number" value={weightValue} onChange={function(e){ setWeightValue(e.target.value); }} />
-                  </label>
-                </div>
-              </fieldset>
-
-              <fieldset>
-                <legend>Hazardous Material</legend>
-                <label>
-                  UN Numbers (comma separated)
-                  <input value={hazardousUnNumbersText} onChange={function(e){ setHazardousUnNumbersText(e.target.value); }} />
-                </label>
-              </fieldset>
-
-              <fieldset>
-                <legend>Accessorial Codes</legend>
-                <label>
-                  Codes (comma separated)
-                  <input value={accessorialCodesText} onChange={function(e){ setAccessorialCodesText(e.target.value); }} />
-                </label>
-              </fieldset>
-
-              <fieldset>
-                <legend>Identifiers</legend>
-                <div className="row-2">
-                  <label>
-                    Shipment ID
-                    <input value={shipmentId} onChange={function(e){ setShipmentId(e.target.value); }} />
-                  </label>
-                  <label>
-                    Reference Number
-                    <input value={referenceNumber} onChange={function(e){ setReferenceNumber(e.target.value); }} />
-                  </label>
-                </div>
-              </fieldset>
-
-              <div className="actions">
-                <button className="btn" type="submit" disabled={loading}>
-                  {loading ? 'Submitting…' : 'Submit'}
-                </button>
-              </div>
-            </form>
-
-            <div className="status">
-              {error && (
-                <div className="error">Error: {error}</div>
-              )}
-              {contactConfirmation && (
-                <div className="success">{contactConfirmation}</div>
-              )}
-              {result && typeof result === 'object' && !Array.isArray(result) && (
-                <QuoteCard quote={result} onSelectQuote={handleSelectQuote} />
-              )}
-              {forwardResult && typeof forwardResult === 'object' && !Array.isArray(forwardResult) && (
-                <QuoteCard quote={forwardResult} onSelectQuote={handleSelectQuote} />
-              )}
-              {result && (typeof result === 'string' || Array.isArray(result)) && (
-                <div className="response">{typeof result === 'string' ? result : JSON.stringify(result)}</div>
-              )}
-            </div>
-          </div>
-        </div>
+        {card}
       </div>
       {isContactModalOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title">
