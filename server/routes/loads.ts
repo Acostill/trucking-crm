@@ -1,11 +1,10 @@
-// Legacy JS kept for reference; TypeScript version lives in loads.ts
-var express = require('express');
-var router = express.Router();
-var db = require('../db');
+import express, { Request, Response, NextFunction } from 'express';
+import db from '../db';
 
-function pickLoad(input) {
-  // Whitelist fields we accept from the client
-  var out = {
+const router = express.Router();
+
+function pickLoad(input: any) {
+  return {
     customer: input.customer,
     load_number: input.loadNumber,
     bill_to: input.billTo,
@@ -30,10 +29,9 @@ function pickLoad(input) {
     show_delivery_time: input.showDeliveryTime,
     delivery_notes: input.deliveryNotes
   };
-  return out;
 }
 
-function toClientRow(row) {
+function toClientRow(row: any) {
   return {
     customer: row.customer,
     loadNumber: row.load_number,
@@ -53,25 +51,25 @@ function toClientRow(row) {
   };
 }
 
-router.get('/', async function(req, res, next) {
+router.get('/', async function(_req: Request, res: Response, next: NextFunction) {
   try {
-    var result = await db.query('SELECT * FROM loads ORDER BY created_at DESC');
-    var mapped = result.rows.map(toClientRow);
+    const result = await db.query('SELECT * FROM loads ORDER BY created_at DESC');
+    const mapped = result.rows.map(toClientRow);
     res.json(mapped);
   } catch (err) {
     next(err);
   }
 });
 
-router.post('/', async function(req, res, next) {
+router.post('/', async function(req: Request, res: Response, next: NextFunction) {
   try {
-    var data = pickLoad(req.body || {});
-    var insert =
+    const data = pickLoad(req.body || {});
+    const insert =
       'INSERT INTO loads ' +
       '(customer, load_number, bill_to, dispatcher, status, type, rate, currency, carrier_or_driver, equipment_type, shipper, shipper_location, ship_date, show_ship_time, description, qty, weight, value, consignee, consignee_location, delivery_date, show_delivery_time, delivery_notes) ' +
       'VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) ' +
       'RETURNING *';
-    var params = [
+    const params = [
       data.customer,
       data.load_number,
       data.bill_to,
@@ -96,10 +94,9 @@ router.post('/', async function(req, res, next) {
       data.show_delivery_time,
       data.delivery_notes
     ];
-    var result = await db.query(insert, params);
+    const result = await db.query(insert, params);
     res.status(201).json(toClientRow(result.rows[0]));
-  } catch (err) {
-    // Handle unique violations on load_number gracefully
+  } catch (err: any) {
     if (err && err.code === '23505') {
       res.status(409).json({ error: 'Load number already exists' });
       return;
@@ -108,6 +105,5 @@ router.post('/', async function(req, res, next) {
   }
 });
 
-module.exports = router;
-
+export default router;
 

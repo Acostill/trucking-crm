@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "nodemon ./bin/www"
+    "dev": "ts-node-dev --respawn --transpile-only ./bin/www.ts",
+    "build": "tsc",
+    "start": "node dist/bin/www.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -18,5 +20,18 @@
     "nodemon": "^3.1.10",
     "pg": "^8.13.1",
     "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/debug": "^4.1.12",
+    "@types/express": "^4.17.21",
+    "@types/morgan": "^1.9.9",
+    "@types/node": "^20.11.19",
+    "@types/pg": "^8.10.2",
+    "@types/xml2js": "^0.4.14",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
   }
 }

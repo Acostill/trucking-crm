@@ -7,6 +7,7 @@ import AuthForm from './components/AuthForm';
 import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
 import AdminPortalPage from './pages/AdminPortalPage';
+import LanelyLandingPage from './pages/LanelyLandingPage';
 import { buildApiUrl } from './config';
 import GlobalTopbar from './components/GlobalTopbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -95,7 +96,7 @@ function DashboardApp() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<CalculateRatePage />} />
+      <Route path="/" element={<LanelyLandingPage />} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<EmailPastePage />} />
       <Route path="/admin-portal" element={<AdminPortalPage />} />
