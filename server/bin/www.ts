@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import http from 'http';
 import debugFactory from 'debug';
 import app from '../app';
