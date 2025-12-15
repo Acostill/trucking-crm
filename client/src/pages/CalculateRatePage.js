@@ -60,7 +60,7 @@ const EMBEDDED_DEFAULT_VALUES = {
   referenceNumber: 'Reference12345'
 };
 
-export default function CalculateRatePage({ embedded, initialValues, prefill }) {
+export default function CalculateRatePage({ embedded, initialValues, prefill, onSelectQuote }) {
   var baseInit = embedded ? EMBEDDED_DEFAULT_VALUES : DEFAULT_INITIAL_VALUES;
   var init = initialValues ? { ...baseInit, ...initialValues } : baseInit;
 
@@ -95,7 +95,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill }) 
 
   // When a prefill object is provided (e.g., from email-paste), update fields
   React.useEffect(function() {
+    console.log('[CalculateRatePage] prefill changed:', prefill);
     if (!prefill) return;
+    
+    console.log('[CalculateRatePage] Applying prefill values');
     function apply(setter, value) {
       if (value !== undefined && value !== null && value !== '') {
         setter(value);
@@ -214,6 +217,13 @@ export default function CalculateRatePage({ embedded, initialValues, prefill }) 
 
   function handleSelectQuote(quote) {
     if (!quote || typeof quote !== 'object') return;
+    
+    // If parent provided onSelectQuote callback, use that instead of opening the contact modal
+    if (typeof onSelectQuote === 'function') {
+      onSelectQuote(quote);
+      return;
+    }
+    
     resetContactForm();
     setContactConfirmation('');
     setSelectedQuote(quote);

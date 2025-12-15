@@ -45,14 +45,20 @@ function buildLoadRecordFromOutput(output) {
     shipment.pickup ||
     (shipment.shipment && shipment.shipment.pickup) ||
     {};
+  
+  // New structure: delivery_options is an array, take the first one
+  var deliveryOptions = shipment.delivery_options || [];
   var delivery =
     shipment.delivery ||
     (shipment.shipment && shipment.shipment.delivery) ||
-    {};
+    (deliveryOptions.length > 0 ? deliveryOptions[0] : {});
 
   var shipmentInfo = shipment.shipment_info || shipment.shipmentInfo || {};
   var billing = output.billing || {};
-  var dimensions = shipment.dimensions || shipmentInfo.dimensions || {};
+  
+  // New structure: dimensions can be an array, take the first one
+  var rawDimensions = shipment.dimensions || shipmentInfo.dimensions || {};
+  var dimensions = Array.isArray(rawDimensions) ? (rawDimensions[0] || {}) : rawDimensions;
 
   var customer =
     output.client_name ||
@@ -69,19 +75,25 @@ function buildLoadRecordFromOutput(output) {
   var numericRate = typeof rateValue === 'number' ? rateValue : Number(rateValue);
   if (Number.isNaN(numericRate)) numericRate = null;
 
+  // Weight: check total_weight_lbs first (new), then weight_lbs (old)
   var weightValue =
-    shipment.shipment_weight_lbs != null
-      ? shipment.shipment_weight_lbs
-      : shipmentInfo.weight_lbs != null
-        ? shipmentInfo.weight_lbs
-        : shipment.weight;
+    shipmentInfo.total_weight_lbs != null
+      ? shipmentInfo.total_weight_lbs
+      : shipment.shipment_weight_lbs != null
+        ? shipment.shipment_weight_lbs
+        : shipmentInfo.weight_lbs != null
+          ? shipmentInfo.weight_lbs
+          : shipment.weight;
   var numericWeight = typeof weightValue === 'number' ? weightValue : Number(weightValue);
   if (Number.isNaN(numericWeight)) numericWeight = null;
 
+  // Pallets: check shipment_info.pallets first (new), then dimensions.pallets (old)
   var qtyValue =
-    dimensions.pallets != null
-      ? dimensions.pallets
-      : (dimensions.quantity != null ? dimensions.quantity : null);
+    shipmentInfo.pallets != null
+      ? shipmentInfo.pallets
+      : dimensions.pallets != null
+        ? dimensions.pallets
+        : (dimensions.quantity != null ? dimensions.quantity : null);
   var numericQty = typeof qtyValue === 'number' ? qtyValue : Number(qtyValue);
   if (Number.isNaN(numericQty)) numericQty = null;
 
@@ -118,7 +130,7 @@ function buildLoadRecordFromOutput(output) {
       null,
     shipper: shipperAddress || 'Pickup location pending',
     shipper_location: formatLocation(pickup),
-    ship_date: pickup.date_time || pickup.requested_date_time || null,
+    ship_date: pickup.pickup_date || pickup.date_time || pickup.requested_date_time || null,
     show_ship_time: true,
     description: description,
     qty: numericQty,

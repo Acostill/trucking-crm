@@ -142,36 +142,51 @@ export default function DashboardPage() {
       // Parse response and prefill the rate calculator
       try {
         const data = text ? JSON.parse(text) : {};
+        // The response might have `output` wrapper or be direct
         const payload = data && data.output ? data.output : data;
         setLastPayload(payload);
         
+        // Handle both old and new response structures
         const body = payload && payload.body ? payload.body : {};
         const shipmentDetails = body.shipment_details || payload.shipment || {};
         const pickup = shipmentDetails.pickup || {};
-        const delivery = shipmentDetails.delivery || {};
+        
+        // New structure: delivery_options is an array, take the first one
+        const deliveryOptions = shipmentDetails.delivery_options || [];
+        const delivery = shipmentDetails.delivery || (deliveryOptions.length > 0 ? deliveryOptions[0] : {});
+        
         const shipmentInfo = shipmentDetails.shipment_info || {};
-        const dims = shipmentInfo.dimensions || {};
+        
+        // New structure: dimensions is an array, take the first one
+        const dimsArray = shipmentInfo.dimensions || [];
+        const dims = Array.isArray(dimsArray) ? (dimsArray[0] || {}) : dimsArray;
+        
+        // Weight: check total_weight_lbs first (new), then weight_lbs (old)
+        const weightLbs = shipmentInfo.total_weight_lbs || shipmentInfo.weight_lbs;
+        
+        // Pallets: check shipment_info.pallets first (new), then dims.pallets (old)
+        const pallets = shipmentInfo.pallets || dims.pallets;
 
         setRatePrefill({
           pickupCity: pickup.city || '',
           pickupState: pickup.state || '',
           pickupZip: pickup.zip || '',
           pickupCountry: 'US',
-          pickupDate: pickup.requested_date_time || '',
+          pickupDate: pickup.pickup_date || pickup.requested_date_time || pickup.date || '',
           deliveryCity: delivery.city || '',
           deliveryState: delivery.state || '',
           deliveryZip: delivery.zip || '',
           deliveryCountry: 'US',
           piecesUnit: 'in',
-          piecesQuantity: dims.pallets != null ? String(dims.pallets) : '',
+          piecesQuantity: pallets != null ? String(pallets) : '',
           part1Length: dims.length_in != null ? String(dims.length_in) : '',
           part1Width: dims.width_in != null ? String(dims.width_in) : '',
           part1Height: dims.height_in != null ? String(dims.height_in) : '',
           part2Length: '',
           part2Width: '',
           part2Height: '',
-          weightUnit: shipmentInfo.weight_lbs ? 'lbs' : '',
-          weightValue: shipmentInfo.weight_lbs ? String(shipmentInfo.weight_lbs) : '',
+          weightUnit: weightLbs ? 'lbs' : '',
+          weightValue: weightLbs ? String(weightLbs) : '',
           hazardousUnNumbersText: '',
           accessorialCodesText: '',
           shipmentId: '',
