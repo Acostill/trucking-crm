@@ -4,15 +4,19 @@ import './App.css';
 import NewLoadModal from './components/NewLoadModal';
 import LoadsTable from './components/LoadsTable';
 import AuthForm from './components/AuthForm';
+import Sidebar from './components/Sidebar';
 import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
 import AdminPortalPage from './pages/AdminPortalPage';
+import LanelyLandingPage from './pages/LanelyLandingPage';
+import DashboardPage from './pages/DashboardPage';
+import PipelinePage from './pages/PipelinePage';
 import { buildApiUrl } from './config';
 import GlobalTopbar from './components/GlobalTopbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 function DashboardApp() {
-  const { user, checking, setUser, signOut } = useAuth();
+  const { user, checking, setUser } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [rows, setRows] = useState([]);
 
@@ -26,8 +30,7 @@ function DashboardApp() {
           setRows(data);
         }
       } catch (e) {
-        // ignore errors for now or log
-        // console.error(e);
+        // ignore errors for now
       }
     }
     fetchLoads();
@@ -48,15 +51,13 @@ function DashboardApp() {
     setRows(prev => [saved, ...prev]);
   }
 
-  async function handleSignOut() {
-    await signOut();
-  }
-
   if (checking) {
     return (
-      <div className="shell">
-        <GlobalTopbar />
-        <div className="container" style={{ padding: 40 }}>Checking session…</div>
+      <div className="app-layout">
+        <Sidebar />
+        <main className="app-main">
+          <div className="app-loading">Checking session…</div>
+        </main>
       </div>
     );
   }
@@ -66,22 +67,21 @@ function DashboardApp() {
   }
 
   return (
-    <div className="shell">
-      <GlobalTopbar />
-      <div className="container">
-        <div className="card">
-          <div className="card-header">
-            <h2 className="title">Manage loads</h2>
-            <div className="subtitle">Create and track active loads</div>
-          </div>
-          <div className="card-body">
-            <div className="actions">
-              <button className="btn" onClick={() => setShowModal(true)}>New Active Load</button>
-            </div>
-            <LoadsTable rows={rows} />
-          </div>
+    <div className="app-layout">
+      <Sidebar />
+      <main className="app-main">
+        {/* Decorative Background Blobs */}
+        <div className="app-blob app-blob-1" />
+        <div className="app-blob app-blob-2" />
+        
+        <div className="app-content">
+          <LoadsTable 
+            rows={rows} 
+            onNewLoad={() => setShowModal(true)} 
+          />
         </div>
-      </div>
+      </main>
+      
       {showModal && (
         <NewLoadModal
           onClose={() => setShowModal(false)}
@@ -95,10 +95,12 @@ function DashboardApp() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<CalculateRatePage />} />
+      <Route path="/" element={<LanelyLandingPage />} />
+      <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<EmailPastePage />} />
       <Route path="/admin-portal" element={<AdminPortalPage />} />
+      <Route path="/pipeline" element={<PipelinePage />} />
       <Route path="/loads" element={<DashboardApp />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

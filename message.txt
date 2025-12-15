@@ -1,0 +1,624 @@
+Product Requirements Document (PRD)
+Lanely — Minimalist Freight CRM & Shipment Management Platform
+1. Product Overview
+1.1 Product Name
+
+Lanely
+
+1.2 Product Vision
+
+Lanely is a modern, minimalist, design-first CRM and operations platform purpose-built for trucking, freight brokerage, and logistics businesses. It combines shipment tracking, rep assignment, commission visibility, and pipeline management into a single, calm, beautiful interface.
+
+Lanely takes heavy inspiration from Attio, Linear, and Superhuman — prioritizing:
+
+clarity over clutter
+
+whitespace over density
+
+motion over static screens
+
+delight over raw utility
+
+Lanely is not a traditional TMS.
+It is a people-centric, revenue-centric logistics CRM.
+
+2. Design Philosophy & Aesthetic Direction
+2.1 Visual Style
+
+Lanely must feel:
+
+Light
+
+Glassy
+
+Soft
+
+Premium
+
+Calm
+
+Key visual principles:
+
+Inter font (thin weights: 300–400)
+
+Small font sizes with generous line height
+
+Thin dividers, subtle borders
+
+Frosted glass panels (glassmorphism)
+
+Soft shadows, never harsh
+
+Muted color palette with 1–2 accent colors
+
+Primary inspiration:
+
+Attio
+
+Linear
+
+Arc Browser UI
+
+Vercel Dashboard
+
+Raycast
+
+2.2 Whitespace as a Feature
+
+Whitespace is not empty — it is intentional breathing room.
+
+Rules:
+
+No screen should ever feel crowded
+
+Cards must float
+
+Tables should feel like lists, not spreadsheets
+
+Every action should feel effortless
+
+3. Target Users & Personas
+3.1 Freight Sales Representatives
+
+View assigned shipments
+
+Track commissions
+
+Update shipment status
+
+Communicate internally
+
+3.2 Operations Managers
+
+See all shipments across reps
+
+Monitor pipeline health
+
+Resolve exceptions
+
+Assign or reassign reps
+
+3.3 Finance / Admin Users
+
+View commissions
+
+Track billed vs paid shipments
+
+Manage billing and subscriptions
+
+3.4 Company Owners
+
+High-level analytics
+
+Revenue visibility
+
+Rep performance
+
+Business health at a glance
+
+4. Core Navigation Structure
+
+Primary navigation (left sidebar or top bar depending on screen size):
+
+Dashboard
+
+Shipments
+
+Pipeline
+
+Lists
+
+Commissions
+
+Analytics
+
+Billing
+
+Settings
+
+Navigation should:
+
+Animate smoothly
+
+Highlight current context subtly
+
+Collapse gracefully on smaller screens
+
+5. Dashboard (Home)
+5.1 Purpose
+
+The Lanely dashboard is a calm command center.
+
+It answers:
+
+How is the business doing today?
+
+Where are shipments stuck?
+
+Who is performing well?
+
+What needs attention?
+
+5.2 Dashboard Components
+
+Total active shipments
+
+Shipments by status (visual pills)
+
+Revenue this month
+
+Commissions pending
+
+Shipments at risk
+
+Top performing reps
+
+5.3 Analytics Presentation
+
+Charts should:
+
+Animate on load
+
+Use soft gradients
+
+Avoid harsh gridlines
+
+Fade in gently
+
+Example widgets:
+
+Line chart: Shipments over time
+
+Bar chart: Revenue by rep
+
+Donut chart: Status breakdown
+
+6. Shipments Module
+6.1 Shipment Overview List
+
+This is the heart of Lanely.
+
+Features:
+
+Minimalist table/list hybrid
+
+Each row feels like a card
+
+Hover states reveal quick actions
+
+Click opens shipment detail view
+
+Shipment fields:
+
+Shipment ID
+
+Origin → Destination
+
+Customer
+
+Assigned Rep
+
+Status
+
+Margin
+
+Commission
+
+Pickup / Delivery dates
+
+6.2 Shipment Detail View
+
+A full-page or slide-over panel with:
+
+Sections:
+
+Shipment summary
+
+Status timeline
+
+Financials
+
+Assigned rep
+
+Notes & activity
+
+Documents
+
+Design principles:
+
+Strong vertical rhythm
+
+Sections separated by whitespace, not heavy borders
+
+Editable inline fields
+
+Autosave with subtle confirmation animations
+
+7. Pipeline (Kanban View)
+7.1 Purpose
+
+The pipeline visualizes shipments as living objects moving through stages.
+
+7.2 Pipeline Stages (Customizable)
+
+Examples:
+
+New Quote
+
+Quoted
+
+Booked
+
+In Transit
+
+Delivered
+
+Invoiced
+
+Paid
+
+7.3 Drag & Drop Experience
+
+Ultra-smooth drag animations
+
+Cards slightly lift on drag
+
+Columns subtly glow on hover
+
+Drop animation feels magnetic
+
+Each card displays:
+
+Shipment ID
+
+Customer
+
+Lane
+
+Assigned rep
+
+Value
+
+8. Lists (Saved Views)
+8.1 Purpose
+
+Lists allow users to create custom views of shipments.
+
+Examples:
+
+My Shipments
+
+High-Margin Loads
+
+Delayed Shipments
+
+New Quotes Today
+
+8.2 List Features
+
+Save filters
+
+Share lists internally
+
+Pin favorite lists
+
+Duplicate lists
+
+UI details:
+
+Chip-based filters
+
+Inline editing
+
+Subtle animations on filter changes
+
+9. Commissions Module
+9.1 Purpose
+
+Provide radical transparency into earnings.
+
+9.2 Commission Views
+
+Commissions by rep
+
+Paid vs unpaid
+
+Commission history per shipment
+
+Each commission record shows:
+
+Shipment ID
+
+Margin
+
+Commission %
+
+Commission amount
+
+Status (pending / paid)
+
+Animations:
+
+Paid commissions animate with celebratory micro-feedback
+
+Progress indicators feel rewarding
+
+10. Analytics Module
+10.1 Analytics Philosophy
+
+Analytics in Lanely should feel human, not corporate.
+
+10.2 Metrics
+
+Revenue
+
+Gross margin
+
+Shipments per rep
+
+Win rate
+
+Avg margin per lane
+
+Charts should:
+
+Animate on tab switch
+
+Allow drill-downs
+
+Feel exploratory
+
+11. Lead & Customer Management (Light CRM)
+11.1 Customers
+
+Create, edit, delete customers
+
+View shipment history per customer
+
+Attach notes and documents
+
+11.2 Leads
+
+Upload CSV lists of leads
+
+Map columns on upload
+
+Validate data before import
+
+Create leads manually
+
+UI considerations:
+
+CSV preview
+
+Column mapping with dropdowns
+
+Friendly validation messages
+
+12. CRUD Philosophy
+
+CRUD should never feel heavy in Lanely.
+
+Rules:
+
+Inline edits
+
+Undo actions
+
+Soft confirmation states
+
+No blocking modals unless destructive
+
+Delete actions:
+
+Require confirmation
+
+Gentle warning copy
+
+Calm red accents only when needed
+
+13. Billing & Subscription
+13.1 Billing Page
+
+Current plan
+
+Usage metrics
+
+Payment method
+
+Invoice history
+
+Design goals:
+
+Simple
+
+Trust-building
+
+Minimal text
+
+14. Settings
+14.1 User Settings
+
+Profile
+
+Role
+
+Notification preferences
+
+14.2 Team Settings
+
+Add/remove users
+
+Assign roles
+
+Commission rules
+
+14.3 System Settings
+
+Pipeline stages
+
+Status definitions
+
+Commission formulas
+
+15. Animations & Micro-Interactions
+15.1 Motion Principles
+
+Motion guides attention
+
+Motion confirms actions
+
+Motion adds delight
+
+Examples:
+
+Button presses compress slightly
+
+Cards float on hover
+
+Tabs slide, not snap
+
+Loading states shimmer
+
+16. Gamified Loading States
+
+Loading in Lanely should feel rewarding, not passive.
+
+Ideas:
+
+Progress bars that feel alive
+
+Soft pulsing placeholders
+
+Gentle copy such as:
+
+“Routing shipments…”
+
+“Calculating commissions…”
+
+“Syncing freight data…”
+
+17. Empty States
+
+Empty states are opportunities for delight.
+
+Examples:
+
+“No shipments yet — let’s move some freight.”
+
+Illustrated but subtle
+
+Clear CTA buttons
+
+18. Notifications & Feedback
+
+Toasts slide in softly
+
+Never stack aggressively
+
+Success feels satisfying
+
+Errors feel calm, not alarming
+
+19. Accessibility
+
+High contrast mode
+
+Keyboard navigation
+
+Screen reader friendly
+
+Motion reduction support
+
+20. Technical Architecture (Future-Ready)
+20.1 Frontend
+
+React / Next.js preferred
+
+Tailwind or similar utility-first CSS
+
+Component-driven design
+
+20.2 Backend (Future)
+
+Supabase
+
+Auth
+
+Postgres
+
+Row-level security
+
+API-first mindset
+
+Modular services
+
+20.3 Data Model (High Level)
+
+Entities:
+
+Users
+
+Shipments
+
+Customers
+
+Leads
+
+Commissions
+
+Lists
+
+21. Non-Goals (Initial Version)
+
+No EDI
+
+No carrier dispatch
+
+No accounting system replacement
+
+No legacy TMS complexity
+
+22. Success Metrics
+
+Daily active usage
+
+Time to update shipment
+
+Rep engagement
+
+Revenue visibility improvement
+
+23. Final Notes
+
+Lanely is not just a tool — it is a calm operating system for freight businesses.
+
+It should:
+
+Reduce stress
+
+Increase clarity
+
+Make people feel good using it
+
+Elevate logistics work into something beautiful

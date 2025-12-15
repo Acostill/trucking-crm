@@ -1,3 +1,4 @@
+// Legacy JS kept for reference; TypeScript version lives in loads.ts
 var express = require('express');
 var router = express.Router();
 var db = require('../db');
