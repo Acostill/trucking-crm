@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import GlobalTopbar from '../components/GlobalTopbar';
+import Sidebar from '../components/Sidebar';
 import CalculateRatePage from './CalculateRatePage';
 import { buildApiUrl } from '../config';
+import { useAuth } from '../context/AuthContext';
+import AuthForm from '../components/AuthForm';
 
 export default function EmailPastePage() {
+  const { user, checking, setUser } = useAuth();
   const [emailBody, setEmailBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -87,56 +90,87 @@ export default function EmailPastePage() {
     }
   }
 
+  if (checking) {
+    return (
+      <div className="app-layout">
+        <Sidebar />
+        <main className="app-main">
+          <div className="app-loading">Checking session…</div>
+        </main>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthForm onAuthed={(u) => setUser(u)} />;
+  }
+
   return (
-    <div className="shell">
-      <GlobalTopbar />
-      <div className="container">
-        <div className="card email-paste-card">
-          <div className="card-header">
-            <h2 className="title">Paste an email</h2>
-            <div className="subtitle">
-              Drop the raw email text below. We&apos;ll parse it in a future step.
+    <div className="app-layout">
+      <Sidebar />
+      <main className="app-main">
+        {/* Decorative Background Blobs */}
+        <div className="app-blob app-blob-1" />
+        <div className="app-blob app-blob-2" />
+        
+        <div className="app-content">
+          <div className="email-paste-page">
+            {/* Page Header */}
+            <div className="page-header">
+              <h1 className="page-title">Email AI</h1>
+              <p className="page-subtitle">Paste email content to automatically extract shipment details.</p>
+            </div>
+
+            {/* Email Paste Card */}
+            <div className="card email-paste-card">
+              <div className="card-header">
+                <h2 className="title">Paste an email</h2>
+                <div className="subtitle">
+                  Drop the raw email text below. We'll parse it and extract shipment info.
+                </div>
+              </div>
+              <div className="card-body">
+                <form className="email-form" onSubmit={handleSubmit}>
+                  <label className="email-label">
+                    Email contents
+                    <textarea
+                      className="email-textarea"
+                      placeholder="Paste the entire email body here…"
+                      value={emailBody}
+                      onChange={handleChange}
+                    />
+                  </label>
+                  <div className="email-meta">
+                    <span>{lineCount} line{lineCount === 1 ? '' : 's'}</span>
+                    <span>{charCount} character{charCount === 1 ? '' : 's'}</span>
+                  </div>
+                  <div className="email-actions">
+                    <button type="submit" className="btn" disabled={isSubmitDisabled}>
+                      {submitting ? 'Sending…' : 'Submit email'}
+                    </button>
+                  </div>
+                  {submitError && <div className="email-message error">{submitError}</div>}
+                  {submitSuccess && <div className="email-message success">{submitSuccess}</div>}
+                  <div className="email-helper">
+                    Tip: you can keep this tab open while working through inbox responses.
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            {/* Calculate Rate Card */}
+            <div className="card" style={{ marginTop: 24 }}>
+              <div className="card-header">
+                <h2 className="title">Calculate rate</h2>
+                <div className="subtitle">Get a quote without leaving this page.</div>
+              </div>
+              <div className="card-body">
+                <CalculateRatePage embedded initialValues={{}} prefill={ratePrefill} />
+              </div>
             </div>
           </div>
-          <div className="card-body">
-            <form className="email-form" onSubmit={handleSubmit}>
-              <label className="email-label">
-                Email contents
-                <textarea
-                  className="email-textarea"
-                  placeholder="Paste the entire email body here…"
-                  value={emailBody}
-                  onChange={handleChange}
-                />
-              </label>
-              <div className="email-meta">
-                <span>{lineCount} line{lineCount === 1 ? '' : 's'}</span>
-                <span>{charCount} character{charCount === 1 ? '' : 's'}</span>
-              </div>
-              <div className="email-actions">
-                <button type="submit" className="btn" disabled={isSubmitDisabled}>
-                  {submitting ? 'Sending…' : 'Submit email'}
-                </button>
-              </div>
-              {submitError && <div className="email-message error">{submitError}</div>}
-              {submitSuccess && <div className="email-message success">{submitSuccess}</div>}
-              <div className="email-helper">
-                Tip: you can keep this tab open while working through inbox responses.
-              </div>
-            </form>
-          </div>
         </div>
-        <div className="card" style={{ marginTop: 20 }}>
-          <div className="card-header">
-            <h2 className="title">Calculate rate</h2>
-            <div className="subtitle">Get a quote without leaving this page.</div>
-          </div>
-          <div className="card-body">
-            <CalculateRatePage embedded initialValues={{}} prefill={ratePrefill} />
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
-
