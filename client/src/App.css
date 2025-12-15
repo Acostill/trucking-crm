@@ -1,4 +1,8 @@
 /* Lanely Design System Integration */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 :root {
   /* Lanely Palette */
   --lanely-indigo-50: #eef2ff;
@@ -227,7 +231,6 @@ input:focus, select:focus, textarea:focus, .email-textarea:focus {
 .justify-between { justify-content: space-between; }
 .items-center { align-items: center; }
 .h-16 { height: 4rem; }
-.grid { display: grid; }
 .gap-4 { gap: 1rem; }
 .gap-12 { gap: 3rem; }
 .text-5xl { font-size: 3rem; line-height: 1; }
@@ -239,3 +242,24 @@ input:focus, select:focus, textarea:focus, .email-textarea:focus {
 .bg-gradient-to-r { background-image: linear-gradient(to right, var(--tw-gradient-stops)); }
 .from-indigo-600 { --tw-gradient-from: #4f46e5; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(79, 70, 229, 0)); }
 .to-emerald-500 { --tw-gradient-to: #10b981; }
+
+/* Grid System */
+.grid {
+  display: grid;
+  width: 100%;
+}
+.grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.hidden { display: none; }
+
+/* Responsive Grid */
+@media (min-width: 640px) {
+  .sm\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 768px) {
+  .md\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .md\:flex { display: flex; }
+  .md\:hidden { display: none; }
+}
+@media (min-width: 1024px) {
+  .lg\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
