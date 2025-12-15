@@ -8,10 +8,12 @@ import {
   ClipboardPaste, 
   ChevronRight,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  X
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import StatusBadge from '../components/StatusBadge';
+import CalculateRatePage from './CalculateRatePage';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
 import { buildApiUrl } from '../config';
@@ -20,6 +22,14 @@ export default function DashboardPage() {
   const { user, checking, setUser } = useAuth();
   const [loads, setLoads] = useState([]);
   const [emailText, setEmailText] = useState('');
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [ratePrefill, setRatePrefill] = useState(null);
+  const [lastPayload, setLastPayload] = useState(null);
+  const [modalError, setModalError] = useState(null);
+  const [modalSuccess, setModalSuccess] = useState(null);
 
   useEffect(() => {
     async function fetchLoads() {
@@ -100,6 +110,115 @@ export default function DashboardPage() {
     if (user?.firstName) return user.firstName;
     if (user?.email) return user.email.split('@')[0];
     return 'there';
+  }
+
+  async function handleProcessQuote() {
+    if (!emailText.trim()) {
+      setModalError('Please paste email content first.');
+      setIsModalOpen(true);
+      return;
+    }
+    
+    setProcessing(true);
+    setModalError(null);
+    setModalSuccess(null);
+    setRatePrefill(null);
+    setLastPayload(null);
+    setIsModalOpen(true);
+    
+    try {
+      const resp = await fetch(buildApiUrl('/api/email-paste'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: emailText })
+      });
+      const text = await resp.text();
+      if (!resp.ok) {
+        throw new Error(text || 'Failed to process email');
+      }
+      
+      setModalSuccess('Email processed successfully!');
+      
+      // Parse response and prefill the rate calculator
+      try {
+        const data = text ? JSON.parse(text) : {};
+        const payload = data && data.output ? data.output : data;
+        setLastPayload(payload);
+        
+        const body = payload && payload.body ? payload.body : {};
+        const shipmentDetails = body.shipment_details || payload.shipment || {};
+        const pickup = shipmentDetails.pickup || {};
+        const delivery = shipmentDetails.delivery || {};
+        const shipmentInfo = shipmentDetails.shipment_info || {};
+        const dims = shipmentInfo.dimensions || {};
+
+        setRatePrefill({
+          pickupCity: pickup.city || '',
+          pickupState: pickup.state || '',
+          pickupZip: pickup.zip || '',
+          pickupCountry: 'US',
+          pickupDate: pickup.requested_date_time || '',
+          deliveryCity: delivery.city || '',
+          deliveryState: delivery.state || '',
+          deliveryZip: delivery.zip || '',
+          deliveryCountry: 'US',
+          piecesUnit: 'in',
+          piecesQuantity: dims.pallets != null ? String(dims.pallets) : '',
+          part1Length: dims.length_in != null ? String(dims.length_in) : '',
+          part1Width: dims.width_in != null ? String(dims.width_in) : '',
+          part1Height: dims.height_in != null ? String(dims.height_in) : '',
+          part2Length: '',
+          part2Width: '',
+          part2Height: '',
+          weightUnit: shipmentInfo.weight_lbs ? 'lbs' : '',
+          weightValue: shipmentInfo.weight_lbs ? String(shipmentInfo.weight_lbs) : '',
+          hazardousUnNumbersText: '',
+          accessorialCodesText: '',
+          shipmentId: '',
+          referenceNumber: ''
+        });
+      } catch (_err) {
+        // ignore parse errors; prefill is best-effort
+      }
+    } catch (err) {
+      setModalError(err && err.message ? err.message : 'Failed to process email');
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  function closeModal() {
+    setIsModalOpen(false);
+    setModalError(null);
+    setModalSuccess(null);
+  }
+
+  async function handleSelectQuote(quote) {
+    if (!lastPayload) {
+      setModalError('No email payload to save with quote.');
+      return;
+    }
+    try {
+      const resp = await fetch(buildApiUrl('/api/email-paste/save-load'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: lastPayload, quote })
+      });
+      if (!resp.ok) {
+        const msg = await resp.text();
+        throw new Error(msg || 'Failed to save load with selected quote');
+      }
+      setModalSuccess('Load saved with selected quote!');
+      setEmailText(''); // Clear the input
+      // Refresh loads
+      const loadsResp = await fetch(buildApiUrl('/api/loads'), { credentials: 'include' });
+      const data = await loadsResp.json();
+      if (Array.isArray(data)) {
+        setLoads(data);
+      }
+    } catch (err) {
+      setModalError(err && err.message ? err.message : 'Failed to save load');
+    }
   }
 
   if (checking) {
@@ -186,10 +305,14 @@ export default function DashboardPage() {
                         Clear
                       </button>
                     )}
-                    <Link to="/email-paste" className="btn-process">
+                    <button 
+                      onClick={handleProcessQuote}
+                      className="btn-process"
+                      disabled={processing || !emailText.trim()}
+                    >
                       <Sparkles size={14} />
-                      Process Quote
-                    </Link>
+                      {processing ? 'Processing...' : 'Process Quote'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -330,6 +453,53 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* Quote Processing Modal */}
+      {isModalOpen && (
+        <div className="quote-modal-overlay" onClick={closeModal}>
+          <div className="quote-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="quote-modal-header">
+              <div>
+                <h2 className="quote-modal-title">
+                  {processing ? 'Processing Email...' : 'Calculate Rate'}
+                </h2>
+                <p className="quote-modal-subtitle">
+                  {processing 
+                    ? 'Extracting shipment details from your email...'
+                    : 'Review and get quotes for this shipment'
+                  }
+                </p>
+              </div>
+              <button className="quote-modal-close" onClick={closeModal}>
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="quote-modal-body">
+              {modalError && (
+                <div className="quote-modal-message error">{modalError}</div>
+              )}
+              {modalSuccess && (
+                <div className="quote-modal-message success">{modalSuccess}</div>
+              )}
+              
+              {processing ? (
+                <div className="quote-modal-loading">
+                  <div className="quote-modal-spinner" />
+                  <span>Analyzing email content...</span>
+                </div>
+              ) : (
+                <CalculateRatePage 
+                  embedded 
+                  initialValues={{}} 
+                  prefill={ratePrefill}
+                  onSelectQuote={handleSelectQuote}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
