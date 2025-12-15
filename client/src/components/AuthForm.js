@@ -41,55 +41,83 @@ export default function AuthForm(props) {
   }
 
   return (
-    <div className="container">
-      <div className="card" style={{ maxWidth: 480, margin: '80px auto' }}>
-        <div className="card-header">
-          <h2 className="title">{mode === 'signup' ? 'Create your account' : 'Sign in'}</h2>
-          <div className="subtitle">
-            {mode === 'signup' ? 'Enter your details to get started' : 'Enter your credentials to continue'}
-          </div>
+    <div className="auth-wrapper">
+      <div className="card auth-card">
+        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+          <div style={{ 
+            width: '48px', 
+            height: '48px', 
+            margin: '0 auto 16px', 
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #4f46e5 0%, #818cf8 100%)',
+            boxShadow: '0 4px 12px -2px rgba(99, 102, 241, 0.4)'
+          }}></div>
+          <h2 className="title" style={{ fontSize: '24px', marginBottom: '8px' }}>
+            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+          </h2>
+          <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
+            {mode === 'signup' ? 'Enter your details to get started' : 'Sign in to continue to Lanely'}
+          </p>
         </div>
-        <div className="card-body">
-          <form className="form-grid" onSubmit={handleSubmit}>
-            {mode === 'signup' && (
-              <div className="row-2">
-                <label>
-                  First name
-                  <input value={firstName} onChange={function(e){ setFirstName(e.target.value); }} />
-                </label>
-                <label>
-                  Last name
-                  <input value={lastName} onChange={function(e){ setLastName(e.target.value); }} />
-                </label>
-              </div>
-            )}
-            <label>
-              Email
-              <input type="email" value={email} onChange={function(e){ setEmail(e.target.value); }} />
-            </label>
-            <label>
-              Password
-              <input type="password" value={password} onChange={function(e){ setPassword(e.target.value); }} />
-            </label>
-            {error && <div className="error">Error: {error}</div>}
-            <div className="actions">
-              <button className="btn" type="submit" disabled={loading}>
-                {loading ? 'Please wait…' : (mode === 'signup' ? 'Create account' : 'Sign in')}
-              </button>
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={function(){ setMode(mode === 'signup' ? 'signin' : 'signup'); }}
-                disabled={loading}
-              >
-                {mode === 'signup' ? 'Have an account? Sign in' : 'New here? Sign up'}
-              </button>
+        
+        <form style={{ display: 'grid', gap: '16px' }} onSubmit={handleSubmit}>
+          {mode === 'signup' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <label>
+                First name
+                <input value={firstName} onChange={function(e){ setFirstName(e.target.value); }} />
+              </label>
+              <label>
+                Last name
+                <input value={lastName} onChange={function(e){ setLastName(e.target.value); }} />
+              </label>
             </div>
-          </form>
+          )}
+          <label>
+            Email
+            <input type="email" value={email} onChange={function(e){ setEmail(e.target.value); }} />
+          </label>
+          <label>
+            Password
+            <input type="password" value={password} onChange={function(e){ setPassword(e.target.value); }} />
+          </label>
+          
+          {error && (
+            <div style={{ 
+              padding: '12px 16px', 
+              background: '#fef2f2', 
+              border: '1px solid #fecaca', 
+              borderRadius: '10px',
+              color: '#dc2626',
+              fontSize: '14px'
+            }}>
+              {error}
+            </div>
+          )}
+          
+          <button className="btn" type="submit" disabled={loading} style={{ width: '100%', marginTop: '8px' }}>
+            {loading ? 'Please wait…' : (mode === 'signup' ? 'Create account' : 'Sign in')}
+          </button>
+        </form>
+        
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button
+            type="button"
+            onClick={function(){ setMode(mode === 'signup' ? 'signin' : 'signup'); }}
+            disabled={loading}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              color: '#4f46e5', 
+              fontSize: '14px',
+              fontWeight: '500',
+              cursor: 'pointer'
+            }}
+          >
+            {mode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
         </div>
       </div>
     </div>
   );
 }
-
-
