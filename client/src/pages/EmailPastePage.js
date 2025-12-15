@@ -12,6 +12,7 @@ export default function EmailPastePage() {
   const [submitError, setSubmitError] = useState(null);
   const [submitSuccess, setSubmitSuccess] = useState(null);
   const [ratePrefill, setRatePrefill] = useState(null);
+  const [lastPayload, setLastPayload] = useState(null);
 
   const lineCount = emailBody.length ? emailBody.split(/\r?\n/).length : 0;
   const charCount = emailBody.length;
@@ -48,6 +49,7 @@ export default function EmailPastePage() {
       try {
         const data = text ? JSON.parse(text) : {};
         const payload = data && data.output ? data.output : data;
+        setLastPayload(payload); // Store for later use when selecting a quote
         const body = payload && payload.body ? payload.body : {};
         const shipmentDetails = body.shipment_details || payload.shipment || {};
         const pickup = shipmentDetails.pickup || {};
@@ -87,6 +89,27 @@ export default function EmailPastePage() {
       setSubmitError(err && err.message ? err.message : 'Failed to submit email');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleSelectQuote(quote) {
+    if (!lastPayload) {
+      setSubmitError('No email payload to save with quote.');
+      return;
+    }
+    try {
+      const resp = await fetch(buildApiUrl('/api/email-paste/save-load'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: lastPayload, quote })
+      });
+      if (!resp.ok) {
+        const msg = await resp.text();
+        throw new Error(msg || 'Failed to save load with selected quote');
+      }
+      setSubmitSuccess('Load saved with selected quote!');
+    } catch (err) {
+      setSubmitError(err && err.message ? err.message : 'Failed to save load with selected quote');
     }
   }
 
@@ -165,7 +188,12 @@ export default function EmailPastePage() {
                 <div className="subtitle">Get a quote without leaving this page.</div>
               </div>
               <div className="card-body">
-                <CalculateRatePage embedded initialValues={{}} prefill={ratePrefill} />
+                <CalculateRatePage 
+                  embedded 
+                  initialValues={{}} 
+                  prefill={ratePrefill}
+                  onSelectQuote={handleSelectQuote}
+                />
               </div>
             </div>
           </div>

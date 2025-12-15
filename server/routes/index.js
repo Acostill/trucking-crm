@@ -458,15 +458,7 @@ router.post('/api/email-paste', function(req, res, next) {
         )
       );
 
-      if (statusCode >= 200 && statusCode < 300) {
-        try {
-          await persistAutomationLoads(parsed);
-        } catch (err) {
-          next(err);
-          return;
-        }
-      }
-
+      // Just relay the response to the client - saving happens via /api/email-paste/save-load
       res.status(statusCode).json(parsed);
     });
   });
@@ -477,6 +469,97 @@ router.post('/api/email-paste', function(req, res, next) {
 
   upstreamReq.write(payload);
   upstreamReq.end();
+});
+
+// POST /api/email-paste/save-load - Save a load from automation response with selected quote
+router.post('/api/email-paste/save-load', async function(req, res, next) {
+  try {
+    var payload = req.body && req.body.payload;
+    var selectedQuote = req.body && req.body.quote;
+    
+    if (!payload) {
+      res.status(400).json({ error: 'payload is required' });
+      return;
+    }
+
+    // If a quote was selected, use its total as the rate override
+    var overrideRate = selectedQuote && selectedQuote.priceTotal;
+    
+    // Extract outputs from automation response
+    var outputs = extractOutputsFromAutomation(payload);
+    if (!outputs.length) {
+      res.status(400).json({ error: 'Could not extract shipment data from payload.' });
+      return;
+    }
+
+    var saved = [];
+    for (var i = 0; i < outputs.length; i++) {
+      var output = outputs[i];
+      var record = buildLoadRecordFromOutput(output);
+      
+      // If no customer found, try to create a minimal record
+      if (!record) {
+        // Try to extract any useful info for a minimal record
+        var body = output.body || {};
+        var shipmentDetails = body.shipment_details || output.shipment || {};
+        var pickup = shipmentDetails.pickup || {};
+        var delivery = shipmentDetails.delivery || {};
+        
+        record = {
+          customer: output.client_name || 'Unknown Customer',
+          load_number: generateLoadNumber(),
+          status: 'Pending',
+          type: 'Email Import',
+          rate: overrideRate || null,
+          currency: 'USD',
+          shipper: pickup.city ? [pickup.city, pickup.state].filter(Boolean).join(', ') : 'Pickup pending',
+          shipper_location: formatLocation(pickup),
+          consignee: delivery.city ? [delivery.city, delivery.state].filter(Boolean).join(', ') : 'Delivery pending',
+          consignee_location: formatLocation(delivery),
+          description: 'Auto-imported from Email Paste workflow'
+        };
+      }
+      
+      // Apply rate override if a quote was selected
+      if (overrideRate !== undefined && overrideRate !== null) {
+        record.rate = overrideRate;
+      }
+
+      var columns = Object.keys(record);
+      var values = columns.map(function(key) { return record[key]; });
+      var placeholders = columns.map(function(_val, idx) { return '$' + (idx + 1); });
+      var insertSql =
+        'INSERT INTO loads (' + columns.join(',') + ') VALUES (' + placeholders.join(',') + ') RETURNING *';
+
+      var attempts = 0;
+      while (attempts < 3) {
+        try {
+          var result = await db.query(insertSql, values);
+          saved.push(result.rows[0]);
+          break;
+        } catch (err) {
+          if (err && err.code === '23505') {
+            // Duplicate load_number, generate a new one
+            record.load_number = generateLoadNumber();
+            var loadIndex = columns.indexOf('load_number');
+            values[loadIndex] = record.load_number;
+            attempts += 1;
+            continue;
+          }
+          throw err;
+        }
+      }
+    }
+
+    if (!saved.length) {
+      res.status(400).json({ error: 'Could not save load from automation response.' });
+      return;
+    }
+
+    res.status(201).json({ loads: saved });
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;
