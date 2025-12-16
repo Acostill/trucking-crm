@@ -853,6 +853,217 @@ label {
   border-bottom: none;
 }
 
+/* ========== Landing Page Navbar ========== */
+.landing-navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 1000;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  transition: all 0.3s ease;
+}
+
+.landing-navbar-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+@media (min-width: 640px) {
+  .landing-navbar-container {
+    padding: 0 24px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .landing-navbar-container {
+    padding: 0 32px;
+  }
+}
+
+.landing-navbar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 64px;
+}
+
+.landing-navbar-logo {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.landing-navbar-logo span {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: var(--text);
+}
+
+.landing-navbar-links {
+  display: none;
+  align-items: center;
+  gap: 32px;
+}
+
+@media (min-width: 768px) {
+  .landing-navbar-links {
+    display: flex;
+  }
+}
+
+.landing-navbar-link {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lanely-slate-500);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.landing-navbar-link:hover {
+  color: var(--primary);
+}
+
+.landing-navbar-actions {
+  display: none;
+  align-items: center;
+  gap: 16px;
+}
+
+@media (min-width: 768px) {
+  .landing-navbar-actions {
+    display: flex;
+  }
+}
+
+.landing-navbar-cta {
+  background: var(--lanely-slate-900);
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.2);
+}
+
+.landing-navbar-cta:hover {
+  background: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px -3px rgba(79, 70, 229, 0.3);
+}
+
+.landing-navbar-cta:active {
+  transform: scale(0.98);
+}
+
+.landing-navbar-mobile-toggle {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .landing-navbar-mobile-toggle {
+    display: none;
+  }
+}
+
+.landing-navbar-mobile-button {
+  background: transparent;
+  border: none;
+  color: var(--lanely-slate-500);
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+
+.landing-navbar-mobile-button:hover {
+  background: var(--lanely-slate-100);
+  color: var(--lanely-slate-900);
+}
+
+.landing-navbar-mobile-menu {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  right: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-bottom: 1px solid var(--border);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.landing-navbar-mobile-link {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--lanely-slate-600);
+  text-decoration: none;
+  padding: 8px 0;
+  transition: color 0.15s ease;
+}
+
+.landing-navbar-mobile-link:hover {
+  color: var(--primary);
+}
+
+.landing-navbar-mobile-divider {
+  border: none;
+  border-top: 1px solid var(--lanely-slate-100);
+  margin: 8px 0;
+}
+
+.landing-navbar-mobile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.landing-navbar-mobile-cta {
+  background: var(--primary);
+  color: white;
+  font-weight: 500;
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.landing-navbar-mobile-cta:hover {
+  background: var(--primary-600);
+}
+
+/* ========== Landing Page Content ========== */
+.landing-page-main {
+  margin-top: 64px; /* Account for fixed navbar */
+}
+
 /* ========== Quote Processing Modal ========== */
 .quote-modal-overlay {
   position: fixed;
