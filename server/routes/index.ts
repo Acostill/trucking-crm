@@ -5,6 +5,14 @@ import xml2js from 'xml2js';
 import util from 'util';
 import { URL } from 'url';
 import db from '../db';
+import {
+  PickupLocation,
+  DeliveryOption,
+  Dimension,
+  ShipmentInfo,
+  ShipmentDetails,
+  N8nEmailPasteResponse
+} from '../types/n8n';
 
 const router = express.Router();
 
@@ -13,18 +21,20 @@ function generateLoadNumber() {
   return 'EMAIL-' + Date.now() + '-' + random;
 }
 
-function formatLocation(location: any) {
+function formatLocation(location: PickupLocation | DeliveryOption | null | undefined): string | null {
   if (!location || typeof location !== 'object') return null;
   const segments: string[] = [];
   if (location.city) segments.push(location.city);
   if (location.state) segments.push(location.state);
   const cityState = segments.length ? segments.join(', ') : null;
-  const zip = location.zip ? String(location.zip) : null;
+  const zip = (location as DeliveryOption).zip_code || (location as PickupLocation).zip 
+    ? String((location as DeliveryOption).zip_code || (location as PickupLocation).zip) 
+    : null;
   if (cityState && zip) return cityState + ' ' + zip;
   return cityState || zip || null;
 }
 
-function buildLoadRecordFromOutput(output: any) {
+function buildLoadRecordFromOutput(output: N8nEmailPasteResponse | null | undefined) {
   if (!output || typeof output !== 'object') return null;
 
   const shipment =
@@ -36,14 +46,18 @@ function buildLoadRecordFromOutput(output: any) {
     shipment.pickup ||
     (shipment.shipment && shipment.shipment.pickup) ||
     {};
+  // New structure: delivery_options is an array, take the first one
+  const deliveryOptions = shipment.delivery_options || [];
   const delivery =
     shipment.delivery ||
     (shipment.shipment && shipment.shipment.delivery) ||
-    {};
+    (deliveryOptions.length > 0 ? deliveryOptions[0] : {});
 
   const shipmentInfo = shipment.shipment_info || shipment.shipmentInfo || {};
   const billing = output.billing || {};
-  const dimensions = shipment.dimensions || shipmentInfo.dimensions || {};
+  // New structure: dimensions is an array, take the first one
+  const dimsArray = shipmentInfo.dimensions || shipment.dimensions || [];
+  const dimensions = Array.isArray(dimsArray) ? (dimsArray[0] || {}) : (dimsArray || {});
 
   const customer =
     output.client_name ||
@@ -61,18 +75,22 @@ function buildLoadRecordFromOutput(output: any) {
   if (Number.isNaN(numericRate)) numericRate = null;
 
   const weightValue =
-    shipment.shipment_weight_lbs != null
-      ? shipment.shipment_weight_lbs
-      : shipmentInfo.weight_lbs != null
-        ? shipmentInfo.weight_lbs
-        : shipment.weight;
+    shipmentInfo.total_weight_lbs != null
+      ? shipmentInfo.total_weight_lbs
+      : shipment.shipment_weight_lbs != null
+        ? shipment.shipment_weight_lbs
+        : shipmentInfo.weight_lbs != null
+          ? shipmentInfo.weight_lbs
+          : shipment.weight;
   let numericWeight = typeof weightValue === 'number' ? weightValue : Number(weightValue);
   if (Number.isNaN(numericWeight)) numericWeight = null;
 
   const qtyValue =
-    dimensions.pallets != null
-      ? dimensions.pallets
-      : (dimensions.quantity != null ? dimensions.quantity : null);
+    shipmentInfo.pallets != null
+      ? shipmentInfo.pallets
+      : dimensions.pallets != null
+        ? dimensions.pallets
+        : (dimensions.quantity != null ? dimensions.quantity : null);
   let numericQty = typeof qtyValue === 'number' ? qtyValue : Number(qtyValue);
   if (Number.isNaN(numericQty)) numericQty = null;
 
@@ -86,10 +104,11 @@ function buildLoadRecordFromOutput(output: any) {
     pickup.address ||
     (pickup.street ? pickup.street : null) ||
     [pickup.city, pickup.state, pickup.zip].filter(Boolean).join(', ');
+  const deliveryZip = delivery.zip_code || delivery.zip;
   const consigneeAddress =
     delivery.address ||
     (delivery.street ? delivery.street : null) ||
-    [delivery.city, delivery.state, delivery.zip].filter(Boolean).join(', ');
+    [delivery.city, delivery.state, deliveryZip].filter(Boolean).join(', ');
 
   return {
     customer: customer,
@@ -108,7 +127,7 @@ function buildLoadRecordFromOutput(output: any) {
       null,
     shipper: shipperAddress || 'Pickup location pending',
     shipper_location: formatLocation(pickup),
-    ship_date: pickup.date_time || pickup.requested_date_time || null,
+    ship_date: pickup.pickup_date || pickup.date_time || pickup.requested_date_time || null,
     show_ship_time: true,
     description: description,
     qty: numericQty,
@@ -116,22 +135,22 @@ function buildLoadRecordFromOutput(output: any) {
     value: null,
     consignee: consigneeAddress || 'Consignee location pending',
     consignee_location: formatLocation(delivery),
-    delivery_date: delivery.expected_date || delivery.date || null,
+    delivery_date: delivery.requested_delivery_date || delivery.expected_date || delivery.date || null,
     show_delivery_time: true,
     delivery_notes: output.contact_email || (output.sender && output.sender.email) || null
   };
 }
 
-function extractOutputsFromAutomation(payload: any) {
+function extractOutputsFromAutomation(payload: N8nEmailPasteResponse | N8nEmailPasteResponse[] | null | undefined): N8nEmailPasteResponse[] {
   if (!payload) return [];
   if (Array.isArray(payload)) {
     return payload
       .map(function(item) {
         if (!item || typeof item !== 'object') return null;
-        if (item.output && typeof item.output === 'object') return item.output;
-        return item;
+        if (item.output && typeof item.output === 'object') return item.output as N8nEmailPasteResponse;
+        return item as N8nEmailPasteResponse;
       })
-      .filter(Boolean);
+      .filter((item): item is N8nEmailPasteResponse => item !== null);
   }
   if (payload.output && typeof payload.output === 'object') {
     return [payload.output];
@@ -142,7 +161,7 @@ function extractOutputsFromAutomation(payload: any) {
   return [];
 }
 
-async function persistAutomationLoads(payload: any) {
+async function persistAutomationLoads(payload: N8nEmailPasteResponse | N8nEmailPasteResponse[] | null | undefined) {
   const outputs = extractOutputsFromAutomation(payload);
   if (!outputs.length) {
     throw new Error('Automation response did not include any load payloads.');

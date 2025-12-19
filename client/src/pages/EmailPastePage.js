@@ -88,7 +88,7 @@ export default function EmailPastePage() {
           pickupDate: pickup.pickup_date || pickup.requested_date_time || pickup.date || '',
           deliveryCity: delivery.city || '',
           deliveryState: delivery.state || '',
-          deliveryZip: delivery.zip || '',
+          deliveryZip: delivery.zip_code || delivery.zip || '',
           deliveryCountry: 'US',
           piecesUnit: 'in',
           piecesQuantity: pallets != null ? String(pallets) : '',
