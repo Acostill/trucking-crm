@@ -296,11 +296,11 @@ export default function LanelyLandingPage() {
         <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6" style={{ maxWidth: '1280px', margin: '0 auto', padding: '48px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="flex items-center gap-2">
              <span style={{ fontSize: '20px', fontWeight: '800', letterSpacing: '-1px', color: '#cbd5e1' }}>
-                LANELY
+                First Class Trucking
               </span>
           </div>
           <p className="text-sm text-slate-500" style={{ color: '#64748b', fontSize: '14px' }}>
-            © {new Date().getFullYear()} Lanely Logistics, Inc. All rights reserved.
+            © {new Date().getFullYear()} First Class Trucking, Inc. All rights reserved.
           </p>
           <div className="flex gap-6" style={{ display: 'flex', gap: '24px' }}>
             <a href="#" className="text-slate-400 hover:text-indigo-600 transition-colors" style={{ color: '#94a3b8', textDecoration: 'none' }}>Privacy</a>

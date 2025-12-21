@@ -1,10 +1,10 @@
-/* Lanely Design System Integration */
+/* First Class Trucking Design System Integration */
 *, *::before, *::after {
   box-sizing: border-box;
 }
 
 :root {
-  /* Lanely Palette */
+  /* First Class Trucking Palette */
   --lanely-indigo-50: #eef2ff;
   --lanely-indigo-100: #e0e7ff;
   --lanely-indigo-500: #6366f1;
@@ -138,8 +138,7 @@ body {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--primary) 0%, #818cf8 100%);
-  box-shadow: 0 4px 8px -2px rgba(99, 102, 241, 0.4);
+  background: transparent;
 }
 
 .nav-links {
@@ -1643,8 +1642,15 @@ label {
   flex-shrink: 0;
 }
 
+.sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  display: block;
+}
+
 .sidebar-logo-text {
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--text);
