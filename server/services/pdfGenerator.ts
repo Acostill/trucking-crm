@@ -2,6 +2,62 @@ import puppeteerCore from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 
 /**
+ * Fetches an image from a URL and converts it to base64
+ */
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.warn(`Failed to fetch image from ${url}: ${response.statusText}`);
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const contentType = response.headers.get('content-type') || 'image/png';
+    return `data:${contentType};base64,${buffer.toString('base64')}`;
+  } catch (err) {
+    console.warn(`Error fetching image from ${url}:`, err);
+    return null;
+  }
+}
+
+/**
+ * Replaces Google Drive image URLs with base64 embedded images in HTML
+ */
+async function embedImagesInHTML(htmlContent: string): Promise<string> {
+  // Find all img tags with Google Drive URLs
+  const googleDriveImageRegex = /<img[^>]+src=["'](https:\/\/drive\.google\.com\/[^"']+)["'][^>]*>/gi;
+  const matches = Array.from(htmlContent.matchAll(googleDriveImageRegex));
+  
+  let updatedHTML = htmlContent;
+  
+  for (const match of matches) {
+    const fullImgTag = match[0];
+    const driveUrl = match[1];
+    
+    // Convert Google Drive URL to direct image URL
+    const fileIdMatch = driveUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch) {
+      const fileId = fileIdMatch[1];
+      const directImageUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+      
+      // Fetch and convert to base64
+      const base64Image = await fetchImageAsBase64(directImageUrl);
+      
+      if (base64Image) {
+        // Replace the src with base64
+        updatedHTML = updatedHTML.replace(
+          fullImgTag,
+          fullImgTag.replace(driveUrl, base64Image)
+        );
+      }
+    }
+  }
+  
+  return updatedHTML;
+}
+
+/**
  * Generates a PDF from HTML content
  * @param htmlContent - The HTML content to convert to PDF
  * @param options - Optional PDF generation options
@@ -21,6 +77,9 @@ export async function generatePDFFromHTML(
     landscape?: boolean;
   }
 ): Promise<Buffer> {
+  // Embed images (like Google Drive logos) as base64 before generating PDF
+  const htmlWithEmbeddedImages = await embedImagesInHTML(htmlContent);
+  
   let executablePath: string | undefined;
   let launchArgs: string[] = ['--no-sandbox', '--disable-setuid-sandbox'];
   
@@ -51,8 +110,8 @@ export async function generatePDFFromHTML(
   try {
     const page = await browser.newPage();
     
-    // Set the HTML content
-    await page.setContent(htmlContent, {
+    // Set the HTML content with embedded images
+    await page.setContent(htmlWithEmbeddedImages, {
       waitUntil: 'networkidle0'
     });
 

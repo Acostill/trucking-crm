@@ -2826,13 +2826,196 @@ label {
   margin: 0 auto;
 }
 
+.quote-view-page .quote-card {
+  margin-top: 24px;
+  padding: 28px;
+}
+
+.quote-view-page .quote-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.quote-view-page .quote-total .label {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  margin-bottom: 4px;
+}
+
+.quote-view-page .quote-total .value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.quote-view-page .quote-badges {
+  margin-top: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quote-view-page .badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--lanely-slate-50);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.quote-view-page .badge.muted {
+  color: var(--muted);
+}
+
+.quote-view-page .muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.quote-view-page .grid-2 {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 20px;
+}
+
+.quote-view-page .panel {
+  background: var(--lanely-slate-50);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.quote-view-page .panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.quote-view-page .kv {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.quote-view-page .kv .k {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.quote-view-page .kv .v {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+
+.quote-view-page .kv.total {
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  padding-top: 12px;
+}
+
+.quote-view-page .kv.total .k {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.quote-view-page .kv.total .v {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.quote-view-page .divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 0;
+}
+
+.quote-view-page .table {
+  display: grid;
+  gap: 8px;
+}
+
+.quote-view-page .thead {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.quote-view-page .tbody {
+  display: grid;
+  gap: 8px;
+}
+
+.quote-view-page .tr {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.quote-view-page .desc {
+  font-size: 14px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.quote-view-page .sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.quote-view-page .amount {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+
+.quote-view-page .tfoot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .quote-view-page .info-item {
   margin-bottom: 16px;
 }
 
 .quote-view-page .info-label {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 4px;
@@ -2841,8 +3024,41 @@ label {
 
 .quote-view-page .info-value {
   font-size: 16px;
-  color: #111827;
+  color: var(--text);
   font-weight: 500;
+}
+
+.quote-view-page .page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 768px) {
+  .quote-view-page .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  
+  .quote-view-page .quote-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .quote-view-page .quote-total {
+    width: 100%;
+  }
+  
+  .quote-view-page .quote-total .label,
+  .quote-view-page .quote-total .value {
+    text-align: left;
+  }
+  
+  .quote-view-page .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 @keyframes spin {
