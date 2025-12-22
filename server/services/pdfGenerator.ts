@@ -1,4 +1,5 @@
-import puppeteer from 'puppeteer';
+import puppeteerCore from 'puppeteer-core';
+import chromium from '@sparticuz/chromium';
 
 /**
  * Generates a PDF from HTML content
@@ -20,9 +21,31 @@ export async function generatePDFFromHTML(
     landscape?: boolean;
   }
 ): Promise<Buffer> {
-  const browser = await puppeteer.launch({
+  let executablePath: string | undefined;
+  let launchArgs: string[] = ['--no-sandbox', '--disable-setuid-sandbox'];
+  
+  // Try to get Chromium executable path for serverless environments
+  try {
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      // Use custom executable path if provided
+      executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    } else {
+      // Try to use @sparticuz/chromium (works in AWS Lambda/serverless)
+      executablePath = await chromium.executablePath();
+      launchArgs = chromium.args;
+    }
+  } catch (err) {
+    // If chromium.executablePath() fails, try to use system Chrome/Chromium
+    console.warn('Could not get Chromium executable path, trying system Chrome:', err);
+    // Will try to use system Chrome if available
+    executablePath = undefined;
+  }
+  
+  const browser = await puppeteerCore.launch({
+    args: launchArgs,
+    defaultViewport: { width: 1920, height: 1080 },
+    executablePath: executablePath,
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
   try {
@@ -35,7 +58,7 @@ export async function generatePDFFromHTML(
 
     // Generate PDF with options
     const pdfBuffer = await page.pdf({
-      format: options?.format || 'A4',
+      format: options?.format || 'Letter',
       margin: options?.margin || {
         top: '20mm',
         right: '20mm',
