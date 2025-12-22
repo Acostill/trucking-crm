@@ -208,7 +208,7 @@ export default function DashboardPage() {
     setModalSuccess(null);
   }
 
-  async function handleSelectQuote(quote) {
+  async function handleSelectQuote(quote, contactInfo) {
     if (!lastPayload) {
       setModalError('No email payload to save with quote.');
       return;
@@ -217,12 +217,17 @@ export default function DashboardPage() {
       const resp = await fetch(buildApiUrl('/api/email-paste/save-load'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload: lastPayload, quote })
+        body: JSON.stringify({ 
+          payload: lastPayload, 
+          quote,
+          contact: contactInfo
+        })
       });
       if (!resp.ok) {
         const msg = await resp.text();
         throw new Error(msg || 'Failed to save load with selected quote');
       }
+      const result = await resp.json();
       setModalSuccess('Load saved with selected quote!');
       setEmailText(''); // Clear the input
       // Refresh loads
@@ -233,6 +238,7 @@ export default function DashboardPage() {
       }
     } catch (err) {
       setModalError(err && err.message ? err.message : 'Failed to save load');
+      throw err; // Re-throw so modal can still show confirmation
     }
   }
 

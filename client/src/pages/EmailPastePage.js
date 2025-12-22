@@ -119,7 +119,7 @@ export default function EmailPastePage() {
     }
   }
 
-  async function handleSelectQuote(quote) {
+  async function handleSelectQuote(quote, contactInfo) {
     if (!lastPayload) {
       setSubmitError('No email payload to save with quote.');
       return;
@@ -128,15 +128,22 @@ export default function EmailPastePage() {
       const resp = await fetch(buildApiUrl('/api/email-paste/save-load'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payload: lastPayload, quote })
+        body: JSON.stringify({ 
+          payload: lastPayload, 
+          quote,
+          contact: contactInfo
+        })
       });
       if (!resp.ok) {
         const msg = await resp.text();
         throw new Error(msg || 'Failed to save load with selected quote');
       }
+      const result = await resp.json();
       setSubmitSuccess('Load saved with selected quote!');
+      // Optionally refresh or update UI here
     } catch (err) {
       setSubmitError(err && err.message ? err.message : 'Failed to save load with selected quote');
+      throw err; // Re-throw so modal can still show confirmation
     }
   }
 

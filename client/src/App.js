@@ -11,6 +11,7 @@ import AdminPortalPage from './pages/AdminPortalPage';
 import LanelyLandingPage from './pages/LanelyLandingPage';
 import DashboardPage from './pages/DashboardPage';
 import PipelinePage from './pages/PipelinePage';
+import QuoteViewPage from './pages/QuoteViewPage';
 import { buildApiUrl } from './config';
 import GlobalTopbar from './components/GlobalTopbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -102,6 +103,7 @@ function AppRoutes() {
       <Route path="/admin-portal" element={<AdminPortalPage />} />
       <Route path="/pipeline" element={<PipelinePage />} />
       <Route path="/loads" element={<DashboardApp />} />
+      <Route path="/quotes/:quoteId" element={<QuoteViewPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

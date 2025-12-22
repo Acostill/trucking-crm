@@ -9,9 +9,10 @@ import indexRouter from './routes/index';
 import usersRouter from './routes/users';
 import loadsRouter from './routes/loads';
 import authRouter from './routes/auth';
+import quotesRouter from './routes/quotes';
 
 const app = express();
-const ROOT_DIR = path.join(process.cwd(), 'server');
+const ROOT_DIR = __dirname;
 
 function parseCorsOrigins(value: string | undefined): string[] {
   if (!value || typeof value !== 'string') {
@@ -52,6 +53,7 @@ app.use('/', indexRouter);
 app.use('/api/admin/users', usersRouter);
 app.use('/api/loads', loadsRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/quotes', quotesRouter);
 
 // catch 404 and forward to error handler
 app.use(function(_req: Request, _res: Response, next: NextFunction) {
@@ -60,6 +62,16 @@ app.use(function(_req: Request, _res: Response, next: NextFunction) {
 
 // error handler
 app.use(function(err: any, req: Request, res: Response, _next: NextFunction) {
+  // For API routes, return JSON instead of rendering a view
+  if (req.path.startsWith('/api/')) {
+    res.status(err.status || 500).json({
+      error: err.message || 'Internal Server Error',
+      ...(req.app.get('env') === 'development' ? { stack: err.stack, details: err } : {})
+    });
+    return;
+  }
+
+  // For non-API routes, render the error view
   res.locals.message = err.message;
   res.locals.error = req.app.get('env') === 'development' ? err : {};
 

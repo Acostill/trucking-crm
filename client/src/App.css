@@ -2819,3 +2819,41 @@ label {
     justify-content: center;
   }
 }
+
+/* Quote View Page Styles */
+.quote-view-page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.quote-view-page .info-item {
+  margin-bottom: 16px;
+}
+
+.quote-view-page .info-label {
+  font-size: 12px;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.quote-view-page .info-value {
+  font-size: 16px;
+  color: #111827;
+  font-weight: 500;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}

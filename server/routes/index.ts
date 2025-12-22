@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import http from 'http';
 import https from 'https';
-import xml2js from 'xml2js';
 import util from 'util';
 import { URL } from 'url';
 import db from '../db';
@@ -13,6 +12,9 @@ import {
   ShipmentDetails,
   N8nEmailPasteResponse
 } from '../types/n8n';
+import { callCalculateRateAPI } from '../services/calculateRate';
+import { callForwardAirAPI } from '../services/forwardAir';
+import { generatePDFFromHTML } from '../services/pdfGenerator';
 
 const router = express.Router();
 
@@ -37,9 +39,11 @@ function formatLocation(location: PickupLocation | DeliveryOption | null | undef
 function buildLoadRecordFromOutput(output: N8nEmailPasteResponse | null | undefined) {
   if (!output || typeof output !== 'object') return null;
 
+  // Handle new structure where shipment_details is directly in body
   const shipment =
     output.shipment ||
     (output.body && output.body.shipment_details) ||
+    (output as any).shipment_details ||
     {};
 
   const pickup =
@@ -59,11 +63,19 @@ function buildLoadRecordFromOutput(output: N8nEmailPasteResponse | null | undefi
   const dimsArray = shipmentInfo.dimensions || shipment.dimensions || [];
   const dimensions = Array.isArray(dimsArray) ? (dimsArray[0] || {}) : (dimsArray || {});
 
+  // Try to extract customer from various possible locations
+  const outputAny = output as any;
   const customer =
     output.client_name ||
     (output.sender && (output.sender.company || output.sender.name)) ||
-    output.sender;
-  if (!customer) return null;
+    output.sender ||
+    (outputAny.subject ? `Customer from ${outputAny.subject}` : null) ||
+    'Unknown Customer';
+  
+  // Don't return null if customer is missing, use default instead
+  if (!customer) {
+    console.warn('[buildLoadRecordFromOutput] No customer found, using default');
+  }
 
   const rateValue =
     shipment.rate != null
@@ -141,12 +153,44 @@ function buildLoadRecordFromOutput(output: N8nEmailPasteResponse | null | undefi
   };
 }
 
-function extractOutputsFromAutomation(payload: N8nEmailPasteResponse | N8nEmailPasteResponse[] | null | undefined): N8nEmailPasteResponse[] {
+function extractOutputsFromAutomation(payload: any): N8nEmailPasteResponse[] {
   if (!payload) return [];
+  
+  // Handle new structure with parsedSample wrapper
+  if (payload.parsedSample && typeof payload.parsedSample === 'object') {
+    // Unwrap parsedSample - the body contains shipment_details
+    // We need to structure it so buildLoadRecordFromOutput can find it
+    const parsedBody = payload.parsedSample.body;
+    if (parsedBody && parsedBody.shipment_details) {
+      // Structure it as { body: { shipment_details: ... } } for compatibility
+      return [{
+        body: {
+          shipment_details: parsedBody.shipment_details
+        },
+        subject: payload.parsedSample.subject
+      } as N8nEmailPasteResponse];
+    }
+    // Fallback: return the body directly
+    return [parsedBody as N8nEmailPasteResponse];
+  }
+  
   if (Array.isArray(payload)) {
     return payload
       .map(function(item) {
         if (!item || typeof item !== 'object') return null;
+        // Handle parsedSample in array items
+        if (item.parsedSample && typeof item.parsedSample === 'object') {
+          const parsedBody = item.parsedSample.body;
+          if (parsedBody && parsedBody.shipment_details) {
+            return {
+              body: {
+                shipment_details: parsedBody.shipment_details
+              },
+              subject: item.parsedSample.subject
+            } as N8nEmailPasteResponse;
+          }
+          return parsedBody as N8nEmailPasteResponse;
+        }
         if (item.output && typeof item.output === 'object') return item.output as N8nEmailPasteResponse;
         return item as N8nEmailPasteResponse;
       })
@@ -216,179 +260,44 @@ router.post('/test-post', function(_req: Request, res: Response) {
   res.send('hello test-post');
 });
 
-// POST proxy to external calculate-rate API
-router.post('/calculate-rate', function(req: Request, res: Response, next: NextFunction) {
-  const payload = JSON.stringify(req.body || {});
-  console.log("hello calculate-rate");
+// POST proxy to external calculate-rate API - now unified to call both APIs
+router.post('/calculate-rate', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = req.body || {};
+    
+    // Call both APIs in parallel
+    const [calculateRateResult, forwardAirResult] = await Promise.allSettled([
+      callCalculateRateAPI(body),
+      callForwardAirAPI(body)
+    ]);
 
-  const options = {
-    method: 'POST',
-    hostname: 'stage-lb-public-api-back.rhinocodes.org',
-    path: '/api/v2/calculate-rate',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-      'Content-Length': Buffer.byteLength(payload),
-      'X-API-Key': 'S7RcSvj5jAhl.2c7e2ZXsOQQqsW0zQedWlRfrDcJ1BPWa'
-    }
-  };
+    // Extract results, handling both success and failure cases
+    const calculateRate = calculateRateResult.status === 'fulfilled' 
+      ? calculateRateResult.value.data 
+      : { error: calculateRateResult.reason?.message || 'Failed to fetch calculate-rate quote' };
+    
+    const forwardAir = forwardAirResult.status === 'fulfilled' 
+      ? forwardAirResult.value.data 
+      : { error: forwardAirResult.reason?.message || 'Failed to fetch Forward Air quote' };
 
-  const apiReq = https.request(options, function(apiRes) {
-    let data = '';
-    apiRes.on('data', function(chunk) { data += chunk; });
-    apiRes.on('end', function() {
-      const contentType = (apiRes.headers && apiRes.headers['content-type']) || 'application/json';
-      res.status(apiRes.statusCode || 500);
-      res.set('content-type', contentType);
-      if (contentType.indexOf('application/json') > -1) {
-        try {
-          res.send(JSON.parse(data));
-        } catch (e) {
-          res.send(data);
-        }
-      } else {
-        res.send(data);
-      }
+    // Return combined response
+    res.status(200).json({
+      calculateRate: calculateRate,
+      forwardAir: forwardAir
     });
-  });
-
-  apiReq.on('error', function(err) {
+  } catch (err) {
     next(err);
-  });
-
-  apiReq.write(payload);
-  apiReq.end();
+  }
 });
 
-// POST to Forward Air quotes API with XML body
-router.post('/forwardair-quote', function(req: Request, res: Response, next: NextFunction) {
-  const body = req.body || {};
-  const pickup = body.pickup || {};
-  const pickupLoc = pickup.location || {};
-  const delivery = body.delivery || {};
-  const deliveryLoc = delivery.location || {};
-  const pieces = body.pieces || {};
-  const parts = Array.isArray(pieces.parts) ? pieces.parts : [];
-  const firstPart = parts[0] || {};
-  const weight = body.weight || {};
-
-  function toWeightType(unit: string) {
-    const u = String(unit || '').toLowerCase();
-    if (u === 'lb' || u === 'lbs' || u === 'pound' || u === 'pounds') return 'L';
-    if (u === 'kg' || u === 'kilogram' || u === 'kilograms') return 'K';
-    return 'L';
-  }
-
-  function toYMD(dateInput: string) {
-    try {
-      const d = dateInput ? new Date(dateInput) : new Date();
-      const year = d.getUTCFullYear();
-      const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(d.getUTCDate()).padStart(2, '0');
-      return year + '-' + month + '-' + day;
-    } catch (_e) {
-      return '2020-11-02';
-    }
-  }
-
-  const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
-<QuoteRequest>
-    <BillToCustomerNumber>2300130</BillToCustomerNumber>
-    <ShipperCustomerNumber>1234567</ShipperCustomerNumber>
-    <Origin>
-        <OriginAirportCode/>
-        <OriginZipCode>${pickupLoc.zip || '90746'}</OriginZipCode>
-        <OriginCountryCode>US</OriginCountryCode>
-        <Pickup>
-            <AirportPickup>N</AirportPickup>
-        </Pickup>
-    </Origin>
-    <Destination>
-        <DestinationAirportCode/>
-        <DestinationZipCode>${deliveryLoc.zip || '48154'}</DestinationZipCode>
-        <DestinationCountryCode>US</DestinationCountryCode>
-        <Delivery>
-            <AirportDelivery>N</AirportDelivery>
-        </Delivery>
-    </Destination>
-    <FreightDetails>
-        <FreightDetail>
-            <Weight>${Number(weight.value || 1500)}</Weight>
-            <WeightType>${toWeightType(weight.unit)}</WeightType>
-            <Pieces>${Number(pieces.quantity || 1)}</Pieces>
-            <FreightClass>60.0</FreightClass>
-        </FreightDetail>
-    </FreightDetails>
-    <Dimensions>
-        <Dimension>
-            <Pieces>${Number(pieces.quantity || 1)}</Pieces>
-            <Length>${Number(firstPart.length || 40)}</Length>
-            <Width>${Number(firstPart.width || 30)}</Width>
-            <Height>${Number(firstPart.height || 20)}</Height>
-        </Dimension>
-    </Dimensions>
-    <Hazmat>N</Hazmat>
-    <InBondShipment>N</InBondShipment>
-    <DeclaredValue>0.00</DeclaredValue>
-    <ShippingDate>${toYMD(pickup.date)}</ShippingDate>
-</QuoteRequest>`;
-
-  const options = {
-    method: 'POST',
-    hostname: 'test-api.forwardair.com',
-    path: '/ltlservices/v2/rest/waybills/quotes',
-    headers: {
-      'Content-Type': 'application/xml',
-      'Accept': 'application/xml',
-      'Content-Length': Buffer.byteLength(xmlBody),
-      'user': 'firstmia',
-      'password': 'L3R2KKgoUjBf4Df6',
-      'customerId': 'FIRSTMIA'
-    }
-  };
-
-  const apiReq = https.request(options, function(apiRes) {
-    let data = '';
-    apiRes.on('data', function(chunk) { data += chunk; });
-    apiRes.on('end', function() {
-      const contentType = (apiRes.headers && apiRes.headers['content-type']) || 'application/xml';
-      const lowerContentType = String(contentType || '').toLowerCase();
-      res.status(apiRes.statusCode || 500);
-      if (lowerContentType.indexOf('xml') > -1) {
-        xml2js.parseString(
-          data,
-          { explicitArray: false, trim: true, explicitRoot: false },
-          function(err, result) {
-            if (err) {
-              res.set('content-type', 'application/json');
-              res.send({ error: 'Failed to parse XML response', raw: data });
-            } else {
-              res.set('content-type', 'application/json');
-              res.send(result);
-            }
-          }
-        );
-      } else if (lowerContentType.indexOf('json') > -1) {
-        try {
-          res.set('content-type', 'application/json');
-          res.send(JSON.parse(data));
-        } catch (e) {
-          res.set('content-type', 'application/json');
-          res.send({ error: 'Invalid JSON from upstream', raw: data });
-        }
-      } else {
-        res.set('content-type', 'application/json');
-        res.send({ raw: data });
-      }
-    });
-  });
-
-  apiReq.on('error', function(err) {
+// POST to Forward Air quotes API with XML body (backward compatibility endpoint)
+router.post('/forwardair-quote', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await callForwardAirAPI(req.body);
+    res.status(result.statusCode).json(result.data);
+  } catch (err) {
     next(err);
-  });
-
-  apiReq.write(xmlBody);
-  apiReq.end();
+  }
 });
 
 router.post('/api/email-paste', function(req: Request, res: Response, next: NextFunction) {
@@ -484,6 +393,122 @@ router.post('/api/email-paste', function(req: Request, res: Response, next: Next
 
   upstreamReq.write(payload);
   upstreamReq.end();
+});
+
+// POST endpoint to save a load after selecting a quote
+router.post('/api/email-paste/save-load', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { payload, quote, contact } = req.body || {};
+    
+    if (!payload) {
+      res.status(400).json({ error: 'Payload is required' });
+      return;
+    }
+
+    // Extract the load record from the payload
+    const outputs = extractOutputsFromAutomation(payload);
+    if (!outputs.length) {
+      res.status(400).json({ error: 'Payload did not include any load data' });
+      return;
+    }
+
+    // Build load record from the first output
+    const record = buildLoadRecordFromOutput(outputs[0]);
+    if (!record) {
+      res.status(400).json({ error: 'Could not build load record from payload' });
+      return;
+    }
+
+    // Add quote information to the load record
+    if (quote && typeof quote === 'object') {
+      if (quote.priceTotal != null) {
+        (record as any).rate = typeof quote.priceTotal === 'number' 
+          ? quote.priceTotal 
+          : Number(quote.priceTotal) || (record as any).rate;
+      }
+      if (quote.truckType) {
+        (record as any).equipment_type = quote.truckType;
+      }
+    }
+
+    // Add contact information if provided
+    if (contact && typeof contact === 'object') {
+      if (contact.email) {
+        (record as any).delivery_notes = contact.email;
+      }
+      if (contact.name) {
+        // Could store contact name in a separate field if needed
+        (record as any).customer = contact.name;
+      }
+    }
+
+    // Insert into database
+    const columns = Object.keys(record);
+    const values = columns.map(function(key) { return (record as any)[key]; });
+    const placeholders = columns.map(function(_val, idx) { return '$' + (idx + 1); });
+    const insertSql =
+      'INSERT INTO loads (' + columns.join(',') + ') VALUES (' + placeholders.join(',') + ') RETURNING *';
+
+    let attempts = 0;
+    let saved: any = null;
+    while (attempts < 3) {
+      try {
+        const result = await db.query(insertSql, values);
+        saved = result.rows[0];
+        break;
+      } catch (err: any) {
+        if (err && err.code === '23505') {
+          // Duplicate key error - regenerate load number and retry
+          (record as any).load_number = generateLoadNumber();
+          const loadIndex = columns.indexOf('load_number');
+          values[loadIndex] = (record as any).load_number;
+          attempts += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!saved) {
+      res.status(500).json({ error: 'Failed to save load after multiple attempts' });
+      return;
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      load: saved,
+      message: 'Load saved successfully'
+    });
+  } catch (err) {
+    console.error('Error saving load:', err);
+    next(err);
+  }
+});
+
+// POST endpoint to generate PDF from HTML content
+router.post('/api/generate-pdf', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { html, options } = req.body || {};
+    
+    if (!html || typeof html !== 'string') {
+      res.status(400).json({ error: 'HTML content is required' });
+      return;
+    }
+
+    // Generate PDF from HTML
+    const pdfBuffer = await generatePDFFromHTML(html, options);
+
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="generated-document.pdf"');
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+
+    // Send PDF buffer
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error('Error generating PDF:', err);
+    next(err);
+  }
 });
 
 export default router;
