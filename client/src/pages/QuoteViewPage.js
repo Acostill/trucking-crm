@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
+import { useParams } from 'react-router-dom';
 import { buildApiUrl } from '../config';
-import { useAuth } from '../context/AuthContext';
-import AuthForm from '../components/AuthForm';
 import { CheckCircle2, XCircle, Loader } from 'lucide-react';
 
 function formatCurrency(value) {
@@ -22,8 +19,6 @@ function formatNumber(value) {
 
 export default function QuoteViewPage() {
   const { quoteId } = useParams();
-  const navigate = useNavigate();
-  const { user, checking, setUser } = useAuth();
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,9 +34,7 @@ export default function QuoteViewPage() {
       }
 
       try {
-        const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}`), {
-          credentials: 'include'
-        });
+        const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}`));
 
         if (!resp.ok) {
           if (resp.status === 404) {
@@ -63,10 +56,8 @@ export default function QuoteViewPage() {
       }
     }
 
-    if (user) {
-      fetchQuote();
-    }
-  }, [quoteId, user]);
+    fetchQuote();
+  }, [quoteId]);
 
   async function handleApprove() {
     if (!quote || !quoteId) return;
@@ -79,7 +70,6 @@ export default function QuoteViewPage() {
       const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}/approve`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({})
       });
 
@@ -90,12 +80,7 @@ export default function QuoteViewPage() {
 
       const updated = await resp.json();
       setQuote(updated);
-      setStatusMessage({ type: 'success', text: 'Quote approved successfully!' });
-      
-      // Optionally redirect after a delay
-      setTimeout(function() {
-        navigate('/dashboard');
-      }, 2000);
+      setStatusMessage({ type: 'success', text: 'Quote approved successfully! A load has been created from this quote.' });
     } catch (err) {
       setError(err && err.message ? err.message : 'Failed to approve quote');
     } finally {
@@ -114,7 +99,6 @@ export default function QuoteViewPage() {
       const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}/reject`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({})
       });
 
@@ -126,11 +110,6 @@ export default function QuoteViewPage() {
       const updated = await resp.json();
       setQuote(updated);
       setStatusMessage({ type: 'error', text: 'Quote rejected.' });
-      
-      // Optionally redirect after a delay
-      setTimeout(function() {
-        navigate('/dashboard');
-      }, 2000);
     } catch (err) {
       setError(err && err.message ? err.message : 'Failed to reject quote');
     } finally {
@@ -138,53 +117,25 @@ export default function QuoteViewPage() {
     }
   }
 
-  if (checking) {
-    return (
-      <div className="app-layout">
-        <Sidebar />
-        <main className="app-main">
-          <div className="app-loading">Checking session…</div>
-        </main>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <AuthForm onAuthed={(u) => setUser(u)} />;
-  }
-
   if (loading) {
     return (
-      <div className="app-layout">
-        <Sidebar />
-        <main className="app-main">
-          <div className="app-content">
-            <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-              <Loader className="spinner" size={48} style={{ margin: '0 auto 20px', animation: 'spin 1s linear infinite' }} />
-              <p>Loading quote...</p>
-            </div>
-          </div>
-        </main>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '500px' }}>
+          <Loader className="spinner" size={48} style={{ margin: '0 auto 20px', animation: 'spin 1s linear infinite' }} />
+          <p>Loading quote...</p>
+        </div>
       </div>
     );
   }
 
   if (error && !quote) {
     return (
-      <div className="app-layout">
-        <Sidebar />
-        <main className="app-main">
-          <div className="app-content">
-            <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-              <XCircle size={48} style={{ margin: '0 auto 20px', color: '#ef4444' }} />
-              <h2 style={{ marginBottom: '10px' }}>Error</h2>
-              <p style={{ color: '#6b7280', marginBottom: '20px' }}>{error}</p>
-              <button className="btn" onClick={() => navigate('/dashboard')}>
-                Back to Dashboard
-              </button>
-            </div>
-          </div>
-        </main>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '500px' }}>
+          <XCircle size={48} style={{ margin: '0 auto 20px', color: '#ef4444' }} />
+          <h2 style={{ marginBottom: '10px' }}>Error</h2>
+          <p style={{ color: '#6b7280', marginBottom: '20px' }}>{error}</p>
+        </div>
       </div>
     );
   }
@@ -193,32 +144,28 @@ export default function QuoteViewPage() {
     return null;
   }
 
-  const rate = quote.rate || {};
-  const priceAccessorials = Array.isArray(quote.priceAccessorials) ? quote.priceAccessorials : [];
-  const linehaul = rate.priceLineHaul;
-  const rpm = rate.rpm;
-  const total = quote.priceTotal;
-  const truckType = quote.truckType;
-  const transitTime = quote.transitTime;
-  const rateCalculationID = quote.rateCalculationID;
-  const accessorialsTotal = priceAccessorials.reduce(function(sum, a) {
-    return sum + (Number(a.price) || 0);
-  }, 0);
+  const quoteData = quote.quote || {};
+  const priceAccessorials = Array.isArray(quoteData.accessorials) ? quoteData.accessorials : [];
+  const linehaul = quoteData.linehaul;
+  const rpm = quoteData.ratePerMile;
+  const total = quoteData.total;
+  const truckType = quoteData.truckType;
+  const transitTime = quoteData.transitTime;
+  const rateCalculationID = quoteData.rateCalculationID;
+  const accessorialsTotal = quoteData.accessorialsTotal != null 
+    ? Number(quoteData.accessorialsTotal) 
+    : priceAccessorials.reduce(function(sum, a) {
+        return sum + (Number(a.price) || 0);
+      }, 0);
 
   const isApproved = quote.status === 'approved';
   const isRejected = quote.status === 'rejected';
   const canModify = !isApproved && !isRejected;
 
   return (
-    <div className="app-layout">
-      <Sidebar />
-      <main className="app-main">
-        {/* Decorative Background Blobs */}
-        <div className="app-blob app-blob-1" />
-        <div className="app-blob app-blob-2" />
-        
-        <div className="app-content">
-          <div className="quote-view-page">
+    <div style={{ minHeight: '100vh', background: '#F8FAFC', padding: '40px 20px' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <div className="quote-view-page">
             {/* Header */}
             <div className="page-header" style={{ marginBottom: '24px' }}>
               <div>
@@ -472,9 +419,8 @@ export default function QuoteViewPage() {
                 </div>
               )}
             </div>
-          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
