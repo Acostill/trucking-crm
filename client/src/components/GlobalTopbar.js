@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Truck, LogOut, User, LayoutDashboard, Sparkles, ShieldCheck } from 'lucide-react';
+import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
 function GlobalTopbar() {
   const auth = useAuth();
@@ -18,7 +19,7 @@ function GlobalTopbar() {
   // Helper to determine active state
   const isActive = (path) => location.pathname === path ? 'active' : '';
 
-  // Custom styles for topbar links to match Lanely aesthetic
+  // Custom styles for topbar links to match First Class Trucking aesthetic
   const linkStyle = {
     display: 'flex',
     alignItems: 'center',
@@ -47,10 +48,17 @@ function GlobalTopbar() {
     }}>
       <Link to="/" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>
         <div className="brand-badge" style={{ 
-          background: 'linear-gradient(135deg, #6366f1 0%, #818cf8 100%)',
-          width: '32px', height: '32px', borderRadius: '8px', marginRight: '12px' 
-        }}></div>
-        <span style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '-0.5px' }}>Lanely</span>
+          width: '32px', height: '32px', borderRadius: '8px', marginRight: '12px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden'
+        }}>
+          <img 
+            src={paperPlaneIcon} 
+            alt="QuotePilot" 
+            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+          />
+        </div>
+        <span style={{ fontSize: '18px', fontWeight: '700', letterSpacing: '-0.5px' }}>First Class Trucking</span>
       </Link>
 
       <div className="topbar-nav-group" style={{ gap: '24px' }}>

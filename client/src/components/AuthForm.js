@@ -56,7 +56,7 @@ export default function AuthForm(props) {
             {mode === 'signup' ? 'Create your account' : 'Welcome back'}
           </h2>
           <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
-            {mode === 'signup' ? 'Enter your details to get started' : 'Sign in to continue to Lanely'}
+            {mode === 'signup' ? 'Enter your details to get started' : 'Sign in to continue to First Class Trucking'}
           </p>
         </div>
         

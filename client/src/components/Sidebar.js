@@ -9,6 +9,7 @@ import {
   LogOut,
   Kanban
 } from 'lucide-react';
+import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
 function Sidebar() {
   const location = useLocation();
@@ -40,12 +41,13 @@ function Sidebar() {
       {/* Logo */}
       <div className="sidebar-logo">
         <div className="sidebar-logo-icon">
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="20" cy="20" r="20" fill="#111827"/>
-            <path d="M12 28L28 12M28 12H18M28 12V22" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
+          <img 
+            src={paperPlaneIcon} 
+            alt="QuotePilot" 
+            className="sidebar-logo-img"
+          />
         </div>
-        <span className="sidebar-logo-text">LANELY</span>
+        <span className="sidebar-logo-text">First Class Trucking</span>
       </div>
 
       {/* Main Navigation */}

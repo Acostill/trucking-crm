@@ -11,7 +11,7 @@ export default function LandingNavbar() {
         <div className="landing-navbar-content">
           {/* Logo */}
           <div className="landing-navbar-logo">
-            <span>LANELY</span>
+            <span>First Class Trucking</span>
           </div>
 
           {/* Desktop Links */}
