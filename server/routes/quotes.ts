@@ -3,6 +3,75 @@ import db from '../db';
 
 const router = express.Router();
 
+// Helper function to generate a unique load number
+function generateLoadNumber(): string {
+  const random = Math.floor(Math.random() * 900) + 100; // 3-digit entropy
+  return 'QUOTE-' + Date.now() + '-' + random;
+}
+
+// Helper function to format location from shipment data
+function formatLocationFromShipment(location: any): string | null {
+  if (!location || typeof location !== 'object') return null;
+  const segments: string[] = [];
+  if (location.city) segments.push(location.city);
+  if (location.state) segments.push(location.state);
+  const cityState = segments.length ? segments.join(', ') : null;
+  const zip = location.zip || location.zip_code || null;
+  if (cityState && zip) return cityState + ' ' + zip;
+  return cityState || zip || null;
+}
+
+// Helper function to convert quote to load record
+function quoteToLoadRecord(quote: any): any {
+  const shipment = quote.shipment || {};
+  const pickup = shipment.pickup || {};
+  const delivery = shipment.delivery || {};
+  const pickupLoc = pickup.location || {};
+  const deliveryLoc = delivery.location || {};
+  const contact = quote.contact || {};
+  const quoteData = quote.quote || {};
+
+  // Build shipper address
+  const shipperAddress = [
+    pickupLoc.city,
+    pickupLoc.state,
+    pickupLoc.zip || pickupLoc.zip_code
+  ].filter(Boolean).join(', ') || 'Pickup location pending';
+
+  // Build consignee address
+  const consigneeAddress = [
+    deliveryLoc.city,
+    deliveryLoc.state,
+    deliveryLoc.zip || deliveryLoc.zip_code
+  ].filter(Boolean).join(', ') || 'Delivery location pending';
+
+  return {
+    customer: contact.name || 'Unknown Customer',
+    load_number: generateLoadNumber(),
+    bill_to: contact.email || null,
+    dispatcher: null,
+    status: 'Pending',
+    type: 'Approved Quote',
+    rate: quoteData.total != null ? Number(quoteData.total) : null,
+    currency: 'USD',
+    carrier_or_driver: null,
+    equipment_type: quoteData.truckType || null,
+    shipper: shipperAddress,
+    shipper_location: formatLocationFromShipment(pickupLoc),
+    ship_date: pickup.date || null,
+    show_ship_time: true,
+    description: 'Approved from quote',
+    qty: shipment.pieces?.quantity || null,
+    weight: shipment.weight?.value || null,
+    value: null,
+    consignee: consigneeAddress,
+    consignee_location: formatLocationFromShipment(deliveryLoc),
+    delivery_date: delivery.date || null,
+    show_delivery_time: true,
+    delivery_notes: contact.email || contact.phone || null
+  };
+}
+
 // Helper to convert database row to quote object
 function rowToQuote(row: any): any {
   return {
@@ -194,6 +263,72 @@ router.post('/:id/approve', async function(req: Request, res: Response, next: Ne
     }
 
     const updated = rowToQuote(result.rows[0]);
+
+    // Create a load record from the approved quote
+    try {
+      const loadRecord = quoteToLoadRecord(updated);
+      
+      const insertLoadSql = `
+        INSERT INTO loads (
+          customer, load_number, bill_to, dispatcher, status, type, rate, currency,
+          carrier_or_driver, equipment_type, shipper, shipper_location, ship_date,
+          show_ship_time, description, qty, weight, value, consignee, consignee_location,
+          delivery_date, show_delivery_time, delivery_notes
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+        ) RETURNING *
+      `;
+
+      const loadParams = [
+        loadRecord.customer,
+        loadRecord.load_number,
+        loadRecord.bill_to,
+        loadRecord.dispatcher,
+        loadRecord.status,
+        loadRecord.type,
+        loadRecord.rate,
+        loadRecord.currency,
+        loadRecord.carrier_or_driver,
+        loadRecord.equipment_type,
+        loadRecord.shipper,
+        loadRecord.shipper_location,
+        loadRecord.ship_date,
+        loadRecord.show_ship_time,
+        loadRecord.description,
+        loadRecord.qty,
+        loadRecord.weight,
+        loadRecord.value,
+        loadRecord.consignee,
+        loadRecord.consignee_location,
+        loadRecord.delivery_date,
+        loadRecord.show_delivery_time,
+        loadRecord.delivery_notes
+      ];
+
+      let attempts = 0;
+      while (attempts < 3) {
+        try {
+          const loadResult = await db.query(insertLoadSql, loadParams);
+          console.log('Load created from approved quote:', loadResult.rows[0].load_number);
+          break;
+        } catch (loadErr: any) {
+          if (loadErr && loadErr.code === '23505') {
+            // Duplicate load number - regenerate and retry
+            loadRecord.load_number = generateLoadNumber();
+            loadParams[1] = loadRecord.load_number; // load_number is the second parameter (index 1)
+            attempts += 1;
+            continue;
+          }
+          // Log error but don't fail the approval if load creation fails
+          console.error('Error creating load from approved quote:', loadErr);
+          break;
+        }
+      }
+    } catch (loadErr) {
+      // Log error but don't fail the approval if load creation fails
+      console.error('Error creating load from approved quote:', loadErr);
+    }
+
     res.json(updated);
   } catch (err) {
     next(err);
