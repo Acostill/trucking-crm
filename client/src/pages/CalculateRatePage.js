@@ -259,151 +259,203 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 <head>
   <meta charset="UTF-8">
   <style>
+    @page {
+      margin: 15mm;
+      size: Letter;
+    }
+    * {
+      box-sizing: border-box;
+    }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       margin: 0;
-      padding: 40px;
-      color: #1f2937;
-      line-height: 1.6;
+      padding: 0;
+      color: #0f172a;
+      line-height: 1.5;
+      font-size: 12px;
+    }
+    .logo-container {
+      text-align: center;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .logo-container img {
+      max-width: 200px;
+      max-height: 50px;
+      height: auto;
+      width: auto;
+      display: block;
+      margin: 0 auto;
+      object-fit: contain;
     }
     .header {
-      border-bottom: 3px solid #4f46e5;
-      padding-bottom: 20px;
-      margin-bottom: 30px;
+      margin-bottom: 12px;
     }
     .header h1 {
-      margin: 0;
-      color: #4f46e5;
-      font-size: 28px;
-    }
-    .header p {
-      margin: 5px 0 0 0;
-      color: #6b7280;
-      font-size: 14px;
-    }
-    .section {
-      margin-bottom: 30px;
-    }
-    .section-title {
+      margin: 0 0 3px 0;
+      color: #0f172a;
       font-size: 18px;
       font-weight: 600;
-      color: #111827;
-      margin-bottom: 15px;
-      border-bottom: 1px solid #e5e7eb;
-      padding-bottom: 8px;
+    }
+    .header p {
+      margin: 0;
+      color: #64748b;
+      font-size: 10px;
+    }
+    .section {
+      margin-bottom: 12px;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 5px;
     }
     .info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 20px;
+      gap: 10px;
+      margin-bottom: 10px;
     }
     .info-item {
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .info-label {
-      font-size: 12px;
-      color: #6b7280;
+      font-size: 10px;
+      color: #64748b;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 4px;
-    }
-    .info-value {
-      font-size: 16px;
-      color: #111827;
+      margin-bottom: 3px;
       font-weight: 500;
     }
-    .quote-summary {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      padding: 20px;
-      margin-bottom: 20px;
+    .info-value {
+      font-size: 13px;
+      color: #0f172a;
+      font-weight: 500;
     }
     .quote-total {
       text-align: center;
-      padding: 20px;
-      background: #4f46e5;
+      padding: 12px;
+      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
       color: white;
-      border-radius: 8px;
-      margin-bottom: 20px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
     .quote-total-label {
-      font-size: 14px;
-      opacity: 0.9;
-      margin-bottom: 8px;
+      font-size: 11px;
+      opacity: 0.95;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     .quote-total-value {
-      font-size: 36px;
+      font-size: 28px;
       font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .quote-summary {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
     }
     .quote-details {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 15px;
+      gap: 10px;
     }
     .quote-detail-item {
-      padding: 12px;
+      padding: 10px;
       background: white;
       border-radius: 6px;
+      border: 1px solid #e2e8f0;
     }
     .quote-detail-label {
-      font-size: 12px;
-      color: #6b7280;
+      font-size: 10px;
+      color: #64748b;
       margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
     .quote-detail-value {
-      font-size: 18px;
+      font-size: 15px;
       font-weight: 600;
-      color: #111827;
+      color: #0f172a;
     }
     .accessorials-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 10px;
+      margin-top: 8px;
+      font-size: 11px;
     }
     .accessorials-table th,
     .accessorials-table td {
-      padding: 10px;
+      padding: 8px;
       text-align: left;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid #e2e8f0;
     }
     .accessorials-table th {
-      background: #f9fafb;
+      background: #f1f5f9;
       font-weight: 600;
-      color: #374151;
-      font-size: 12px;
+      color: #475569;
+      font-size: 10px;
       text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
     .accessorials-table td {
-      color: #111827;
+      color: #0f172a;
     }
     .badges {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
-      margin-top: 10px;
+      margin-top: 8px;
     }
     .badge {
       display: inline-block;
-      padding: 4px 12px;
+      padding: 4px 10px;
       background: #e0e7ff;
       color: #4f46e5;
-      border-radius: 12px;
-      font-size: 12px;
+      border-radius: 6px;
+      font-size: 10px;
       font-weight: 500;
     }
     .footer {
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 1px solid #e5e7eb;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid #e2e8f0;
       text-align: center;
-      color: #6b7280;
-      font-size: 12px;
+      color: #64748b;
+      font-size: 9px;
+    }
+    .compact-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media print {
+      body {
+        font-size: 11px;
+      }
+      .section {
+        margin-bottom: 12px;
+        page-break-inside: avoid;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="logo-container">
+    <img src="https://drive.google.com/file/d/1DpWfi_FMisj4OzBCDtbE6zCq-U2N9q9n" alt="First Class Trucking QuotePilot" />
+  </div>
+  
   <div class="header">
     <h1>Freight Quote</h1>
     <p>Generated on ${new Date().toLocaleDateString('en-US', { 
@@ -415,9 +467,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     })}</p>
   </div>
 
-  <div class="section">
-    <div class="section-title">Contact Information</div>
-    <div class="info-grid">
+  <div class="compact-grid">
+    <div class="section">
+      <div class="section-title">Contact Information</div>
+      <div class="info-grid">
       <div class="info-item">
         <div class="info-label">Name</div>
         <div class="info-value">${contact.name || 'N/A'}</div>
@@ -431,11 +484,11 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         <div class="info-value">${contact.phone || 'N/A'}</div>
       </div>
     </div>
-  </div>
+    </div>
 
-  <div class="section">
-    <div class="section-title">Shipment Details</div>
-    <div class="info-grid">
+    <div class="section">
+      <div class="section-title">Shipment Details</div>
+      <div class="info-grid">
       <div class="info-item">
         <div class="info-label">Pickup Location</div>
         <div class="info-value">${[pickupLoc.city, pickupLoc.state, pickupLoc.zip].filter(Boolean).join(', ') || 'N/A'}</div>
@@ -456,6 +509,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         <div class="info-label">Pieces</div>
         <div class="info-value">${shipment.pieces ? shipment.pieces.quantity + ' ' + (shipment.pieces.unit || 'pieces') : 'N/A'}</div>
       </div>
+    </div>
     </div>
   </div>
 
@@ -488,24 +542,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     ${rateCalculationID ? '<div style="margin-top: 10px; font-size: 12px; color: #6b7280;">Rate Calculation ID: ' + rateCalculationID + '</div>' : ''}
   </div>
 
-  ${accessorials.length > 0 ? `
-  <div class="section">
-    <div class="section-title">Accessorials</div>
-    <table class="accessorials-table">
-      <thead>
-        <tr>
-          <th>Description</th>
-          <th>Price</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${accessorials.map(function(a) {
-          return '<tr><td>' + (a.description || a.code || 'N/A') + '</td><td>' + formatCurrency(Number(a.price) || 0) + '</td></tr>';
-        }).join('')}
-      </tbody>
-    </table>
-  </div>
-  ` : ''}
 
   <div class="footer">
     <p>This quote is valid for the shipment details provided above.</p>

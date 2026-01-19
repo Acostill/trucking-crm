@@ -119,10 +119,10 @@ export default function QuoteViewPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
-        <div className="card" style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '500px' }}>
-          <Loader className="spinner" size={48} style={{ margin: '0 auto 20px', animation: 'spin 1s linear infinite' }} />
-          <p>Loading quote...</p>
+      <div className="shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '60px 40px', maxWidth: '500px', position: 'relative', zIndex: 1 }}>
+          <Loader className="spinner" size={48} style={{ margin: '0 auto 20px', color: 'var(--primary)' }} />
+          <p style={{ color: 'var(--muted)', fontSize: '14px' }}>Loading quote...</p>
         </div>
       </div>
     );
@@ -130,11 +130,11 @@ export default function QuoteViewPage() {
 
   if (error && !quote) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC' }}>
-        <div className="card" style={{ textAlign: 'center', padding: '60px 20px', maxWidth: '500px' }}>
-          <XCircle size={48} style={{ margin: '0 auto 20px', color: '#ef4444' }} />
-          <h2 style={{ marginBottom: '10px' }}>Error</h2>
-          <p style={{ color: '#6b7280', marginBottom: '20px' }}>{error}</p>
+      <div className="shell" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '60px 40px', maxWidth: '500px', position: 'relative', zIndex: 1 }}>
+          <XCircle size={48} style={{ margin: '0 auto 20px', color: 'var(--danger)' }} />
+          <h2 style={{ marginBottom: '10px', color: 'var(--text)', fontSize: '20px', fontWeight: '600' }}>Error</h2>
+          <p style={{ color: 'var(--muted)', marginBottom: '20px', fontSize: '14px' }}>{error}</p>
         </div>
       </div>
     );
@@ -163,23 +163,20 @@ export default function QuoteViewPage() {
   const canModify = !isApproved && !isRejected;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC', padding: '40px 20px' }}>
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+    <div className="shell" style={{ padding: '40px 20px' }}>
+      <div style={{ maxWidth: '1200px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
         <div className="quote-view-page">
             {/* Header */}
-            <div className="page-header" style={{ marginBottom: '24px' }}>
+            <div className="page-header">
               <div>
                 <h1 className="page-title">Quote Details</h1>
                 <p className="page-subtitle">Review and manage this freight quote</p>
               </div>
               {quote.status && (
-                <div style={{ 
-                  padding: '8px 16px', 
-                  borderRadius: '8px',
-                  background: isApproved ? '#d1fae5' : isRejected ? '#fee2e2' : '#fef3c7',
+                <div className="badge" style={{ 
+                  background: isApproved ? 'rgba(16, 185, 129, 0.1)' : isRejected ? 'rgba(239, 68, 68, 0.1)' : 'rgba(251, 191, 36, 0.1)',
                   color: isApproved ? '#065f46' : isRejected ? '#991b1b' : '#92400e',
-                  fontWeight: '500',
-                  fontSize: '14px'
+                  border: `1px solid ${isApproved ? 'rgba(16, 185, 129, 0.2)' : isRejected ? 'rgba(239, 68, 68, 0.2)' : 'rgba(251, 191, 36, 0.2)'}`
                 }}>
                   {isApproved ? '✓ Approved' : isRejected ? '✗ Rejected' : 'Pending'}
                 </div>
@@ -188,15 +185,19 @@ export default function QuoteViewPage() {
 
             {/* Status Messages */}
             {statusMessage && (
-              <div className={`card ${statusMessage.type === 'success' ? 'success' : 'error'}`} style={{ 
+              <div className="card" style={{ 
                 marginBottom: '24px',
-                background: statusMessage.type === 'success' ? '#d1fae5' : '#fee2e2',
-                border: `1px solid ${statusMessage.type === 'success' ? '#10b981' : '#ef4444'}`
+                background: statusMessage.type === 'success' 
+                  ? 'rgba(16, 185, 129, 0.1)' 
+                  : 'rgba(239, 68, 68, 0.1)',
+                border: `1px solid ${statusMessage.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                padding: '16px 20px'
               }}>
                 <p style={{ 
                   margin: 0, 
                   color: statusMessage.type === 'success' ? '#065f46' : '#991b1b',
-                  fontWeight: '500'
+                  fontWeight: '500',
+                  fontSize: '14px'
                 }}>
                   {statusMessage.text}
                 </p>
@@ -204,12 +205,13 @@ export default function QuoteViewPage() {
             )}
 
             {error && (
-              <div className="card error" style={{ 
+              <div className="card" style={{ 
                 marginBottom: '24px',
-                background: '#fee2e2',
-                border: '1px solid #ef4444'
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                padding: '16px 20px'
               }}>
-                <p style={{ margin: 0, color: '#991b1b' }}>{error}</p>
+                <p style={{ margin: 0, color: '#991b1b', fontSize: '14px' }}>{error}</p>
               </div>
             )}
 
@@ -288,7 +290,7 @@ export default function QuoteViewPage() {
 
               {/* Shipment Details */}
               {quote.shipment && (
-                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #e5e7eb' }}>
+                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border)' }}>
                   <div className="panel-title" style={{ marginBottom: '16px' }}>Shipment Details</div>
                   <div className="grid-2">
                     <div>
@@ -341,7 +343,7 @@ export default function QuoteViewPage() {
 
               {/* Contact Information */}
               {quote.contact && (
-                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid #e5e7eb' }}>
+                <div style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--border)' }}>
                   <div className="panel-title" style={{ marginBottom: '16px' }}>Contact Information</div>
                   <div className="grid-2">
                     <div className="info-item">
@@ -362,23 +364,20 @@ export default function QuoteViewPage() {
 
               {/* Action Buttons */}
               {canModify && (
-                <div className="quote-actions" style={{ 
+                <div className="actions" style={{ 
                   marginTop: '32px', 
                   paddingTop: '24px', 
-                  borderTop: '1px solid #e5e7eb',
-                  display: 'flex',
-                  gap: '12px',
-                  justifyContent: 'flex-end'
+                  borderTop: '1px solid var(--border)'
                 }}>
                   <button
                     type="button"
-                    className="btn btn-outline"
+                    className="btn btn-secondary"
                     onClick={handleReject}
                     disabled={processing}
                     style={{ 
-                      background: '#fee2e2',
+                      background: 'rgba(239, 68, 68, 0.1)',
                       color: '#991b1b',
-                      borderColor: '#ef4444'
+                      borderColor: 'rgba(239, 68, 68, 0.3)'
                     }}
                   >
                     {processing ? (
@@ -399,9 +398,9 @@ export default function QuoteViewPage() {
                     onClick={handleApprove}
                     disabled={processing}
                     style={{ 
-                      background: '#10b981',
+                      background: 'var(--success)',
                       color: 'white',
-                      borderColor: '#10b981'
+                      borderColor: 'var(--success)'
                     }}
                   >
                     {processing ? (
