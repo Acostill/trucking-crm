@@ -9,6 +9,7 @@ import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
 import AdminPortalPage from './pages/AdminPortalPage';
 import AdminFinancePage from './pages/AdminFinancePage';
+import AdminProfitMarginPage from './pages/AdminProfitMarginPage';
 import LanelyLandingPage from './pages/LanelyLandingPage';
 import DashboardPage from './pages/DashboardPage';
 import PipelinePage from './pages/PipelinePage';
@@ -123,6 +124,7 @@ function AppRoutes() {
       <Route path="/email-paste" element={<EmailPastePage />} />
       <Route path="/admin-portal" element={<AdminPortalPage />} />
       <Route path="/admin-finance" element={<AdminFinancePage />} />
+      <Route path="/admin-profit-margin" element={<AdminProfitMarginPage />} />
       <Route path="/pipeline" element={<PipelinePage />} />
       <Route path="/loads" element={<DashboardApp />} />
       <Route path="/quotes/:quoteId" element={<QuoteViewPage />} />

@@ -2,6 +2,9 @@ import { callExpediteAllAPI, ExpediteAllResponse } from './expediteAll';
 import { callForwardAirAPI, ForwardAirResponse } from './forwardAir';
 import { callDATForecastAPI, DATForecastResponse } from './datForecast';
 import { UnifiedQuoteRequest, ErrorResponse, StandardizedQuote } from '../types/quote';
+import db from '../db';
+
+const DEFAULT_PROFIT_MARGIN_RULE_ID = 1;
 
 /**
  * Helper function to coerce a value to a number
@@ -38,6 +41,27 @@ function findNumberByKeys(obj: any, keyCandidates: string[]): number | undefined
     }
   }
   return undefined;
+}
+
+async function getDefaultProfitMarginPct(): Promise<number> {
+  try {
+    const result = await db.query(
+      `SELECT margin_pct
+       FROM public.profit_margin_rules
+       WHERE id = $1`,
+      [DEFAULT_PROFIT_MARGIN_RULE_ID]
+    );
+    const value = result.rows && result.rows[0] ? Number(result.rows[0].margin_pct) : 0;
+    return Number.isFinite(value) ? value : 0;
+  } catch (_err) {
+    return 0;
+  }
+}
+
+function applyProfitMargin(total: number | undefined, marginPct: number): number | undefined {
+  if (typeof total !== 'number' || Number.isNaN(total)) return total;
+  const multiplier = 1 + marginPct / 100;
+  return Number.isFinite(multiplier) ? total * multiplier : total;
 }
 
 /**
@@ -144,6 +168,7 @@ export interface UnifiedQuoteResponse {
  * @returns Promise resolving to a unified response with all three API results
  */
 export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<UnifiedQuoteResponse> {
+  const marginPct = await getDefaultProfitMarginPct();
   // Call all three APIs in parallel
   const [expediteAllResult, forwardAirResult, datForecastResult] = await Promise.allSettled([
     callExpediteAllAPI(body),
@@ -164,11 +189,25 @@ export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<Unifi
     ? normalizeDATForecast(datForecastResult.value.data as DATForecastResponse)
     : { source: 'DAT', error: datForecastResult.reason?.message || 'Failed to fetch DAT forecast' };
 
+  const withMargin = (quote: StandardizedQuote): StandardizedQuote => {
+    if (quote.error) return quote;
+    const baseTotal = typeof quote.total === 'number' ? quote.total : quote.lineHaul;
+    const totalWithMargin = applyProfitMargin(baseTotal, marginPct);
+    return {
+      ...quote,
+      total: totalWithMargin,
+      additionalInfo: {
+        ...quote.additionalInfo,
+        profitMarginPct: marginPct
+      }
+    };
+  };
+
   // Return combined response with standardized format
   return {
-    expediteAll,
-    forwardAir,
-    datForecast
+    expediteAll: withMargin(expediteAll),
+    forwardAir: withMargin(forwardAir),
+    datForecast: withMargin(datForecast)
   };
 }
 

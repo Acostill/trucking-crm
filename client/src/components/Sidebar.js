@@ -7,7 +7,8 @@ import {
   ShieldCheck,
   LogOut,
   Kanban,
-  DollarSign
+  DollarSign,
+  Percent
 } from 'lucide-react';
 import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
@@ -32,6 +33,7 @@ function Sidebar() {
   const adminItems = isAdmin ? [
     { id: '/admin-portal', label: 'Admin', icon: ShieldCheck, path: '/admin-portal' },
     { id: '/admin-finance', label: 'Finance', icon: DollarSign, path: '/admin-finance' },
+    { id: '/admin-profit-margin', label: 'Profit Margin', icon: Percent, path: '/admin-profit-margin' },
   ] : [];
 
   const isActive = (path) => location.pathname === path;
