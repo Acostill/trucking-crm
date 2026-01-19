@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import db from '../db';
+import { getUserIdFromRequest } from '../utils/auth';
 
 const router = express.Router();
 
@@ -26,11 +27,12 @@ async function findUserByEmail(email: string) {
   return result.rows[0];
 }
 
-async function createUser(email: string, password: string, firstName?: string | null, lastName?: string | null) {
+async function createUser(email: string, password: string, firstName?: string | null, lastName?: string | null, userId?: string | null) {
   const passwordHash = password ? await bcrypt.hash(password, 10) : null;
-  const result = await db.query(
+  const result = await db.queryWithUser(
     'INSERT INTO public.users (email, password_hash, first_name, last_name) VALUES ($1, $2, $3, $4) RETURNING id, email, first_name, last_name, is_active',
-    [email, passwordHash, firstName || null, lastName || null]
+    [email, passwordHash, firstName || null, lastName || null],
+    userId || undefined
   );
   return result.rows[0];
 }
@@ -38,9 +40,10 @@ async function createUser(email: string, password: string, firstName?: string | 
 async function createSession(userId: string) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-  await db.query(
+  await db.queryWithUser(
     'INSERT INTO public.sessions (user_id, session_token, expires_at) VALUES ($1, $2, $3)',
-    [userId, token, expiresAt]
+    [userId, token, expiresAt],
+    userId
   );
   return { token, expiresAt };
 }
@@ -57,9 +60,13 @@ async function getUserFromToken(token: string | undefined) {
   return result.rows[0] || null;
 }
 
-async function revokeSession(token: string | undefined) {
+async function revokeSession(token: string | undefined, userId?: string | null) {
   if (!token) return;
-  await db.query('UPDATE public.sessions SET revoked_at = NOW() WHERE session_token = $1', [token]);
+  await db.queryWithUser(
+    'UPDATE public.sessions SET revoked_at = NOW() WHERE session_token = $1',
+    [token],
+    userId || undefined
+  );
 }
 
 router.get('/me', async function(req: Request, res: Response, next: NextFunction) {
@@ -113,7 +120,7 @@ router.post('/signin', async function(req: Request, res: Response, next: NextFun
     if (!user.is_active) return res.status(403).json({ error: 'Account disabled' });
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
-    await db.query('UPDATE public.users SET last_login_at = NOW() WHERE id = $1', [user.id]);
+    await db.queryWithUser('UPDATE public.users SET last_login_at = NOW() WHERE id = $1', [user.id], user.id);
     const rolesRes = await db.query(
       `SELECT r.name
        FROM public.user_roles ur
@@ -133,7 +140,8 @@ router.post('/signin', async function(req: Request, res: Response, next: NextFun
 router.post('/signout', async function(req: Request, res: Response, next: NextFunction) {
   try {
     const token = req.cookies && req.cookies[SESSION_COOKIE];
-    await revokeSession(token);
+    const userId = await getUserIdFromRequest(req);
+    await revokeSession(token, userId);
     res.clearCookie(SESSION_COOKIE, makeCookieOptions());
     res.json({ success: true });
   } catch (err) {

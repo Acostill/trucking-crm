@@ -1,0 +1,174 @@
+import { callExpediteAllAPI, ExpediteAllResponse } from './expediteAll';
+import { callForwardAirAPI, ForwardAirResponse } from './forwardAir';
+import { callDATForecastAPI, DATForecastResponse } from './datForecast';
+import { UnifiedQuoteRequest, ErrorResponse, StandardizedQuote } from '../types/quote';
+
+/**
+ * Helper function to coerce a value to a number
+ */
+function coerceNumber(value: any): number | undefined {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') {
+    const n = Number(value.replace(/[^0-9.\-]/g, ''));
+    return Number.isNaN(n) ? undefined : n;
+  }
+  return undefined;
+}
+
+/**
+ * Helper function to find a number in an object by key candidates
+ */
+function findNumberByKeys(obj: any, keyCandidates: string[]): number | undefined {
+  if (!obj || typeof obj !== 'object') return undefined;
+  for (const key of keyCandidates) {
+    for (const k in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+      if (k.toLowerCase().indexOf(key.toLowerCase()) > -1) {
+        const num = coerceNumber(obj[k]);
+        if (typeof num === 'number') return num;
+      }
+    }
+  }
+  for (const k in obj) {
+    if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+    const v = obj[k];
+    if (v && typeof v === 'object') {
+      const found = findNumberByKeys(v, keyCandidates);
+      if (typeof found === 'number') return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Normalize ExpediteAll response to standardized format
+ */
+function normalizeExpediteAll(data: ExpediteAllResponse): StandardizedQuote {
+  if ('error' in data) {
+    return { source: 'ExpediteAll', error: data.error };
+  }
+
+  return {
+    source: 'ExpediteAll',
+    lineHaul: data.rate?.priceLineHaul,
+    ratePerMile: data.rate?.rpm,
+    total: data.priceTotal,
+    additionalInfo: {
+      truckType: data.truckType,
+      transitTime: data.transitTime,
+      rateCalculationID: data.rateCalculationID,
+      accessorials: data.priceAccessorials?.map(acc => ({
+        description: acc.description,
+        code: acc.code,
+        price: acc.price
+      }))
+    }
+  };
+}
+
+/**
+ * Normalize ForwardAir response to standardized format
+ */
+function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
+  if ('error' in data) {
+    return { source: 'ForwardAir', error: data.error };
+  }
+
+  const quoteResponse = data.QuoteResponse || {};
+  const lineHaul = findNumberByKeys(quoteResponse, ['linehaul', 'line_haul', 'base', 'basecharge']);
+  const total = findNumberByKeys(quoteResponse, ['quoteamount', 'totalcharges', 'total', 'grandtotal', 'amountdue']);
+
+  // Extract accessorials
+  const accessorials: Array<{ description?: string; code?: string; price?: number }> = [];
+  const accessorialCharges = quoteResponse.AccessorialCharges?.AccessorialCharge;
+  if (accessorialCharges) {
+    const chargesArray = Array.isArray(accessorialCharges) ? accessorialCharges : [accessorialCharges];
+    chargesArray.forEach((charge: any) => {
+      const price = coerceNumber(charge.Amount);
+      accessorials.push({
+        description: charge.Description,
+        code: charge.Code,
+        price
+      });
+    });
+  }
+
+  return {
+    source: 'ForwardAir',
+    lineHaul,
+    total,
+    additionalInfo: {
+      accessorials: accessorials.length > 0 ? accessorials : undefined
+    }
+  };
+}
+
+/**
+ * Normalize DAT Forecast response to standardized format
+ */
+function normalizeDATForecast(data: DATForecastResponse): StandardizedQuote {
+  if ('error' in data) {
+    return { source: 'DAT', error: data.error };
+  }
+
+  const forecasts = data.forecasts;
+  const perTripForecast = forecasts?.perTrip?.[0];
+  const perMileForecast = forecasts?.perMile?.[0];
+
+  return {
+    source: 'DAT',
+    lineHaul: perTripForecast?.forecastUSD,
+    ratePerMile: perMileForecast?.forecastUSD,
+    total: perTripForecast?.forecastUSD,
+    additionalInfo: {
+      mileage: data.mileage,
+      equipmentCategory: data.equipmentCategory,
+      forecastDate: perTripForecast?.forecastDate,
+      mae: perTripForecast?.mae
+    }
+  };
+}
+
+/**
+ * Combined response structure from all quote APIs (standardized format)
+ */
+export interface UnifiedQuoteResponse {
+  expediteAll: StandardizedQuote;
+  forwardAir: StandardizedQuote;
+  datForecast: StandardizedQuote;
+}
+
+/**
+ * Calls all three quote APIs in parallel and combines the results
+ * @param body - The request body containing pickup, delivery, and shipment details
+ * @returns Promise resolving to a unified response with all three API results
+ */
+export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<UnifiedQuoteResponse> {
+  // Call all three APIs in parallel
+  const [expediteAllResult, forwardAirResult, datForecastResult] = await Promise.allSettled([
+    callExpediteAllAPI(body),
+    callForwardAirAPI(body),
+    callDATForecastAPI(body)
+  ]);
+
+  // Extract and normalize results, handling both success and failure cases
+  const expediteAll: StandardizedQuote = expediteAllResult.status === 'fulfilled' 
+    ? normalizeExpediteAll(expediteAllResult.value.data as ExpediteAllResponse)
+    : { source: 'ExpediteAll', error: expediteAllResult.reason?.message || 'Failed to fetch ExpediteAll quote' };
+  
+  const forwardAir: StandardizedQuote = forwardAirResult.status === 'fulfilled' 
+    ? normalizeForwardAir(forwardAirResult.value.data as ForwardAirResponse)
+    : { source: 'ForwardAir', error: forwardAirResult.reason?.message || 'Failed to fetch Forward Air quote' };
+
+  const datForecast: StandardizedQuote = datForecastResult.status === 'fulfilled' 
+    ? normalizeDATForecast(datForecastResult.value.data as DATForecastResponse)
+    : { source: 'DAT', error: datForecastResult.reason?.message || 'Failed to fetch DAT forecast' };
+
+  // Return combined response with standardized format
+  return {
+    expediteAll,
+    forwardAir,
+    datForecast
+  };
+}
+

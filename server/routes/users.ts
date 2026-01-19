@@ -141,25 +141,23 @@ router.put('/:userId/roles', async function(req: Request, res: Response, next: N
       return;
     }
 
-    await db.query('BEGIN');
-    try {
-      await db.query('DELETE FROM public.user_roles WHERE user_id = $1', [userId]);
+    const adminUser = (req as any).user;
+    const adminUserId = adminUser?.id || null;
+    
+    await db.transactionWithUser(async function(client) {
+      await client.query('DELETE FROM public.user_roles WHERE user_id = $1', [userId]);
       if (validRolesRes.rows.length) {
         const params: any[] = [userId];
         const values = validRolesRes.rows.map(function(role, idx) {
           params.push(role.id);
           return '($1, $' + (idx + 2) + ')';
         });
-        await db.query(
+        await client.query(
           'INSERT INTO public.user_roles (user_id, role_id) VALUES ' + values.join(','),
           params
         );
       }
-      await db.query('COMMIT');
-    } catch (err) {
-      await db.query('ROLLBACK');
-      throw err;
-    }
+    }, adminUserId);
 
     const updatedUser = await fetchUserSummary(userId);
     res.json({ user: updatedUser });

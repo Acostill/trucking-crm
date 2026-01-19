@@ -1,5 +1,32 @@
 import https from 'https';
 import xml2js from 'xml2js';
+import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
+
+/**
+ * Forward Air API response structure (parsed from XML)
+ */
+export interface ForwardAirResponse {
+  QuoteResponse?: {
+    QuoteAmount?: string | number;
+    LineHaul?: string | number;
+    TotalCharges?: string | number;
+    AccessorialCharges?: {
+      AccessorialCharge?: Array<{
+        Code?: string;
+        Description?: string;
+        Amount?: string | number;
+      }> | {
+        Code?: string;
+        Description?: string;
+        Amount?: string | number;
+      };
+    };
+    [key: string]: any;
+  };
+  error?: string;
+  raw?: string;
+  [key: string]: any; // Allow additional properties from parsed XML
+}
 
 /**
  * Helper function to convert weight unit to Forward Air format
@@ -31,7 +58,7 @@ function toYMD(dateInput: string): string {
  * @param body - The request body containing pickup, delivery, pieces, and weight information
  * @returns Promise resolving to an object with statusCode and data
  */
-export function callForwardAirAPI(body: any): Promise<{ statusCode: number; data: any }> {
+export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIResponse<ForwardAirResponse | ErrorResponse>> {
   return new Promise((resolve, reject) => {
     const pickup = body.pickup || {};
     const pickupLoc = pickup.location || {};

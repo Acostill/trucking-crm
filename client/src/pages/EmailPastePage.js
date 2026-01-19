@@ -148,7 +148,7 @@ export default function EmailPastePage() {
   }
 
   if (checking) {
-    return (
+  return (
       <div className="app-layout">
         <Sidebar />
         <main className="app-main">
@@ -179,39 +179,39 @@ export default function EmailPastePage() {
             </div>
 
             {/* Email Paste Card */}
-            <div className="card email-paste-card">
-              <div className="card-header">
-                <h2 className="title">Paste an email</h2>
-                <div className="subtitle">
+        <div className="card email-paste-card">
+          <div className="card-header">
+            <h2 className="title">Paste an email</h2>
+            <div className="subtitle">
                   Drop the raw email text below. We'll parse it and extract shipment info.
-                </div>
+            </div>
+          </div>
+          <div className="card-body">
+            <form className="email-form" onSubmit={handleSubmit}>
+              <label className="email-label">
+                Email contents
+                <textarea
+                  className="email-textarea"
+                  placeholder="Paste the entire email body here…"
+                  value={emailBody}
+                  onChange={handleChange}
+                />
+              </label>
+              <div className="email-meta">
+                <span>{lineCount} line{lineCount === 1 ? '' : 's'}</span>
+                <span>{charCount} character{charCount === 1 ? '' : 's'}</span>
               </div>
-              <div className="card-body">
-                <form className="email-form" onSubmit={handleSubmit}>
-                  <label className="email-label">
-                    Email contents
-                    <textarea
-                      className="email-textarea"
-                      placeholder="Paste the entire email body here…"
-                      value={emailBody}
-                      onChange={handleChange}
-                    />
-                  </label>
-                  <div className="email-meta">
-                    <span>{lineCount} line{lineCount === 1 ? '' : 's'}</span>
-                    <span>{charCount} character{charCount === 1 ? '' : 's'}</span>
-                  </div>
-                  <div className="email-actions">
-                    <button type="submit" className="btn" disabled={isSubmitDisabled}>
-                      {submitting ? 'Sending…' : 'Submit email'}
-                    </button>
-                  </div>
-                  {submitError && <div className="email-message error">{submitError}</div>}
-                  {submitSuccess && <div className="email-message success">{submitSuccess}</div>}
-                  <div className="email-helper">
-                    Tip: you can keep this tab open while working through inbox responses.
-                  </div>
-                </form>
+              <div className="email-actions">
+                <button type="submit" className="btn" disabled={isSubmitDisabled}>
+                  {submitting ? 'Sending…' : 'Submit email'}
+                </button>
+              </div>
+              {submitError && <div className="email-message error">{submitError}</div>}
+              {submitSuccess && <div className="email-message success">{submitSuccess}</div>}
+              <div className="email-helper">
+                Tip: you can keep this tab open while working through inbox responses.
+              </div>
+            </form>
               </div>
             </div>
 
@@ -229,9 +229,9 @@ export default function EmailPastePage() {
                   onSelectQuote={handleSelectQuote}
                 />
               </div>
-            </div>
           </div>
         </div>
+      </div>
       </main>
     </div>
   );

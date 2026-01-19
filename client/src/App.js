@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar';
 import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
 import AdminPortalPage from './pages/AdminPortalPage';
+import AdminFinancePage from './pages/AdminFinancePage';
 import LanelyLandingPage from './pages/LanelyLandingPage';
 import DashboardPage from './pages/DashboardPage';
 import PipelinePage from './pages/PipelinePage';
@@ -52,6 +53,25 @@ function DashboardApp() {
     setRows(prev => [saved, ...prev]);
   }
 
+  async function handleUpdate(updatePayload) {
+    if (!updatePayload || !updatePayload.id) {
+      throw new Error('Missing load id');
+    }
+    const resp = await fetch(buildApiUrl(`/api/loads/${updatePayload.id}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(updatePayload)
+    });
+    if (!resp.ok) {
+      const msg = await resp.text();
+      throw new Error(msg || 'Failed to update');
+    }
+    const updated = await resp.json();
+    setRows(prev => prev.map(row => (row.id === updated.id ? updated : row)));
+    return updated;
+  }
+
   if (checking) {
     return (
       <div className="app-layout">
@@ -79,6 +99,7 @@ function DashboardApp() {
           <LoadsTable 
             rows={rows} 
             onNewLoad={() => setShowModal(true)} 
+            onUpdate={handleUpdate}
           />
         </div>
       </main>
@@ -101,6 +122,7 @@ function AppRoutes() {
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<EmailPastePage />} />
       <Route path="/admin-portal" element={<AdminPortalPage />} />
+      <Route path="/admin-finance" element={<AdminFinancePage />} />
       <Route path="/pipeline" element={<PipelinePage />} />
       <Route path="/loads" element={<DashboardApp />} />
       <Route path="/quotes/:quoteId" element={<QuoteViewPage />} />

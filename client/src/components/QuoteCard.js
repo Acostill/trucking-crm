@@ -29,6 +29,8 @@ export default function QuoteCard(props) {
 
   var accessorialsTotal = priceAccessorials.reduce(function(sum, a) { return sum + (Number(a.price) || 0); }, 0);
 
+  var source = quote.source || 'Unknown';
+
   return (
     <div className="quote-card">
       <div className="quote-header">
@@ -43,6 +45,7 @@ export default function QuoteCard(props) {
       </div>
 
       <div className="quote-badges">
+        {source && source !== 'Unknown' && <span className="badge" style={{ backgroundColor: '#6366f1', color: 'white' }}>{source}</span>}
         {truckType && <span className="badge">{truckType}</span>}
         {typeof transitTime === 'number' && <span className="badge">{transitTime} day{transitTime === 1 ? '' : 's'}</span>}
         {rateCalculationID && <span className="badge muted">ID: {rateCalculationID}</span>}

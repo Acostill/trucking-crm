@@ -61,26 +61,26 @@ export default function AuthForm(props) {
         </div>
         
         <form style={{ display: 'grid', gap: '16px' }} onSubmit={handleSubmit}>
-          {mode === 'signup' && (
+            {mode === 'signup' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <label>
-                First name
-                <input value={firstName} onChange={function(e){ setFirstName(e.target.value); }} />
-              </label>
-              <label>
-                Last name
-                <input value={lastName} onChange={function(e){ setLastName(e.target.value); }} />
-              </label>
-            </div>
-          )}
-          <label>
-            Email
-            <input type="email" value={email} onChange={function(e){ setEmail(e.target.value); }} />
-          </label>
-          <label>
-            Password
-            <input type="password" value={password} onChange={function(e){ setPassword(e.target.value); }} />
-          </label>
+                <label>
+                  First name
+                  <input value={firstName} onChange={function(e){ setFirstName(e.target.value); }} />
+                </label>
+                <label>
+                  Last name
+                  <input value={lastName} onChange={function(e){ setLastName(e.target.value); }} />
+                </label>
+              </div>
+            )}
+            <label>
+              Email
+              <input type="email" value={email} onChange={function(e){ setEmail(e.target.value); }} />
+            </label>
+            <label>
+              Password
+              <input type="password" value={password} onChange={function(e){ setPassword(e.target.value); }} />
+            </label>
           
           {error && (
             <div style={{ 
@@ -96,15 +96,15 @@ export default function AuthForm(props) {
           )}
           
           <button className="btn" type="submit" disabled={loading} style={{ width: '100%', marginTop: '8px' }}>
-            {loading ? 'Please wait…' : (mode === 'signup' ? 'Create account' : 'Sign in')}
-          </button>
+                {loading ? 'Please wait…' : (mode === 'signup' ? 'Create account' : 'Sign in')}
+              </button>
         </form>
         
         <div style={{ marginTop: '20px', textAlign: 'center' }}>
-          <button
-            type="button"
-            onClick={function(){ setMode(mode === 'signup' ? 'signin' : 'signup'); }}
-            disabled={loading}
+              <button
+                type="button"
+                onClick={function(){ setMode(mode === 'signup' ? 'signin' : 'signup'); }}
+                disabled={loading}
             style={{ 
               background: 'none', 
               border: 'none', 
@@ -113,9 +113,9 @@ export default function AuthForm(props) {
               fontWeight: '500',
               cursor: 'pointer'
             }}
-          >
+              >
             {mode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-          </button>
+              </button>
         </div>
       </div>
     </div>
