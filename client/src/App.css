@@ -1515,6 +1515,51 @@ label {
   border-bottom: none;
 }
 
+/* ========== Admin Profit Margin ========== */
+.admin-profit-page {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.profit-margin-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px 22px;
+  display: grid;
+  gap: 16px;
+}
+
+.profit-margin-row {
+  display: grid;
+  gap: 8px;
+}
+
+.profit-margin-row label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.profit-margin-row input {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.profit-margin-row input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.profit-margin-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .user-primary {
   font-weight: 600;
   color: var(--text);

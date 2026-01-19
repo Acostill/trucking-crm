@@ -52,6 +52,74 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
 
 router.use(requireAdmin);
 
+// Get a profit margin rule by ID (default row used for future margins)
+router.get('/profit-margin/:id', async function(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'Invalid profit margin rule id' });
+    return;
+  }
+  try {
+    const result = await db.query(
+      `SELECT id, margin_pct
+       FROM public.profit_margin_rules
+       WHERE id = $1`,
+      [id]
+    );
+    if (!result.rows.length) {
+      res.status(404).json({ error: 'Profit margin rule not found' });
+      return;
+    }
+    res.json({
+      id: result.rows[0].id,
+      marginPct: result.rows[0].margin_pct
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update a profit margin rule by ID
+router.put('/profit-margin/:id', async function(req: Request, res: Response, next: NextFunction) {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'Invalid profit margin rule id' });
+    return;
+  }
+  const marginPct = req.body && req.body.marginPct;
+  const parsedPct = typeof marginPct === 'string' ? parseFloat(marginPct) : marginPct;
+  if (typeof parsedPct !== 'number' || Number.isNaN(parsedPct)) {
+    res.status(400).json({ error: 'marginPct must be a number' });
+    return;
+  }
+  if (parsedPct < 0 || parsedPct > 100) {
+    res.status(400).json({ error: 'marginPct must be between 0 and 100' });
+    return;
+  }
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    const result = await db.queryWithUser(
+      `UPDATE public.profit_margin_rules
+       SET margin_pct = $1,
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, margin_pct`,
+      [parsedPct, id],
+      userId
+    );
+    if (!result.rows.length) {
+      res.status(404).json({ error: 'Profit margin rule not found' });
+      return;
+    }
+    res.json({
+      id: result.rows[0].id,
+      marginPct: result.rows[0].margin_pct
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // List all available audit tables
 router.get('/audit/tables', async function(_req: Request, res: Response, next: NextFunction) {
   try {
