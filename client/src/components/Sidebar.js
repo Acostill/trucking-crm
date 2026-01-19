@@ -4,10 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { 
   LayoutDashboard, 
   Package, 
-  Sparkles, 
   ShieldCheck,
   LogOut,
-  Kanban
+  Kanban,
+  DollarSign
 } from 'lucide-react';
 import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
@@ -27,11 +27,11 @@ function Sidebar() {
     { id: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { id: '/loads', label: 'Shipments', icon: Package, path: '/loads' },
     { id: '/pipeline', label: 'Pipeline', icon: Kanban, path: '/pipeline' },
-    { id: '/email-paste', label: 'Email AI', icon: Sparkles, path: '/email-paste' },
   ];
 
   const adminItems = isAdmin ? [
     { id: '/admin-portal', label: 'Admin', icon: ShieldCheck, path: '/admin-portal' },
+    { id: '/admin-finance', label: 'Finance', icon: DollarSign, path: '/admin-finance' },
   ] : [];
 
   const isActive = (path) => location.pathname === path;

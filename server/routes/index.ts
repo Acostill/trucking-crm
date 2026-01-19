@@ -4,6 +4,7 @@ import https from 'https';
 import util from 'util';
 import { URL } from 'url';
 import db from '../db';
+import { getUserIdFromRequest } from '../utils/auth';
 import {
   PickupLocation,
   DeliveryOption,
@@ -12,9 +13,11 @@ import {
   ShipmentDetails,
   N8nEmailPasteResponse
 } from '../types/n8n';
-import { callCalculateRateAPI } from '../services/calculateRate';
+import { callExpediteAllAPI } from '../services/expediteAll';
 import { callForwardAirAPI } from '../services/forwardAir';
 import { generatePDFFromHTML } from '../services/pdfGenerator';
+import { getUnifiedQuotes } from '../services/unifiedQuoteService';
+import { UnifiedQuoteRequest } from '../types/quote';
 
 const router = express.Router();
 
@@ -205,7 +208,10 @@ function extractOutputsFromAutomation(payload: any): N8nEmailPasteResponse[] {
   return [];
 }
 
-async function persistAutomationLoads(payload: N8nEmailPasteResponse | N8nEmailPasteResponse[] | null | undefined) {
+async function persistAutomationLoads(
+  req: Request | null,
+  payload: N8nEmailPasteResponse | N8nEmailPasteResponse[] | null | undefined
+) {
   const outputs = extractOutputsFromAutomation(payload);
   if (!outputs.length) {
     throw new Error('Automation response did not include any load payloads.');
@@ -227,7 +233,8 @@ async function persistAutomationLoads(payload: N8nEmailPasteResponse | N8nEmailP
     let attempts = 0;
     while (attempts < 3) {
       try {
-        const result = await db.query(insertSql, values);
+        const userId = req ? await getUserIdFromRequest(req) : null;
+        const result = await db.queryWithUser(insertSql, values, userId || undefined);
         saved.push(result.rows[0]);
         break;
       } catch (err: any) {
@@ -260,31 +267,16 @@ router.post('/test-post', function(_req: Request, res: Response) {
   res.send('hello test-post');
 });
 
-// POST proxy to external calculate-rate API - now unified to call both APIs
+// POST proxy to external calculate-rate API - now unified to call all three APIs
 router.post('/calculate-rate', async function(req: Request, res: Response, next: NextFunction) {
   try {
-    const body = req.body || {};
+    const body: UnifiedQuoteRequest = req.body || {};
     
-    // Call both APIs in parallel
-    const [calculateRateResult, forwardAirResult] = await Promise.allSettled([
-      callCalculateRateAPI(body),
-      callForwardAirAPI(body)
-    ]);
-
-    // Extract results, handling both success and failure cases
-    const calculateRate = calculateRateResult.status === 'fulfilled' 
-      ? calculateRateResult.value.data 
-      : { error: calculateRateResult.reason?.message || 'Failed to fetch calculate-rate quote' };
-    
-    const forwardAir = forwardAirResult.status === 'fulfilled' 
-      ? forwardAirResult.value.data 
-      : { error: forwardAirResult.reason?.message || 'Failed to fetch Forward Air quote' };
+    // Get unified quotes from all three APIs
+    const unifiedResponse = await getUnifiedQuotes(body);
 
     // Return combined response
-    res.status(200).json({
-      calculateRate: calculateRate,
-      forwardAir: forwardAir
-    });
+    res.status(200).json(unifiedResponse);
   } catch (err) {
     next(err);
   }
@@ -376,7 +368,7 @@ router.post('/api/email-paste', function(req: Request, res: Response, next: Next
 
       if (statusCode >= 200 && statusCode < 300) {
         try {
-          await persistAutomationLoads(parsed);
+          await persistAutomationLoads(req, parsed);
         } catch (err) {
           next(err);
           return;
@@ -453,7 +445,8 @@ router.post('/api/email-paste/save-load', async function(req: Request, res: Resp
     let saved: any = null;
     while (attempts < 3) {
       try {
-        const result = await db.query(insertSql, values);
+        const userId = await getUserIdFromRequest(req);
+        const result = await db.queryWithUser(insertSql, values, userId || undefined);
         saved = result.rows[0];
         break;
       } catch (err: any) {

@@ -1,11 +1,32 @@
 import https from 'https';
+import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
 
 /**
- * Calls the external calculate-rate API
+ * ExpediteAll API response structure
+ */
+export interface ExpediteAllResponse {
+  rate?: {
+    priceLineHaul?: number;
+    rpm?: number;
+  };
+  priceTotal?: number;
+  priceAccessorials?: Array<{
+    description?: string;
+    code?: string;
+    price?: number;
+  }>;
+  truckType?: string;
+  transitTime?: number;
+  rateCalculationID?: string;
+  [key: string]: any; // Allow additional properties from API
+}
+
+/**
+ * Calls the external ExpediteAll API
  * @param body - The request body to send to the API
  * @returns Promise resolving to an object with statusCode and data
  */
-export function callCalculateRateAPI(body: any): Promise<{ statusCode: number; data: any }> {
+export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIResponse<ExpediteAllResponse | ErrorResponse>> {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body || {});
     const options = {
@@ -27,12 +48,12 @@ export function callCalculateRateAPI(body: any): Promise<{ statusCode: number; d
         const contentType = (apiRes.headers && apiRes.headers['content-type']) || 'application/json';
         if (contentType.indexOf('application/json') > -1) {
           try {
-            resolve({ statusCode: apiRes.statusCode || 500, data: JSON.parse(data) });
+            resolve({ statusCode: apiRes.statusCode || 500, data: JSON.parse(data) as ExpediteAllResponse });
           } catch (e) {
-            resolve({ statusCode: apiRes.statusCode || 500, data: data });
+            resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Failed to parse JSON response', raw: data } as ErrorResponse });
           }
         } else {
-          resolve({ statusCode: apiRes.statusCode || 500, data: data });
+          resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Non-JSON response received', raw: data } as ErrorResponse });
         }
       });
     });

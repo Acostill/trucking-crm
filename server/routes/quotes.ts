@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import db from '../db';
+import { getUserIdFromRequest } from '../utils/auth';
 
 const router = express.Router();
 
@@ -129,7 +130,7 @@ async function getQuoteById(id: string): Promise<any | null> {
 }
 
 // Helper to save quote to database
-async function saveQuote(quoteData: any): Promise<any> {
+async function saveQuote(quoteData: any, userId?: string | null): Promise<any> {
   const {
     id,
     status = 'pending',
@@ -194,7 +195,7 @@ async function saveQuote(quoteData: any): Promise<any> {
   ];
 
   try {
-    const result = await db.query(insertSql, params);
+    const result = await db.queryWithUser(insertSql, params, userId || undefined);
     return rowToQuote(result.rows[0]);
   } catch (err) {
     console.error('Error saving quote to database:', err);
@@ -254,8 +255,8 @@ router.post('/:id/approve', async function(req: Request, res: Response, next: Ne
       RETURNING *
     `;
 
-    const userId = (req as any).user?.id || null;
-    const result = await db.query(updateSql, [id, userId]);
+    const userId = await getUserIdFromRequest(req);
+    const result = await db.queryWithUser(updateSql, [id, userId || null], userId || undefined);
     
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Quote not found' });
@@ -308,7 +309,7 @@ router.post('/:id/approve', async function(req: Request, res: Response, next: Ne
       let attempts = 0;
       while (attempts < 3) {
         try {
-          const loadResult = await db.query(insertLoadSql, loadParams);
+          const loadResult = await db.queryWithUser(insertLoadSql, loadParams, userId || undefined);
           console.log('Load created from approved quote:', loadResult.rows[0].load_number);
           break;
         } catch (loadErr: any) {
@@ -364,8 +365,8 @@ router.post('/:id/reject', async function(req: Request, res: Response, next: Nex
       RETURNING *
     `;
 
-    const userId = (req as any).user?.id || null;
-    const result = await db.query(updateSql, [id, userId]);
+    const userId = await getUserIdFromRequest(req);
+    const result = await db.queryWithUser(updateSql, [id, userId], userId || undefined);
     
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Quote not found' });
@@ -382,6 +383,7 @@ router.post('/:id/reject', async function(req: Request, res: Response, next: Nex
 // POST /api/quotes - Create a new quote (for storing quotes from webhook)
 router.post('/', async function(req: Request, res: Response, next: NextFunction) {
   try {
+    const userId = await getUserIdFromRequest(req);
     const quoteData = req.body || {};
     
     // Generate a unique ID if not provided
@@ -396,7 +398,7 @@ router.post('/', async function(req: Request, res: Response, next: NextFunction)
       n8nWebhookSent: quoteData.n8nWebhookSent || false
     };
 
-    const saved = await saveQuote(quote);
+    const saved = await saveQuote(quote, userId);
 
     res.status(201).json(saved);
   } catch (err) {

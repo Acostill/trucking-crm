@@ -1,5 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import db from '../db';
+import { getUserIdFromRequest } from '../utils/auth';
 
 const router = express.Router();
 
@@ -33,6 +34,7 @@ function pickLoad(input: any) {
 
 function toClientRow(row: any) {
   return {
+    id: row.id,
     customer: row.customer,
     loadNumber: row.load_number,
     billTo: row.bill_to,
@@ -47,7 +49,9 @@ function toClientRow(row: any) {
     shipDate: row.ship_date,
     consignee: row.consignee,
     consigneeLocation: row.consignee_location,
-    deliveryDate: row.delivery_date
+    deliveryDate: row.delivery_date,
+    deliveryNotes: row.delivery_notes,
+    description: row.description
   };
 }
 
@@ -63,6 +67,7 @@ router.get('/', async function(_req: Request, res: Response, next: NextFunction)
 
 router.post('/', async function(req: Request, res: Response, next: NextFunction) {
   try {
+    const userId = await getUserIdFromRequest(req);
     const data = pickLoad(req.body || {});
     const insert =
       'INSERT INTO loads ' +
@@ -94,13 +99,87 @@ router.post('/', async function(req: Request, res: Response, next: NextFunction)
       data.show_delivery_time,
       data.delivery_notes
     ];
-    const result = await db.query(insert, params);
+    const result = await db.queryWithUser(insert, params, userId || undefined);
     res.status(201).json(toClientRow(result.rows[0]));
   } catch (err: any) {
     if (err && err.code === '23505') {
       res.status(409).json({ error: 'Load number already exists' });
       return;
     }
+    next(err);
+  }
+});
+
+router.put('/:id', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = await getUserIdFromRequest(req);
+    const id = Number(req.params.id);
+    if (!id || Number.isNaN(id)) {
+      res.status(400).json({ error: 'Invalid load id' });
+      return;
+    }
+
+    const status = req.body?.status ?? null;
+    const deliveryNotes = req.body?.deliveryNotes ?? null;
+    const description = req.body?.description ?? null;
+    const customer = req.body?.customer ?? null;
+    const type = req.body?.type ?? null;
+    const rate = req.body?.rate ?? null;
+    const equipmentType = req.body?.equipmentType ?? null;
+    const shipper = req.body?.shipper ?? null;
+    const shipperLocation = req.body?.shipperLocation ?? null;
+    const shipDate = req.body?.shipDate ?? null;
+    const consignee = req.body?.consignee ?? null;
+    const consigneeLocation = req.body?.consigneeLocation ?? null;
+    const deliveryDate = req.body?.deliveryDate ?? null;
+
+    const updateSql = `
+      UPDATE loads
+      SET status = COALESCE($2, status),
+          delivery_notes = COALESCE($3, delivery_notes),
+          description = COALESCE($4, description),
+          customer = COALESCE($5, customer),
+          type = COALESCE($6, type),
+          rate = COALESCE($7, rate),
+          equipment_type = COALESCE($8, equipment_type),
+          shipper = COALESCE($9, shipper),
+          shipper_location = COALESCE($10, shipper_location),
+          ship_date = COALESCE($11, ship_date),
+          consignee = COALESCE($12, consignee),
+          consignee_location = COALESCE($13, consignee_location),
+          delivery_date = COALESCE($14, delivery_date),
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `;
+
+    const result = await db.queryWithUser(
+      updateSql,
+      [
+        id,
+        status,
+        deliveryNotes,
+        description,
+        customer,
+        type,
+        rate,
+        equipmentType,
+        shipper,
+        shipperLocation,
+        shipDate,
+        consignee,
+        consigneeLocation,
+        deliveryDate
+      ],
+      userId || undefined
+    );
+    if (!result.rows.length) {
+      res.status(404).json({ error: 'Load not found' });
+      return;
+    }
+
+    res.json(toClientRow(result.rows[0]));
+  } catch (err) {
     next(err);
   }
 });

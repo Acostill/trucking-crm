@@ -4,6 +4,7 @@ import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
 import { buildApiUrl } from '../config';
+import ShipmentDetailsModal from '../components/ShipmentDetailsModal';
 
 const PIPELINE_STAGES = [
   'New Quote',
@@ -16,12 +17,12 @@ const PIPELINE_STAGES = [
   'Paid'
 ];
 
-function PipelineCard({ shipment }) {
+function PipelineCard({ shipment, onSelect }) {
   const originCity = shipment.shipper_location ? shipment.shipper_location.split(',')[0] : '-';
   const destCity = shipment.consignee_location ? shipment.consignee_location.split(',')[0] : '-';
   
   return (
-    <div className="pipeline-card">
+    <div className="pipeline-card" onClick={onSelect} style={{ cursor: 'pointer' }}>
       <div className="pipeline-card-header">
         <span className="pipeline-card-id">{shipment.load_number}</span>
         <button className="pipeline-card-more">
@@ -48,6 +49,8 @@ export default function PipelinePage() {
   const { user, checking, setUser } = useAuth();
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedShipment, setSelectedShipment] = useState(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchShipments() {
@@ -70,6 +73,25 @@ export default function PipelinePage() {
   const getShipmentsByStage = (stage) => {
     return shipments.filter(s => s.status === stage);
   };
+
+  async function handleUpdate(updatePayload) {
+    if (!updatePayload || !updatePayload.id) {
+      throw new Error('Missing load id');
+    }
+    const resp = await fetch(buildApiUrl(`/api/loads/${updatePayload.id}`), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(updatePayload)
+    });
+    if (!resp.ok) {
+      const msg = await resp.text();
+      throw new Error(msg || 'Failed to update');
+    }
+    const updated = await resp.json();
+    setShipments(prev => prev.map(row => (row.id === updated.id ? updated : row)));
+    return updated;
+  }
 
   if (checking) {
     return (
@@ -131,7 +153,14 @@ export default function PipelinePage() {
                         </div>
                       ) : items.length > 0 ? (
                         items.map(shipment => (
-                          <PipelineCard key={shipment.id} shipment={shipment} />
+                          <PipelineCard
+                            key={shipment.id}
+                            shipment={shipment}
+                            onSelect={() => {
+                              setSelectedShipment(shipment);
+                              setIsDetailsModalOpen(true);
+                            }}
+                          />
                         ))
                       ) : (
                         <div className="pipeline-empty">
@@ -145,6 +174,19 @@ export default function PipelinePage() {
             </div>
           </div>
         </div>
+        {isDetailsModalOpen && (
+          <ShipmentDetailsModal
+            shipment={selectedShipment}
+            onSave={async (updatedFields) => {
+              const updated = await handleUpdate(updatedFields);
+              setSelectedShipment(updated);
+            }}
+            onClose={() => {
+              setIsDetailsModalOpen(false);
+              setSelectedShipment(null);
+            }}
+          />
+        )}
       </main>
     </div>
   );

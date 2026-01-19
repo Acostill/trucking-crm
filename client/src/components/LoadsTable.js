@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import StatusBadge from './StatusBadge';
 import { Search, Filter, Download, ChevronDown, MoreVertical, Plus } from 'lucide-react';
+import ShipmentDetailsModal from './ShipmentDetailsModal';
 
-function LoadsTable({ rows, onNewLoad }) {
+function LoadsTable({ rows, onNewLoad, onUpdate }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedShipment, setSelectedShipment] = useState(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   const filtered = rows.filter(r => {
     if (!searchTerm.trim()) return true;
@@ -93,25 +96,33 @@ function LoadsTable({ rows, onNewLoad }) {
           </div>
         ) : (
           <table className="shipment-table">
-            <thead>
-              <tr>
+        <thead>
+          <tr>
                 <th className="th-checkbox">
                   <input type="checkbox" />
                 </th>
                 <th>Load #</th>
-                <th>Customer</th>
+            <th>Customer</th>
                 <th>Origin</th>
                 <th>Destination</th>
                 <th>Dates</th>
-                <th>Status</th>
+            <th>Status</th>
                 <th className="th-right">Rate</th>
                 <th className="th-actions"></th>
-              </tr>
-            </thead>
-            <tbody>
+          </tr>
+        </thead>
+        <tbody>
               {filtered.map((r, idx) => (
-                <tr key={r.id || idx}>
-                  <td className="td-checkbox">
+                <tr 
+                  key={r.id || idx}
+                  className="shipment-table-row-clickable"
+                  onClick={() => {
+                    setSelectedShipment(r);
+                    setIsDetailsModalOpen(true);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <td className="td-checkbox" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" />
                   </td>
                   <td className="td-id">
@@ -141,17 +152,33 @@ function LoadsTable({ rows, onNewLoad }) {
                   <td className="td-rate">
                     {formatCurrency(r.rate)}
                   </td>
-                  <td className="td-actions">
+                  <td className="td-actions" onClick={(e) => e.stopPropagation()}>
                     <button className="btn-more">
                       <MoreVertical size={16} />
                     </button>
                   </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            </tr>
+          ))}
+        </tbody>
+      </table>
         )}
       </div>
+
+      {/* Shipment Details Modal */}
+      {isDetailsModalOpen && (
+        <ShipmentDetailsModal
+          shipment={selectedShipment}
+          onSave={async (updatedFields) => {
+            if (!onUpdate) return;
+            const updated = await onUpdate(updatedFields);
+            setSelectedShipment(updated);
+          }}
+          onClose={() => {
+            setIsDetailsModalOpen(false);
+            setSelectedShipment(null);
+          }}
+        />
+      )}
     </div>
   );
 }
