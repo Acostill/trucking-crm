@@ -11,6 +11,9 @@ import loadsRouter from './routes/loads';
 import authRouter from './routes/auth';
 import quotesRouter from './routes/quotes';
 import adminRouter from './routes/admin';
+import ocrRouter from './routes/ocr';
+import openaiDimensionsRouter from './routes/openaiDimensions';
+import openrouterDimensionsRouter from './routes/openrouterDimensions';
 
 const app = express();
 const ROOT_DIR = __dirname;
@@ -56,6 +59,9 @@ app.use('/api/admin', adminRouter);
 app.use('/api/loads', loadsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/quotes', quotesRouter);
+app.use('/api/ocr', ocrRouter);
+app.use('/api/extract-dimensions', openaiDimensionsRouter);
+app.use('/api/extract-dimensions-openrouter', openrouterDimensionsRouter);
 
 // catch 404 and forward to error handler
 app.use(function(_req: Request, _res: Response, next: NextFunction) {
