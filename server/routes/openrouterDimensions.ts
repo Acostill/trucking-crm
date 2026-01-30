@@ -22,6 +22,30 @@ function parseJsonFromText(text: string): any | null {
   }
 }
 
+function normalizePieces(payload: any) {
+  if (!payload || typeof payload !== 'object') return [];
+  const rawPieces = Array.isArray(payload.pieces) ? payload.pieces : [];
+  return rawPieces.map(function(piece) {
+    if (!piece || typeof piece !== 'object') return null;
+    const length = piece.length_in ?? piece.length ?? null;
+    const width = piece.width_in ?? piece.width ?? null;
+    const height = piece.height_in ?? piece.height ?? null;
+    const weight = piece.weight ?? piece.weight_lbs ?? piece.weight_lb ?? null;
+    return {
+      length_in: typeof length === 'number' ? length : Number(length),
+      width_in: typeof width === 'number' ? width : Number(width),
+      height_in: typeof height === 'number' ? height : Number(height),
+      weight: typeof weight === 'number' ? weight : Number(weight),
+      unit: piece.unit || payload.unit || 'in'
+    };
+  }).filter(function(piece) {
+    if (!piece) return false;
+    return [piece.length_in, piece.width_in, piece.height_in, piece.weight].some(function(val) {
+      return typeof val === 'number' && !Number.isNaN(val);
+    });
+  });
+}
+
 router.post(
   '/',
   upload.single('image'),
@@ -44,12 +68,15 @@ router.post(
 
       const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
       const prompt =
-        'Extract the box dimensions from the image. ' +
-        'Return the length, width, and height as numbers (inches if shown). ' +
-        "Prefer values explicitly labeled in the image (e.g., 'Length = 12 in.'). " +
-        'If only "L x W x H" is shown, use that. ' +
+        'Extract dimensions for ALL items visible in the image. ' +
+        'Return an array of pieces, each with length_in, width_in, height_in, and weight if shown. ' +
+        'If the unit is shown, include unit (in/cm/mm/ft). If not shown, use "in". ' +
+        'Prefer values explicitly labeled in the image (e.g., "Length = 12 in."). ' +
+        'If only "L x W x H" is shown, use that ordering. ' +
+        'If "@" is shown assume the number following it is the weight.' +
         'If uncertain, set a confidence < 0.7. ' +
-        'Return ONLY valid JSON with keys: length_in, width_in, height_in, unit, confidence, notes.';
+        'Return ONLY valid JSON with this shape: ' +
+        '{"pieces":[{"length_in":number|null,"width_in":number|null,"height_in":number|null,"weight":number|null,"unit":"in|cm|mm|ft","confidence":number,"notes":string}]}';
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -90,7 +117,11 @@ router.post(
         return;
       }
 
-      res.status(200).json(parsed);
+      const pieces = normalizePieces(parsed);
+      res.status(200).json({
+        pieces,
+        raw: parsed
+      });
     } catch (err) {
       next(err);
     }

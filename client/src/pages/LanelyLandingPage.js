@@ -9,7 +9,7 @@ import {
   Scale,
   Info
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import LandingNavbar from '../components/LandingNavbar';
 
 const EquipmentType = {
@@ -19,6 +19,7 @@ const EquipmentType = {
 };
 
 export default function LanelyLandingPage() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     origin: '',
     destination: '',
@@ -39,8 +40,30 @@ export default function LanelyLandingPage() {
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log("Generating quote for:", formData);
-    // In the future this can redirect to the calculate rate page or process the quote directly
-    window.location.href = '/calculate-rate';
+    const origin = (formData.origin || '').trim();
+    const destination = (formData.destination || '').trim();
+    const isZip = function(value) { return /^\d{5}(-\d{4})?$/.test(value); };
+
+    const prefill = {
+      pickupCity: isZip(origin) ? '' : origin,
+      pickupZip: isZip(origin) ? origin : '',
+      deliveryCity: isZip(destination) ? '' : destination,
+      deliveryZip: isZip(destination) ? destination : '',
+      pickupDate: formData.pickupDate || '',
+      equipmentType: formData.equipment || '',
+      piecesUnit: 'in',
+      weightUnit: 'lbs',
+      piecesRows: [
+        {
+          length: formData.length || '',
+          width: formData.width || '',
+          height: formData.height || '',
+          weight: formData.weight || ''
+        }
+      ]
+    };
+
+    navigate('/calculate-rate', { state: { prefill } });
   };
 
   return (

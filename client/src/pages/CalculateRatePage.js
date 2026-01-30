@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import QuoteCard from '../components/QuoteCard';
 import { buildApiUrl } from '../config';
 import GlobalTopbar from '../components/GlobalTopbar';
+import { useLocation } from 'react-router-dom';
 
 const DEFAULT_INITIAL_VALUES = {
   pickupCity: 'Chicago',
@@ -14,19 +15,18 @@ const DEFAULT_INITIAL_VALUES = {
   deliveryZip: '30303',
   deliveryCountry: 'US',
   piecesUnit: 'in',
-  piecesQuantity: '2',
   part1Length: '74',
   part1Width: '51',
   part1Height: '67',
-  part2Length: '75',
-  part2Width: '51',
-  part2Height: '67',
+  part2Length: '',
+  part2Width: '',
+  part2Height: '',
   weightUnit: 'lbs',
-  weightValue: '999',
   hazardousUnNumbersText: 'UN3508, UN3530, UN3536, UN3548',
   accessorialCodesText: 'CALLDEL, DEBRISREM, UPK',
   shipmentId: '1',
-  referenceNumber: 'Reference12345'
+  referenceNumber: 'Reference12345',
+  equipmentType: ''
 };
 
 const EMPTY_INITIAL_VALUES = Object.keys(DEFAULT_INITIAL_VALUES).reduce(function(acc, key) {
@@ -45,7 +45,6 @@ const EMBEDDED_DEFAULT_VALUES = {
   deliveryZip: '',
   deliveryCountry: '',
   piecesUnit: '',
-  piecesQuantity: '',
   part1Length: '',
   part1Width: '',
   part1Height: '',
@@ -53,14 +52,40 @@ const EMBEDDED_DEFAULT_VALUES = {
   part2Width: '',
   part2Height: '',
   weightUnit: '',
-  weightValue: '',
   hazardousUnNumbersText: 'UN3508, UN3530, UN3536, UN3548',
   accessorialCodesText: 'CALLDEL, DEBRISREM, UPK',
   shipmentId: '1',
-  referenceNumber: 'Reference12345'
+  referenceNumber: 'Reference12345',
+  equipmentType: ''
 };
 
+function buildPiecesRowsFrom(source) {
+  const rows = [];
+  if (source.part1Length || source.part1Width || source.part1Height) {
+    rows.push({
+      length: source.part1Length || '',
+      width: source.part1Width || '',
+      height: source.part1Height || '',
+      weight: source.part1Weight || ''
+    });
+  }
+  if (source.part2Length || source.part2Width || source.part2Height) {
+    rows.push({
+      length: source.part2Length || '',
+      width: source.part2Width || '',
+      height: source.part2Height || '',
+      weight: source.part2Weight || ''
+    });
+  }
+  if (!rows.length) {
+    rows.push({ length: '', width: '', height: '', weight: '' });
+  }
+  return rows;
+}
+
 export default function CalculateRatePage({ embedded, initialValues, prefill, onSelectQuote }) {
+  const location = useLocation();
+  const mergedPrefill = prefill || (location && location.state ? location.state.prefill : null);
   var baseInit = embedded ? EMBEDDED_DEFAULT_VALUES : DEFAULT_INITIAL_VALUES;
   var init = initialValues ? { ...baseInit, ...initialValues } : baseInit;
 
@@ -76,27 +101,21 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [deliveryCountry, setDeliveryCountry] = useState(init.deliveryCountry);
 
   const [piecesUnit, setPiecesUnit] = useState(init.piecesUnit);
-  const [piecesQuantity, setPiecesQuantity] = useState(init.piecesQuantity);
-  const [part1Length, setPart1Length] = useState(init.part1Length);
-  const [part1Width, setPart1Width] = useState(init.part1Width);
-  const [part1Height, setPart1Height] = useState(init.part1Height);
-  const [part2Length, setPart2Length] = useState(init.part2Length);
-  const [part2Width, setPart2Width] = useState(init.part2Width);
-  const [part2Height, setPart2Height] = useState(init.part2Height);
+  const [piecesRows, setPiecesRows] = useState(buildPiecesRowsFrom(init));
 
   const [weightUnit, setWeightUnit] = useState(init.weightUnit);
-  const [weightValue, setWeightValue] = useState(init.weightValue);
 
   const [hazardousUnNumbersText, setHazardousUnNumbersText] = useState(init.hazardousUnNumbersText);
   const [accessorialCodesText, setAccessorialCodesText] = useState(init.accessorialCodesText);
 
   const [shipmentId, setShipmentId] = useState(init.shipmentId);
   const [referenceNumber, setReferenceNumber] = useState(init.referenceNumber);
+  const [equipmentType, setEquipmentType] = useState(init.equipmentType);
 
   // When a prefill object is provided (e.g., from email-paste), update fields
   React.useEffect(function() {
-    console.log('[CalculateRatePage] prefill changed:', prefill);
-    if (!prefill) return;
+    console.log('[CalculateRatePage] prefill changed:', mergedPrefill);
+    if (!mergedPrefill) return;
     
     console.log('[CalculateRatePage] Applying prefill values');
     function apply(setter, value) {
@@ -105,35 +124,62 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       }
     }
 
-    apply(setPickupCity, prefill.pickupCity);
-    apply(setPickupState, prefill.pickupState);
-    apply(setPickupZip, prefill.pickupZip);
-    apply(setPickupCountry, prefill.pickupCountry);
-    apply(setPickupDate, prefill.pickupDate);
+    apply(setPickupCity, mergedPrefill.pickupCity);
+    apply(setPickupState, mergedPrefill.pickupState);
+    apply(setPickupZip, mergedPrefill.pickupZip);
+    apply(setPickupCountry, mergedPrefill.pickupCountry);
+    apply(setPickupDate, mergedPrefill.pickupDate);
 
-    apply(setDeliveryCity, prefill.deliveryCity);
-    apply(setDeliveryState, prefill.deliveryState);
-    apply(setDeliveryZip, prefill.deliveryZip);
-    apply(setDeliveryCountry, prefill.deliveryCountry);
+    apply(setDeliveryCity, mergedPrefill.deliveryCity);
+    apply(setDeliveryState, mergedPrefill.deliveryState);
+    apply(setDeliveryZip, mergedPrefill.deliveryZip);
+    apply(setDeliveryCountry, mergedPrefill.deliveryCountry);
 
-    apply(setPiecesUnit, prefill.piecesUnit);
-    apply(setPiecesQuantity, prefill.piecesQuantity);
-    apply(setPart1Length, prefill.part1Length);
-    apply(setPart1Width, prefill.part1Width);
-    apply(setPart1Height, prefill.part1Height);
-    apply(setPart2Length, prefill.part2Length);
-    apply(setPart2Width, prefill.part2Width);
-    apply(setPart2Height, prefill.part2Height);
+    apply(setPiecesUnit, mergedPrefill.piecesUnit);
+    apply(setWeightUnit, mergedPrefill.weightUnit);
 
-    apply(setWeightUnit, prefill.weightUnit);
-    apply(setWeightValue, prefill.weightValue);
+    if (Array.isArray(mergedPrefill.piecesRows)) {
+      setPiecesRows(mergedPrefill.piecesRows.map(function(row) {
+        return {
+          length: row.length || '',
+          width: row.width || '',
+          height: row.height || '',
+          weight: row.weight || ''
+        };
+      }));
+    } else if (
+      mergedPrefill.part1Length || mergedPrefill.part1Width || mergedPrefill.part1Height ||
+      mergedPrefill.part2Length || mergedPrefill.part2Width || mergedPrefill.part2Height
+    ) {
+      setPiecesRows(buildPiecesRowsFrom(mergedPrefill));
+    } else if (mergedPrefill.piecesQuantity) {
+      var count = Math.max(1, Number(mergedPrefill.piecesQuantity) || 1);
+      setPiecesRows(function(prev) {
+        var next = prev.slice(0, count);
+        while (next.length < count) {
+          next.push({ length: '', width: '', height: '', weight: '' });
+        }
+        return next;
+      });
+    }
 
-    apply(setHazardousUnNumbersText, prefill.hazardousUnNumbersText);
-    apply(setAccessorialCodesText, prefill.accessorialCodesText);
+    if (mergedPrefill.weightValue) {
+      setPiecesRows(function(prev) {
+        var hasWeight = prev.some(function(row) { return row.weight; });
+        if (hasWeight) return prev;
+        var next = prev.slice();
+        next[0] = { ...next[0], weight: mergedPrefill.weightValue };
+        return next;
+      });
+    }
 
-    apply(setShipmentId, prefill.shipmentId);
-    apply(setReferenceNumber, prefill.referenceNumber);
-  }, [prefill]);
+    apply(setHazardousUnNumbersText, mergedPrefill.hazardousUnNumbersText);
+    apply(setAccessorialCodesText, mergedPrefill.accessorialCodesText);
+
+    apply(setShipmentId, mergedPrefill.shipmentId);
+    apply(setReferenceNumber, mergedPrefill.referenceNumber);
+    apply(setEquipmentType, mergedPrefill.equipmentType || mergedPrefill.truckType);
+  }, [mergedPrefill]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -146,8 +192,85 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactConfirmation, setContactConfirmation] = useState('');
+  const [dimensionsFile, setDimensionsFile] = useState(null);
+  const [dimensionsLoading, setDimensionsLoading] = useState(false);
+  const [dimensionsError, setDimensionsError] = useState(null);
+
+  function updatePieceRow(index, key, value) {
+    setPiecesRows(function(prev) {
+      var next = prev.slice();
+      next[index] = { ...next[index], [key]: value };
+      return next;
+    });
+  }
+
+  function addPieceRow() {
+    setPiecesRows(function(prev) {
+      return prev.concat([{ length: '', width: '', height: '', weight: '' }]);
+    });
+  }
+
+  function removePieceRow(index) {
+    setPiecesRows(function(prev) {
+      if (prev.length <= 1) return prev;
+      return prev.filter(function(_row, idx) { return idx !== index; });
+    });
+  }
+
+  function computeTotalWeight(rows) {
+    return rows.reduce(function(sum, row) {
+      var val = Number(row.weight);
+      if (Number.isNaN(val)) return sum;
+      return sum + val;
+    }, 0);
+  }
+
+  async function handleExtractDimensions() {
+    if (!dimensionsFile) {
+      setDimensionsError('Please select an image first.');
+      return;
+    }
+    setDimensionsLoading(true);
+    setDimensionsError(null);
+    try {
+      var formData = new FormData();
+      formData.append('image', dimensionsFile);
+      var resp = await fetch(buildApiUrl('/api/extract-dimensions-openrouter'), {
+        method: 'POST',
+        body: formData
+      });
+      if (!resp.ok) {
+        var errorText = await resp.text();
+        throw new Error(errorText || 'Failed to extract dimensions.');
+      }
+      var data = await resp.json();
+      var pieces = Array.isArray(data.pieces) ? data.pieces : [];
+      if (!pieces.length) {
+        setDimensionsError('No dimensions were detected in the image.');
+        return;
+      }
+      var mapped = pieces.map(function(piece) {
+        return {
+          length: piece.length_in != null ? String(piece.length_in) : '',
+          width: piece.width_in != null ? String(piece.width_in) : '',
+          height: piece.height_in != null ? String(piece.height_in) : '',
+          weight: piece.weight != null ? String(piece.weight) : ''
+        };
+      });
+      setPiecesRows(mapped);
+    } catch (err) {
+      setDimensionsError(err && err.message ? err.message : 'Failed to extract dimensions.');
+    } finally {
+      setDimensionsLoading(false);
+    }
+  }
 
   function buildPayload() {
+    var totalWeight = computeTotalWeight(piecesRows);
+    function toNumberOrUndefined(value) {
+      var num = Number(value);
+      return Number.isNaN(num) ? undefined : num;
+    }
     return {
       pickup: {
         location: {
@@ -168,23 +291,19 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       },
       pieces: {
         unit: piecesUnit,
-        quantity: Number(piecesQuantity),
-        parts: [
-          {
-            length: Number(part1Length),
-            width: Number(part1Width),
-            height: Number(part1Height)
-          },
-          {
-            length: Number(part2Length),
-            width: Number(part2Width),
-            height: Number(part2Height)
-          }
-        ]
+        quantity: piecesRows.length,
+        parts: piecesRows.map(function(row) {
+          return {
+            length: toNumberOrUndefined(row.length),
+            width: toNumberOrUndefined(row.width),
+            height: toNumberOrUndefined(row.height),
+            weight: toNumberOrUndefined(row.weight)
+          };
+        })
       },
       weight: {
         unit: weightUnit,
-        value: Number(weightValue)
+        value: totalWeight
       },
       hazardousMaterial: {
         unNumbers: hazardousUnNumbersText
@@ -197,7 +316,8 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         .map(function(s) { return s.trim(); })
         .filter(function(s) { return s.length > 0; }),
       shipmentId: shipmentId,
-      referenceNumber: referenceNumber
+      referenceNumber: referenceNumber,
+      truckType: equipmentType || undefined
     };
   }
 
@@ -876,50 +996,111 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
               </fieldset>
 
               <fieldset>
-                <legend>Pieces</legend>
+                <legend>Units</legend>
                 <div className="row-2">
                   <label>
-                    Unit
-                    <input value={piecesUnit} onChange={function(e){ setPiecesUnit(e.target.value); }} />
+                    Length Unit
+                    <select value={piecesUnit} onChange={function(e){ setPiecesUnit(e.target.value); }}>
+                      <option value="in">in</option>
+                      <option value="ft">ft</option>
+                      <option value="cm">cm</option>
+                      <option value="mm">mm</option>
+                    </select>
                   </label>
                   <label>
-                    Quantity
-                    <input type="number" value={piecesQuantity} onChange={function(e){ setPiecesQuantity(e.target.value); }} />
+                    Weight Unit
+                    <select value={weightUnit} onChange={function(e){ setWeightUnit(e.target.value); }}>
+                      <option value="lbs">lbs</option>
+                      <option value="kg">kg</option>
+                    </select>
                   </label>
                 </div>
-                <div>
-                  <div className="section-title">Part 1</div>
-                  <div className="row-3">
-                    <label>
-                      Length
-                      <input type="number" value={part1Length} onChange={function(e){ setPart1Length(e.target.value); }} />
-                    </label>
-                    <label>
-                      Width
-                      <input type="number" value={part1Width} onChange={function(e){ setPart1Width(e.target.value); }} />
-                    </label>
-                    <label>
-                      Height
-                      <input type="number" value={part1Height} onChange={function(e){ setPart1Height(e.target.value); }} />
-                    </label>
-                  </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Dimensions From Image</legend>
+                <div className="row-2">
+                  <label>
+                    Upload Image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={function(e){ setDimensionsFile(e.target.files && e.target.files[0] ? e.target.files[0] : null); }}
+                    />
+                  </label>
                 </div>
-                <div>
-                  <div className="section-title">Part 2</div>
-                  <div className="row-3">
-                    <label>
-                      Length
-                      <input type="number" value={part2Length} onChange={function(e){ setPart2Length(e.target.value); }} />
-                    </label>
-                    <label>
-                      Width
-                      <input type="number" value={part2Width} onChange={function(e){ setPart2Width(e.target.value); }} />
-                    </label>
-                    <label>
-                      Height
-                      <input type="number" value={part2Height} onChange={function(e){ setPart2Height(e.target.value); }} />
-                    </label>
+                <div className="actions" style={{ justifyContent: 'flex-start' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleExtractDimensions}
+                    disabled={dimensionsLoading}
+                  >
+                    {dimensionsLoading ? 'Extracting…' : 'Get Dimensions From Image'}
+                  </button>
+                </div>
+                {dimensionsError && (
+                  <div className="error" style={{ marginTop: 10 }}>
+                    {dimensionsError}
                   </div>
+                )}
+              </fieldset>
+
+              <fieldset>
+                <legend>Pieces</legend>
+                {piecesRows.map(function(row, idx) {
+                  return (
+                    <div key={idx}>
+                      <div className="row-4">
+                        <label>
+                          Length
+                          <input
+                            type="number"
+                            value={row.length}
+                            onChange={function(e){ updatePieceRow(idx, 'length', e.target.value); }}
+                          />
+                        </label>
+                        <label>
+                          Width
+                          <input
+                            type="number"
+                            value={row.width}
+                            onChange={function(e){ updatePieceRow(idx, 'width', e.target.value); }}
+                          />
+                        </label>
+                        <label>
+                          Height
+                          <input
+                            type="number"
+                            value={row.height}
+                            onChange={function(e){ updatePieceRow(idx, 'height', e.target.value); }}
+                          />
+                        </label>
+                        <label>
+                          Weight ({weightUnit || 'lbs'})
+                          <input
+                            type="number"
+                            value={row.weight}
+                            onChange={function(e){ updatePieceRow(idx, 'weight', e.target.value); }}
+                          />
+                        </label>
+                      </div>
+                      <div className="actions" style={{ justifyContent: 'flex-start' }}>
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={function(){ removePieceRow(idx); }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="actions" style={{ justifyContent: 'flex-start' }}>
+                  <button type="button" className="btn-secondary" onClick={addPieceRow}>
+                    Add piece
+                  </button>
                 </div>
               </fieldset>
 
@@ -927,12 +1108,12 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                 <legend>Weight</legend>
                 <div className="row-2">
                   <label>
-                    Unit
-                    <input value={weightUnit} onChange={function(e){ setWeightUnit(e.target.value); }} />
+                    Total Weight ({weightUnit || 'lbs'})
+                    <input type="number" value={computeTotalWeight(piecesRows)} readOnly />
                   </label>
                   <label>
-                    Value
-                    <input type="number" value={weightValue} onChange={function(e){ setWeightValue(e.target.value); }} />
+                    Pieces Count
+                    <input type="number" value={piecesRows.length} readOnly />
                   </label>
                 </div>
               </fieldset>
@@ -965,6 +1146,22 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     <input value={referenceNumber} onChange={function(e){ setReferenceNumber(e.target.value); }} />
                   </label>
                 </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Equipment Type</legend>
+                <label>
+                  Equipment
+                  <select value={equipmentType} onChange={function(e){ setEquipmentType(e.target.value); }}>
+                    <option value="">Select equipment</option>
+                    <option value="Box Truck">Box Truck</option>
+                    <option value="Flatbed Hotshot">Flatbed Hotshot</option>
+                    <option value="Sprinter Van">Sprinter Van</option>
+                    <option value="Reefer">Reefer</option>
+                    <option value="Dry Van">Dry Van</option>
+                    <option value="Flatbed">Flatbed</option>
+                  </select>
+                </label>
               </fieldset>
 
               <div className="actions">
