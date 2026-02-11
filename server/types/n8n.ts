@@ -94,6 +94,7 @@ export interface EmailBody {
   greeting?: string;
   message?: string;
   shipment_details?: ShipmentDetails;
+  special_instructions?: SpecialInstructions;
 }
 
 export interface ParsedSample {

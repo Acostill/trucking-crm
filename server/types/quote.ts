@@ -22,6 +22,7 @@ export interface Piece {
   width?: number;
   height?: number;
   count?: number;
+  weight?: number;
 }
 
 // Common pieces structure
@@ -45,8 +46,13 @@ export interface UnifiedQuoteRequest {
   weight?: Weight;
   truckType?: string;
   equipmentCategory?: string;
+  hazardousMaterial?: {
+    unNumbers?: string[];
+  };
   accessorialCodes?: string[];
   hazardousUnNumbers?: string[];
+  shipmentId?: string;
+  referenceNumber?: string;
   [key: string]: any; // Allow additional properties for service-specific fields
 }
 

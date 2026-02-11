@@ -21,9 +21,268 @@ import { UnifiedQuoteRequest } from '../types/quote';
 
 const router = express.Router();
 
+const DEFAULT_OPENROUTER_EMAIL_MODEL = 'meta-llama/llama-3.1-8b-instruct';
+const DEFAULT_OPENROUTER_RATE_MODEL = 'meta-llama/llama-3.1-8b-instruct';
+
 function generateLoadNumber() {
   const random = Math.floor(Math.random() * 900) + 100; // 3-digit entropy
   return 'EMAIL-' + Date.now() + '-' + random;
+}
+
+function stripJsonFence(value: string): string {
+  return value.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+}
+
+async function parseEmailWithOpenRouter(emailContent: string): Promise<N8nEmailPasteResponse> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    const err: any = new Error('OPENROUTER_API_KEY is not configured');
+    err.status = 500;
+    throw err;
+  }
+
+  const primaryModel =
+    process.env.OPENROUTER_EMAIL_MODEL ||
+    process.env.OPENROUTER_MODEL ||
+    DEFAULT_OPENROUTER_EMAIL_MODEL;
+
+  const modelCandidates = [primaryModel];
+  if (primaryModel.endsWith(':free')) {
+    modelCandidates.push(primaryModel.replace(/:free$/, ''));
+  }
+  if (modelCandidates.indexOf(DEFAULT_OPENROUTER_EMAIL_MODEL) === -1) {
+    modelCandidates.push(DEFAULT_OPENROUTER_EMAIL_MODEL);
+  }
+
+  const prompt = [
+    'You are an expert logistics email parser.',
+    'Extract shipment details from the raw email text and return ONLY valid JSON (no markdown).',
+    'Use this exact schema (omit fields you cannot determine):',
+    '{',
+    '  "subject": string,',
+    '  "body": {',
+    '    "greeting": string,',
+    '    "message": string,',
+    '    "shipment_details": {',
+    '      "pickup": { "city": string, "state": string, "zip": string, "pickup_date": string, "pickup_ready_time": string, "pickup_close_time": string },',
+    '      "delivery_options": [',
+    '        { "location_code": string, "city": string, "state": string, "type": string, "zip_code": string, "requested_delivery_date": string, "delivery_time_window_start": string, "delivery_time_window_end": string }',
+    '      ],',
+    '      "shipment_info": {',
+    '        "pallets": number,',
+    '        "dimensions": [ { "length_in": number, "width_in": number, "height_in": number, "count": number } ],',
+    '        "total_weight_lbs": number,',
+    '        "commodity": string,',
+    '        "stackable": boolean,',
+    '        "temperature_control": { "min_c": number, "max_c": number },',
+    '        "data_loggers_required": number,',
+    '        "ready_for_loading_date": string,',
+    '        "cut_off_time_for_trucking": string',
+    '      }',
+    '    },',
+    '    "special_instructions": {',
+    '      "notes": string[],',
+    '      "requirements": string[],',
+    '      "driver_requirements": string[],',
+    '      "security_requirements": string[],',
+    '      "accessorials": string[],',
+    '      "compliance_flags": string[],',
+    '      "extra_fields": object',
+    '    }',
+    '  }',
+    '}',
+    'If a list has no items, return an empty array.',
+    'Do not include any additional keys.',
+    '',
+    'EMAIL TEXT:',
+    emailContent
+  ].join('\n');
+
+  let lastErrorText: string | null = null;
+  let data: any = null;
+  let chosenModel: string | null = null;
+
+  for (let i = 0; i < modelCandidates.length; i++) {
+    const model = modelCandidates[i];
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://trucking-crm.app',
+        'X-Title': 'Trucking CRM Email Paste'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: 'Return only valid JSON.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 900
+      })
+    });
+
+    if (response.ok) {
+      data = await response.json();
+      chosenModel = model;
+      break;
+    }
+
+    lastErrorText = await response.text();
+
+    // If model isn't found, try the next candidate.
+    if (response.status === 404) {
+      continue;
+    }
+
+    const err: any = new Error(`OpenRouter API error: ${response.status}`);
+    err.status = 502;
+    err.details = { raw: lastErrorText, model };
+    throw err;
+  }
+
+  if (!data) {
+    const err: any = new Error('OpenRouter API error: 404');
+    err.status = 502;
+    err.details = { raw: lastErrorText, triedModels: modelCandidates };
+    throw err;
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    const err: any = new Error('No content in OpenRouter response');
+    err.status = 502;
+    err.details = { model: chosenModel };
+    throw err;
+  }
+
+  const jsonStr = stripJsonFence(String(content));
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('OpenRouter response was not a JSON object');
+    }
+    return parsed as N8nEmailPasteResponse;
+  } catch (parseErr: any) {
+    const err: any = new Error('Failed to parse JSON from OpenRouter response');
+    err.status = 502;
+    err.details = { raw: content, parseError: parseErr?.message, model: chosenModel };
+    throw err;
+  }
+}
+
+async function parseCalculateRateWithOpenRouter(inputText: string): Promise<any> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    const err: any = new Error('OPENROUTER_API_KEY is not configured');
+    err.status = 500;
+    throw err;
+  }
+
+  const primaryModel =
+    process.env.OPENROUTER_RATE_MODEL ||
+    process.env.OPENROUTER_MODEL ||
+    DEFAULT_OPENROUTER_RATE_MODEL;
+
+  const modelCandidates = [primaryModel];
+  if (primaryModel.endsWith(':free')) {
+    modelCandidates.push(primaryModel.replace(/:free$/, ''));
+  }
+  if (modelCandidates.indexOf(DEFAULT_OPENROUTER_RATE_MODEL) === -1) {
+    modelCandidates.push(DEFAULT_OPENROUTER_RATE_MODEL);
+  }
+
+  const prompt = [
+    'You extract shipping quote details from user instructions.',
+    'Return ONLY valid JSON (no markdown). Use this schema and omit unknown fields:',
+    '{',
+    '  "pickup": { "city": string, "state": string, "zip": string, "country": string, "date": string },',
+    '  "delivery": { "city": string, "state": string, "zip": string, "country": string, "date": string },',
+    '  "pieces": { "unit": string, "parts": [ { "length": number, "width": number, "height": number, "weight": number, "count": number } ] },',
+    '  "weight": { "unit": string, "value": number },',
+    '  "equipmentType": string,',
+    '  "accessorialCodes": string[],',
+    '  "hazardousUnNumbers": string[],',
+    '  "shipmentId": string,',
+    '  "referenceNumber": string',
+    '}',
+    'If no parts are provided, return an empty array. If no arrays, return empty arrays.',
+    '',
+    'USER INPUT:',
+    inputText
+  ].join('\n');
+
+  let lastErrorText: string | null = null;
+  let data: any = null;
+  let chosenModel: string | null = null;
+
+  for (let i = 0; i < modelCandidates.length; i++) {
+    const model = modelCandidates[i];
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://trucking-crm.app',
+        'X-Title': 'Trucking CRM Rate Parser'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: 'system', content: 'Return only valid JSON.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 900
+      })
+    });
+
+    if (response.ok) {
+      data = await response.json();
+      chosenModel = model;
+      break;
+    }
+
+    lastErrorText = await response.text();
+    if (response.status === 404) {
+      continue;
+    }
+
+    const err: any = new Error(`OpenRouter API error: ${response.status}`);
+    err.status = 502;
+    err.details = { raw: lastErrorText, model };
+    throw err;
+  }
+
+  if (!data) {
+    const err: any = new Error('OpenRouter API error: 404');
+    err.status = 502;
+    err.details = { raw: lastErrorText, triedModels: modelCandidates };
+    throw err;
+  }
+
+  const content = data?.choices?.[0]?.message?.content;
+  if (!content) {
+    const err: any = new Error('No content in OpenRouter response');
+    err.status = 502;
+    err.details = { model: chosenModel };
+    throw err;
+  }
+
+  const jsonStr = stripJsonFence(String(content));
+  try {
+    const parsed = JSON.parse(jsonStr);
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('OpenRouter response was not a JSON object');
+    }
+    return parsed;
+  } catch (parseErr: any) {
+    const err: any = new Error('Failed to parse JSON from OpenRouter response');
+    err.status = 502;
+    err.details = { raw: content, parseError: parseErr?.message, model: chosenModel };
+    throw err;
+  }
 }
 
 function formatLocation(location: PickupLocation | DeliveryOption | null | undefined): string | null {
@@ -385,6 +644,42 @@ router.post('/api/email-paste', function(req: Request, res: Response, next: Next
 
   upstreamReq.write(payload);
   upstreamReq.end();
+});
+
+router.post('/api/email-paste/openrouter', async function(req: Request, res: Response, next: NextFunction) {
+  const emailContent = (req.body && (req.body as any).content) || '';
+  if (typeof emailContent !== 'string' || emailContent.trim().length === 0) {
+    res.status(400).json({ error: 'Email content is required' });
+    return;
+  }
+
+  try {
+    const parsed = await parseEmailWithOpenRouter(emailContent);
+
+    console.log(
+      '[email-paste-openrouter] response',
+      util.inspect({ parsed }, { depth: null, maxArrayLength: null, breakLength: 120 })
+    );
+
+    res.status(200).json(parsed);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/api/ai/parse-calculate-rate', async function(req: Request, res: Response, next: NextFunction) {
+  const content = (req.body && (req.body as any).content) || '';
+  if (typeof content !== 'string' || content.trim().length === 0) {
+    res.status(400).json({ error: 'Input content is required' });
+    return;
+  }
+
+  try {
+    const parsed = await parseCalculateRateWithOpenRouter(content);
+    res.status(200).json(parsed);
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST endpoint to save a load after selecting a quote
