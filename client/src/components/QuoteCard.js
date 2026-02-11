@@ -31,6 +31,14 @@ export default function QuoteCard(props) {
 
   var source = quote.source || 'Unknown';
 
+  function mapSourceLabel(name) {
+    if (!name) return 'Unknown';
+    if (name === 'ExpediteAll') return 'Full Truck';
+    if (name === 'ForwardAir') return 'LTL (Less Than Truckload)';
+    if (name === 'DAT') return 'In Network Carrier';
+    return name;
+  }
+
   return (
     <div className="quote-card">
       <div className="quote-header">
@@ -45,7 +53,11 @@ export default function QuoteCard(props) {
       </div>
 
       <div className="quote-badges">
-        {source && source !== 'Unknown' && <span className="badge" style={{ backgroundColor: '#6366f1', color: 'white' }}>{source}</span>}
+        {source && source !== 'Unknown' && (
+          <span className="badge" style={{ backgroundColor: '#6366f1', color: 'white' }}>
+            {mapSourceLabel(source)}
+          </span>
+        )}
         {truckType && <span className="badge">{truckType}</span>}
         {typeof transitTime === 'number' && <span className="badge">{transitTime} day{transitTime === 1 ? '' : 's'}</span>}
         {rateCalculationID && <span className="badge muted">ID: {rateCalculationID}</span>}
@@ -70,34 +82,14 @@ export default function QuoteCard(props) {
         </div>
 
         <div className="panel">
-          <div className="panel-title">Accessorials</div>
-          {priceAccessorials.length === 0 ? (
-            <div className="muted">No accessorials</div>
-          ) : (
-            <div className="table">
-              <div className="thead">
-                <div>Description</div>
-                <div>Price</div>
-              </div>
-              <div className="tbody">
-                {priceAccessorials.map(function(a){
-                  return (
-                    <div className="tr" key={a.code || a.description}>
-                      <div>
-                        <div className="desc">{a.description || a.code}</div>
-                        {a.code && <div className="sub">{a.code}</div>}
-                      </div>
-                      <div className="amount">{formatCurrency(Number(a.price) || 0)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="tfoot">
-                <div>Accessorials total</div>
-                <div>{formatCurrency(accessorialsTotal)}</div>
-              </div>
-            </div>
-          )}
+          <div className="panel-title">Additional info</div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            This quote is based on standard access and handling.
+            <br />
+            <br />
+            Please call us if you need special accommodations, extra services,
+            or have unique shipment requirements.
+          </div>
         </div>
       </div>
       {onSelectQuote && (

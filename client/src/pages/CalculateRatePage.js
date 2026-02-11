@@ -3,16 +3,22 @@ import QuoteCard from '../components/QuoteCard';
 import { buildApiUrl } from '../config';
 import GlobalTopbar from '../components/GlobalTopbar';
 import { useLocation } from 'react-router-dom';
-import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, TileLayer, Polyline, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+function getDefaultPickupDateIso() {
+  var d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
 
 const DEFAULT_INITIAL_VALUES = {
   pickupCity: 'Chicago',
   pickupState: 'IL',
   pickupZip: '60605',
   pickupCountry: 'US',
-  pickupDate: '2024-12-31T16:00:00.000Z',
+  pickupDate: getDefaultPickupDateIso(),
   deliveryCity: 'Atlanta',
   deliveryState: 'GA',
   deliveryZip: '30303',
@@ -25,10 +31,10 @@ const DEFAULT_INITIAL_VALUES = {
   part2Width: '',
   part2Height: '',
   weightUnit: 'lbs',
-  hazardousUnNumbersText: 'UN3508, UN3530, UN3536, UN3548',
-  accessorialCodesText: 'CALLDEL, DEBRISREM, UPK',
-  shipmentId: '1',
-  referenceNumber: 'Reference12345',
+  hazardousUnNumbersText: '',
+  accessorialCodesText: '',
+  shipmentId: '',
+  referenceNumber: '',
   equipmentType: ''
 };
 
@@ -55,10 +61,10 @@ const EMBEDDED_DEFAULT_VALUES = {
   part2Width: '',
   part2Height: '',
   weightUnit: '',
-  hazardousUnNumbersText: 'UN3508, UN3530, UN3536, UN3548',
-  accessorialCodesText: 'CALLDEL, DEBRISREM, UPK',
-  shipmentId: '1',
-  referenceNumber: 'Reference12345',
+  hazardousUnNumbersText: '',
+  accessorialCodesText: '',
+  shipmentId: '',
+  referenceNumber: '',
   equipmentType: ''
 };
 
@@ -74,6 +80,34 @@ const mapMarkerIcon = new L.Icon({
   popupAnchor: [1, -34],
   shadowSize: [41, 41]
 });
+
+function isoToDateInput(value) {
+  if (!value) return '';
+  // If it's already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  var d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  var year = d.getUTCFullYear();
+  var month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  var day = String(d.getUTCDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function dateInputToIso(value) {
+  if (!value) return '';
+  // Interpret as local date at midnight, then to ISO
+  var d = new Date(value + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toISOString();
+}
+
+function buildPickupDeliveryLine(from, to) {
+  if (!from || !to) return null;
+  return [
+    [from.lat, from.lng],
+    [to.lat, to.lng]
+  ];
+}
 
 function MapClickHandler({ onSelect }) {
   useMapEvents({
@@ -246,6 +280,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 
   const pickupZipAbortRef = useRef(null);
   const deliveryZipAbortRef = useRef(null);
+
+  const pickupDeliveryLine = React.useMemo(function() {
+    return buildPickupDeliveryLine(pickupMarker, deliveryMarker);
+  }, [pickupMarker, deliveryMarker]);
 
   function buildZipSearchUrl(code) {
     var base = 'https://app.zipcodebase.com/api/v1/search';
@@ -1326,13 +1364,15 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     <div>
                       <span className="map-label">Pickup</span>
                       <span className="map-value">
-                        {pickupMarker ? `${pickupMarker.lat.toFixed(5)}, ${pickupMarker.lng.toFixed(5)}` : '-'}
+                        {[pickupCity, pickupState].filter(Boolean).join(', ') +
+                          (pickupZip ? (pickupCity || pickupState ? ' ' : '') + pickupZip : '') || '-'}
                       </span>
                     </div>
                     <div>
                       <span className="map-label">Delivery</span>
                       <span className="map-value">
-                        {deliveryMarker ? `${deliveryMarker.lat.toFixed(5)}, ${deliveryMarker.lng.toFixed(5)}` : '-'}
+                        {[deliveryCity, deliveryState].filter(Boolean).join(', ') +
+                          (deliveryZip ? (deliveryCity || deliveryState ? ' ' : '') + deliveryZip : '') || '-'}
                       </span>
                     </div>
                   </div>
@@ -1346,6 +1386,12 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
                     <MapClickHandler onSelect={handleMapPick} />
+                    {pickupDeliveryLine && (
+                      <Polyline
+                        positions={pickupDeliveryLine}
+                        pathOptions={{ color: '#2563eb', weight: 4 }}
+                      />
+                    )}
                     {pickupMarker && <Marker position={pickupMarker} icon={mapMarkerIcon} />}
                     {deliveryMarker && <Marker position={deliveryMarker} icon={mapMarkerIcon} />}
                   </MapContainer>
@@ -1407,8 +1453,12 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   </label>
                 </div>
                 <label>
-                  Date (ISO)
-                  <input value={pickupDate} onChange={function(e){ setPickupDate(e.target.value); }} />
+                  Pickup date
+                  <input
+                    type="date"
+                    value={isoToDateInput(pickupDate)}
+                    onChange={function(e){ setPickupDate(dateInputToIso(e.target.value)); }}
+                  />
                 </label>
               </fieldset>
 
@@ -1586,36 +1636,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   <label>
                     Pieces Count
                     <input type="number" value={piecesRows.length} readOnly />
-                  </label>
-                </div>
-              </fieldset>
-
-              <fieldset>
-                <legend>Hazardous Material</legend>
-                <label>
-                  UN Numbers (comma separated)
-                  <input value={hazardousUnNumbersText} onChange={function(e){ setHazardousUnNumbersText(e.target.value); }} />
-                </label>
-              </fieldset>
-
-              <fieldset>
-                <legend>Accessorial Codes</legend>
-                <label>
-                  Codes (comma separated)
-                  <input value={accessorialCodesText} onChange={function(e){ setAccessorialCodesText(e.target.value); }} />
-                </label>
-              </fieldset>
-
-              <fieldset>
-                <legend>Identifiers</legend>
-                <div className="row-2">
-                  <label>
-                    Shipment ID
-                    <input value={shipmentId} onChange={function(e){ setShipmentId(e.target.value); }} />
-                  </label>
-                  <label>
-                    Reference Number
-                    <input value={referenceNumber} onChange={function(e){ setReferenceNumber(e.target.value); }} />
                   </label>
                 </div>
               </fieldset>
