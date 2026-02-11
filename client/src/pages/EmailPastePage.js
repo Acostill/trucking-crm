@@ -34,7 +34,7 @@ export default function EmailPastePage() {
     setSubmitError(null);
     setSubmitSuccess(null);
     try {
-      const resp = await fetch(buildApiUrl('/api/email-paste'), {
+      const resp = await fetch(buildApiUrl('/api/email-paste/openrouter'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: emailBody })

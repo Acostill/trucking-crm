@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import QuoteCard from '../components/QuoteCard';
 import { buildApiUrl } from '../config';
 import GlobalTopbar from '../components/GlobalTopbar';
 import { useLocation } from 'react-router-dom';
+import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const DEFAULT_INITIAL_VALUES = {
   pickupCity: 'Chicago',
@@ -58,6 +61,28 @@ const EMBEDDED_DEFAULT_VALUES = {
   referenceNumber: 'Reference12345',
   equipmentType: ''
 };
+
+const MAP_DEFAULT_CENTER = [39.8283, -98.5795];
+const MAP_DEFAULT_ZOOM = 4;
+
+const mapMarkerIcon = new L.Icon({
+  iconUrl: require('leaflet/dist/images/marker-icon.png'),
+  iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
+  shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41]
+});
+
+function MapClickHandler({ onSelect }) {
+  useMapEvents({
+    click: function(e) {
+      onSelect(e.latlng);
+    }
+  });
+  return null;
+}
 
 function buildPiecesRowsFrom(source) {
   const rows = [];
@@ -195,6 +220,337 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [dimensionsFile, setDimensionsFile] = useState(null);
   const [dimensionsLoading, setDimensionsLoading] = useState(false);
   const [dimensionsError, setDimensionsError] = useState(null);
+
+  const [mapMode, setMapMode] = useState('pickup');
+  const [pickupMarker, setPickupMarker] = useState(null);
+  const [deliveryMarker, setDeliveryMarker] = useState(null);
+  const [mapLookupLoading, setMapLookupLoading] = useState(false);
+  const [mapLookupError, setMapLookupError] = useState(null);
+
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiListening, setAiListening] = useState(false);
+  const recognitionRef = useRef(null);
+  const [aiOpen, setAiOpen] = useState(false);
+
+  const [pickupZipOptions, setPickupZipOptions] = useState([]);
+  const [pickupZipLoading, setPickupZipLoading] = useState(false);
+  const [pickupZipError, setPickupZipError] = useState(null);
+  const [showPickupZipOptions, setShowPickupZipOptions] = useState(false);
+
+  const [deliveryZipOptions, setDeliveryZipOptions] = useState([]);
+  const [deliveryZipLoading, setDeliveryZipLoading] = useState(false);
+  const [deliveryZipError, setDeliveryZipError] = useState(null);
+  const [showDeliveryZipOptions, setShowDeliveryZipOptions] = useState(false);
+
+  const pickupZipAbortRef = useRef(null);
+  const deliveryZipAbortRef = useRef(null);
+
+  function buildZipSearchUrl(code) {
+    var base = 'https://app.zipcodebase.com/api/v1/search';
+    var apiKey = '44ceb090-0620-11f1-b2cd-796c895a7671';
+    return base + '?apikey=' + encodeURIComponent(apiKey) + '&codes=' + encodeURIComponent(code) + '&country=US';
+  }
+
+  function mapZipResults(code, payload) {
+    var results = payload && payload.results ? payload.results[code] : null;
+    if (!Array.isArray(results)) return [];
+    return results
+      .filter(function(item) { return !item.country_code || item.country_code === 'US'; })
+      .map(function(item) {
+        return {
+          zip: item.postal_code,
+          city: item.city_en || item.city || '',
+          state: item.state_code || item.state || '',
+          country: item.country_code || 'US'
+        };
+      });
+  }
+
+  React.useEffect(function() {
+    var code = String(pickupZip || '').trim();
+    if (code.length < 3) {
+      setPickupZipOptions([]);
+      setPickupZipLoading(false);
+      setPickupZipError(null);
+      return;
+    }
+    if (pickupZipAbortRef.current) {
+      pickupZipAbortRef.current.abort();
+    }
+    var controller = new AbortController();
+    pickupZipAbortRef.current = controller;
+    setPickupZipLoading(true);
+    setPickupZipError(null);
+    fetch(buildZipSearchUrl(code), { signal: controller.signal })
+      .then(function(resp) {
+        if (!resp.ok) {
+          throw new Error('Zip search failed');
+        }
+        return resp.json();
+      })
+      .then(function(data) {
+        setPickupZipOptions(mapZipResults(code, data));
+      })
+      .catch(function(err) {
+        if (err && err.name === 'AbortError') return;
+        setPickupZipError('Zip search failed.');
+        setPickupZipOptions([]);
+      })
+      .finally(function() {
+        setPickupZipLoading(false);
+      });
+    return function() {
+      controller.abort();
+    };
+  }, [pickupZip]);
+
+  React.useEffect(function() {
+    var code = String(deliveryZip || '').trim();
+    if (code.length < 3) {
+      setDeliveryZipOptions([]);
+      setDeliveryZipLoading(false);
+      setDeliveryZipError(null);
+      return;
+    }
+    if (deliveryZipAbortRef.current) {
+      deliveryZipAbortRef.current.abort();
+    }
+    var controller = new AbortController();
+    deliveryZipAbortRef.current = controller;
+    setDeliveryZipLoading(true);
+    setDeliveryZipError(null);
+    fetch(buildZipSearchUrl(code), { signal: controller.signal })
+      .then(function(resp) {
+        if (!resp.ok) {
+          throw new Error('Zip search failed');
+        }
+        return resp.json();
+      })
+      .then(function(data) {
+        setDeliveryZipOptions(mapZipResults(code, data));
+      })
+      .catch(function(err) {
+        if (err && err.name === 'AbortError') return;
+        setDeliveryZipError('Zip search failed.');
+        setDeliveryZipOptions([]);
+      })
+      .finally(function() {
+        setDeliveryZipLoading(false);
+      });
+    return function() {
+      controller.abort();
+    };
+  }, [deliveryZip]);
+
+  function applyZipSelection(option, kind) {
+    if (!option) return;
+    if (kind === 'pickup') {
+      setPickupZip(option.zip || '');
+      setPickupCity(option.city || '');
+      setPickupState(option.state || '');
+      setPickupCountry(option.country || 'US');
+      setShowPickupZipOptions(false);
+    } else {
+      setDeliveryZip(option.zip || '');
+      setDeliveryCity(option.city || '');
+      setDeliveryState(option.state || '');
+      setDeliveryCountry(option.country || 'US');
+      setShowDeliveryZipOptions(false);
+    }
+  }
+
+  function ensureRecognition() {
+    if (recognitionRef.current) return recognitionRef.current;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = function(event) {
+      const transcript = event.results && event.results[0] && event.results[0][0]
+        ? event.results[0][0].transcript
+        : '';
+      if (transcript) {
+        setAiInput(transcript);
+      }
+    };
+    recognition.onend = function() {
+      setAiListening(false);
+    };
+    recognition.onerror = function(event) {
+      setAiListening(false);
+      var reason = event && event.error ? String(event.error) : 'unknown';
+      if (reason === 'not-allowed' || reason === 'service-not-allowed') {
+        setAiError('Microphone access was blocked. Allow mic permissions and use HTTPS or localhost.');
+        return;
+      }
+      if (reason === 'no-speech') {
+        setAiError('No speech detected. Please try again or type your request.');
+        return;
+      }
+      if (reason === 'audio-capture') {
+        setAiError('No microphone found. Please connect a mic or type your request.');
+        return;
+      }
+      setAiError('Voice input failed (' + reason + '). Please type your request.');
+    };
+    recognitionRef.current = recognition;
+    return recognition;
+  }
+
+  function handleStartVoice() {
+    const recognition = ensureRecognition();
+    if (!recognition) {
+      setAiError('Voice input is not supported in this browser.');
+      return;
+    }
+    setAiError(null);
+    setAiListening(true);
+    try {
+      recognition.start();
+    } catch (_err) {
+      setAiListening(false);
+      setAiError('Voice input failed to start. Please type your request.');
+    }
+  }
+
+  function handleStopVoice() {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setAiListening(false);
+  }
+
+  function applyAiResult(parsed) {
+    if (!parsed || typeof parsed !== 'object') return;
+    if (parsed.pickup) {
+      if (parsed.pickup.city) setPickupCity(parsed.pickup.city);
+      if (parsed.pickup.state) setPickupState(parsed.pickup.state);
+      if (parsed.pickup.zip) setPickupZip(parsed.pickup.zip);
+      if (parsed.pickup.country) setPickupCountry(parsed.pickup.country);
+      if (parsed.pickup.date) setPickupDate(parsed.pickup.date);
+    }
+    if (parsed.delivery) {
+      if (parsed.delivery.city) setDeliveryCity(parsed.delivery.city);
+      if (parsed.delivery.state) setDeliveryState(parsed.delivery.state);
+      if (parsed.delivery.zip) setDeliveryZip(parsed.delivery.zip);
+      if (parsed.delivery.country) setDeliveryCountry(parsed.delivery.country);
+    }
+    if (parsed.pieces && Array.isArray(parsed.pieces.parts)) {
+      const nextRows = parsed.pieces.parts.map(function(part) {
+        return {
+          length: part.length != null ? String(part.length) : '',
+          width: part.width != null ? String(part.width) : '',
+          height: part.height != null ? String(part.height) : '',
+          weight: part.weight != null ? String(part.weight) : ''
+        };
+      });
+      if (nextRows.length) {
+        setPiecesRows(nextRows);
+      }
+      if (parsed.pieces.unit) {
+        setPiecesUnit(parsed.pieces.unit);
+      }
+    }
+    if (parsed.weight) {
+      if (parsed.weight.unit) setWeightUnit(parsed.weight.unit);
+      if (parsed.weight.value != null) {
+        setPiecesRows(function(prev) {
+          if (!prev.length) return prev;
+          var next = prev.slice();
+          next[0] = { ...next[0], weight: String(parsed.weight.value) };
+          return next;
+        });
+      }
+    }
+    if (parsed.equipmentType) setEquipmentType(parsed.equipmentType);
+    if (Array.isArray(parsed.accessorialCodes)) {
+      setAccessorialCodesText(parsed.accessorialCodes.join(', '));
+    }
+    if (Array.isArray(parsed.hazardousUnNumbers)) {
+      setHazardousUnNumbersText(parsed.hazardousUnNumbers.join(', '));
+    }
+    if (parsed.shipmentId) setShipmentId(String(parsed.shipmentId));
+    if (parsed.referenceNumber) setReferenceNumber(String(parsed.referenceNumber));
+  }
+
+  async function handleAiSubmit() {
+    if (!aiInput.trim()) {
+      setAiError('Please enter a request or use voice input.');
+      return;
+    }
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const resp = await fetch(buildApiUrl('/api/ai/parse-calculate-rate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: aiInput })
+      });
+      if (!resp.ok) {
+        const msg = await resp.text();
+        throw new Error(msg || 'Failed to parse input.');
+      }
+      const data = await resp.json();
+      applyAiResult(data);
+    } catch (err) {
+      setAiError(err && err.message ? err.message : 'Failed to parse input.');
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function reverseGeocode(latlng) {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latlng.lat}&lon=${latlng.lng}&addressdetails=1&email=support@trucking-crm.app`;
+    const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      throw new Error('Failed to look up address');
+    }
+    const data = await resp.json();
+    const address = data && data.address ? data.address : {};
+    const city =
+      address.city ||
+      address.town ||
+      address.village ||
+      address.hamlet ||
+      address.county ||
+      '';
+    const state = address.state || address.state_code || '';
+    const zip = address.postcode || '';
+    const country = address.country_code ? address.country_code.toUpperCase() : 'US';
+    return { city, state, zip, country };
+  }
+
+  async function handleMapPick(latlng) {
+    if (mapMode === 'pickup') {
+      setPickupMarker(latlng);
+    } else {
+      setDeliveryMarker(latlng);
+    }
+    setMapLookupLoading(true);
+    setMapLookupError(null);
+    try {
+      const details = await reverseGeocode(latlng);
+      if (mapMode === 'pickup') {
+        setPickupCity(details.city || '');
+        setPickupState(details.state || '');
+        setPickupZip(details.zip || '');
+        setPickupCountry(details.country || 'US');
+      } else {
+        setDeliveryCity(details.city || '');
+        setDeliveryState(details.state || '');
+        setDeliveryZip(details.zip || '');
+        setDeliveryCountry(details.country || 'US');
+      }
+    } catch (_err) {
+      setMapLookupError('Address lookup failed. You can edit the fields manually.');
+    } finally {
+      setMapLookupLoading(false);
+    }
+  }
 
   function updatePieceRow(index, key, value) {
     setPiecesRows(function(prev) {
@@ -946,6 +1302,56 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
             <div className="subtitle">Enter pickup, delivery and freight info</div>
           </div>
           <div className="card-body">
+            {!embedded && (
+              <fieldset>
+                <legend>Map</legend>
+                <div className="map-toolbar">
+                  <div className="map-mode">
+                    <button
+                      type="button"
+                      className={`btn ${mapMode === 'pickup' ? '' : 'btn-ghost'}`}
+                      onClick={() => setMapMode('pickup')}
+                    >
+                      Pickup
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${mapMode === 'delivery' ? '' : 'btn-ghost'}`}
+                      onClick={() => setMapMode('delivery')}
+                    >
+                      Delivery
+                    </button>
+                  </div>
+                  <div className="map-coordinates">
+                    <div>
+                      <span className="map-label">Pickup</span>
+                      <span className="map-value">
+                        {pickupMarker ? `${pickupMarker.lat.toFixed(5)}, ${pickupMarker.lng.toFixed(5)}` : '-'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="map-label">Delivery</span>
+                      <span className="map-value">
+                        {deliveryMarker ? `${deliveryMarker.lat.toFixed(5)}, ${deliveryMarker.lng.toFixed(5)}` : '-'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {mapLookupLoading && <div className="map-status">Looking up address…</div>}
+                {mapLookupError && <div className="map-status error">{mapLookupError}</div>}
+                <div className="map-container">
+                  <MapContainer center={MAP_DEFAULT_CENTER} zoom={MAP_DEFAULT_ZOOM} className="leaflet-map">
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    <MapClickHandler onSelect={handleMapPick} />
+                    {pickupMarker && <Marker position={pickupMarker} icon={mapMarkerIcon} />}
+                    {deliveryMarker && <Marker position={deliveryMarker} icon={mapMarkerIcon} />}
+                  </MapContainer>
+                </div>
+              </fieldset>
+            )}
             <form onSubmit={onSubmit} className="form-grid">
               <fieldset>
                 <legend>Pickup</legend>
@@ -960,7 +1366,40 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   </label>
                   <label>
                     Zip
-                    <input value={pickupZip} onChange={function(e){ setPickupZip(e.target.value); }} />
+                    <div className="zip-select">
+                      <input
+                        value={pickupZip}
+                        onChange={function(e){ setPickupZip(e.target.value); }}
+                        onFocus={function(){ setShowPickupZipOptions(true); }}
+                        onBlur={function(){ setTimeout(function(){ setShowPickupZipOptions(false); }, 150); }}
+                        placeholder="Search ZIP"
+                      />
+                      {showPickupZipOptions && (pickupZipLoading || pickupZipOptions.length || pickupZipError) ? (
+                        <div className="zip-dropdown">
+                          {pickupZipLoading && <div className="zip-loading">Searching…</div>}
+                          {!pickupZipLoading && pickupZipError && <div className="zip-empty">{pickupZipError}</div>}
+                          {!pickupZipLoading && !pickupZipError && !pickupZipOptions.length && (
+                            <div className="zip-empty">No matches.</div>
+                          )}
+                          {!pickupZipLoading && !pickupZipError && pickupZipOptions.map(function(option, idx) {
+                            return (
+                              <button
+                                key={option.zip + '-' + idx}
+                                type="button"
+                                className="zip-option"
+                                onMouseDown={function(e) {
+                                  e.preventDefault();
+                                  applyZipSelection(option, 'pickup');
+                                }}
+                              >
+                                <span>{option.zip}</span>
+                                <span className="zip-option-meta">{option.city}{option.state ? ', ' + option.state : ''}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
                   </label>
                   <label>
                     Country
@@ -986,7 +1425,40 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   </label>
                   <label>
                     Zip
-                    <input value={deliveryZip} onChange={function(e){ setDeliveryZip(e.target.value); }} />
+                    <div className="zip-select">
+                      <input
+                        value={deliveryZip}
+                        onChange={function(e){ setDeliveryZip(e.target.value); }}
+                        onFocus={function(){ setShowDeliveryZipOptions(true); }}
+                        onBlur={function(){ setTimeout(function(){ setShowDeliveryZipOptions(false); }, 150); }}
+                        placeholder="Search ZIP"
+                      />
+                      {showDeliveryZipOptions && (deliveryZipLoading || deliveryZipOptions.length || deliveryZipError) ? (
+                        <div className="zip-dropdown">
+                          {deliveryZipLoading && <div className="zip-loading">Searching…</div>}
+                          {!deliveryZipLoading && deliveryZipError && <div className="zip-empty">{deliveryZipError}</div>}
+                          {!deliveryZipLoading && !deliveryZipError && !deliveryZipOptions.length && (
+                            <div className="zip-empty">No matches.</div>
+                          )}
+                          {!deliveryZipLoading && !deliveryZipError && deliveryZipOptions.map(function(option, idx) {
+                            return (
+                              <button
+                                key={option.zip + '-' + idx}
+                                type="button"
+                                className="zip-option"
+                                onMouseDown={function(e) {
+                                  e.preventDefault();
+                                  applyZipSelection(option, 'delivery');
+                                }}
+                              >
+                                <span>{option.zip}</span>
+                                <span className="zip-option-meta">{option.city}{option.state ? ', ' + option.state : ''}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
                   </label>
                   <label>
                     Country
@@ -1273,6 +1745,56 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       <div className="container">
         {card}
       </div>
+      {!embedded && (
+        <div className="ai-widget-fixed">
+          <button
+            type="button"
+            className="ai-widget-toggle"
+            onClick={function() { setAiOpen(!aiOpen); }}
+          >
+            {aiOpen ? 'Close Assistant' : 'AI Assistant'}
+          </button>
+          {aiOpen && (
+            <div className="ai-widget-panel">
+              <div className="ai-widget-header">
+                <div className="ai-widget-title">Shipment Assistant</div>
+                <div className="ai-widget-subtitle">
+                  Describe the load and we’ll fill the form.
+                </div>
+              </div>
+              <div className="ai-box">
+                <label>
+                  Tell us the shipment details
+                  <textarea
+                    className="ai-textarea"
+                    placeholder="Example: Pickup in Dallas TX 75201 on Jan 15, deliver to Phoenix AZ 85001. 2 pallets 48x40x48 inches, 2500 lbs, dry van."
+                    value={aiInput}
+                    onChange={function(e){ setAiInput(e.target.value); }}
+                  />
+                </label>
+                <div className="ai-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={aiListening ? handleStopVoice : handleStartVoice}
+                  >
+                    {aiListening ? 'Stop Voice' : 'Use Voice'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleAiSubmit}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading ? 'Applying…' : 'Apply to Form'}
+                  </button>
+                </div>
+                {aiError && <div className="ai-error">{aiError}</div>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {isContactModalOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="contact-modal-title">
           <div className="modal">
@@ -1339,3 +1861,4 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   );
 }
 
+// Floating AI widget (rendered by parent pages if needed)

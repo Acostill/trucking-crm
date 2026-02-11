@@ -8,7 +8,8 @@ import {
   LogOut,
   Kanban,
   DollarSign,
-  Percent
+  Percent,
+  MapPin
 } from 'lucide-react';
 import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
@@ -28,6 +29,7 @@ function Sidebar() {
     { id: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { id: '/loads', label: 'Shipments', icon: Package, path: '/loads' },
     { id: '/pipeline', label: 'Pipeline', icon: Kanban, path: '/pipeline' },
+    { id: '/map', label: 'Map', icon: MapPin, path: '/map' },
   ];
 
   const adminItems = isAdmin ? [
