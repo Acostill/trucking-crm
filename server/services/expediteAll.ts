@@ -1,6 +1,47 @@
 import https from 'https';
 import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
 
+const DEFAULT_HAZARDOUS_UN_NUMBERS = ['UN3508', 'UN3530', 'UN3536', 'UN3548'];
+const DEFAULT_ACCESSORIAL_CODES = ['CALLDEL', 'DEBRISREM', 'UPK'];
+const DEFAULT_SHIPMENT_ID = '1';
+const DEFAULT_REFERENCE_NUMBER = 'Reference12345';
+
+function applyExpediteAllDefaults(body: UnifiedQuoteRequest): UnifiedQuoteRequest {
+  const cloned: UnifiedQuoteRequest = { ...body };
+
+  const existingHaz =
+    Array.isArray(body.hazardousMaterial && body.hazardousMaterial.unNumbers)
+      ? (body.hazardousMaterial!.unNumbers || []).filter(function(s) {
+          return typeof s === 'string' && s.trim().length > 0;
+        })
+      : [];
+  if (!existingHaz.length) {
+    cloned.hazardousMaterial = {
+      ...(body.hazardousMaterial || {}),
+      unNumbers: DEFAULT_HAZARDOUS_UN_NUMBERS.slice()
+    };
+  }
+
+  const existingAccessorials = Array.isArray(body.accessorialCodes)
+    ? (body.accessorialCodes || []).filter(function(s) {
+        return typeof s === 'string' && s.trim().length > 0;
+      })
+    : [];
+  if (!existingAccessorials.length) {
+    cloned.accessorialCodes = DEFAULT_ACCESSORIAL_CODES.slice();
+  }
+
+  if (!cloned.shipmentId) {
+    cloned.shipmentId = DEFAULT_SHIPMENT_ID;
+  }
+
+  if (!cloned.referenceNumber) {
+    cloned.referenceNumber = DEFAULT_REFERENCE_NUMBER;
+  }
+
+  return cloned;
+}
+
 /**
  * ExpediteAll API response structure
  */
@@ -28,7 +69,7 @@ export interface ExpediteAllResponse {
  */
 export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIResponse<ExpediteAllResponse | ErrorResponse>> {
   return new Promise((resolve, reject) => {
-    const payload = JSON.stringify(body || {});
+    const payload = JSON.stringify(applyExpediteAllDefaults(body || {} as UnifiedQuoteRequest) || {});
     const options = {
       method: 'POST',
       hostname: 'stage-lb-public-api-back.rhinocodes.org',

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import GlobalTopbar from '../components/GlobalTopbar';
-import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, TileLayer, Polyline, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import CalculateRatePage from './CalculateRatePage';
@@ -28,9 +28,29 @@ function MapClickHandler({ onSelect }) {
   return null;
 }
 
-function formatLatLng(value) {
-  if (!value) return '-';
-  return `${value.lat.toFixed(5)}, ${value.lng.toFixed(5)}`;
+function formatLocationSummary(details) {
+  if (!details) return '-';
+  var city = details.city || '';
+  var state = details.state || '';
+  var zip = details.zip || '';
+  var parts = [];
+  if (city) parts.push(city);
+  if (state) parts.push(state);
+  var main = parts.join(', ');
+  return (main + (zip ? (main ? ' ' : '') + zip : '')).trim() || '-';
+}
+
+function buildArcPositions(from, to) {
+  if (!from || !to) return null;
+  var lat1 = from.lat;
+  var lng1 = from.lng;
+  var lat2 = to.lat;
+  var lng2 = to.lng;
+  // Simple straight line between pickup and delivery
+  return [
+    [lat1, lng1],
+    [lat2, lng2]
+  ];
 }
 
 export default function MapPage() {
@@ -107,6 +127,10 @@ export default function MapPage() {
     };
   }, [pickupDetails, deliveryDetails]);
 
+  const arcPositions = useMemo(function() {
+    return buildArcPositions(pickupLocation, deliveryLocation);
+  }, [pickupLocation, deliveryLocation]);
+
   return (
     <div className="app-layout">
       <Sidebar />
@@ -147,11 +171,11 @@ export default function MapPage() {
                 <div className="map-coordinates">
                   <div>
                     <span className="map-label">Pickup</span>
-                    <span className="map-value">{formatLatLng(pickupLocation)}</span>
+                    <span className="map-value">{formatLocationSummary(pickupDetails)}</span>
                   </div>
                   <div>
                     <span className="map-label">Delivery</span>
-                    <span className="map-value">{formatLatLng(deliveryLocation)}</span>
+                    <span className="map-value">{formatLocationSummary(deliveryDetails)}</span>
                   </div>
                 </div>
               </div>
@@ -165,6 +189,12 @@ export default function MapPage() {
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   />
                   <MapClickHandler onSelect={handleSelectLocation} />
+                  {arcPositions && (
+                    <Polyline
+                      positions={arcPositions}
+                      pathOptions={{ color: '#2563eb', weight: 4 }}
+                    />
+                  )}
                   {markers.map((marker) => (
                     <Marker key={marker.id} position={marker.position} icon={markerIcon} />
                   ))}
