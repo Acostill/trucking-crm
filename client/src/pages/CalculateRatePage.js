@@ -251,6 +251,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [contactConfirmation, setContactConfirmation] = useState('');
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
   const [dimensionsFile, setDimensionsFile] = useState(null);
   const [dimensionsLoading, setDimensionsLoading] = useState(false);
   const [dimensionsError, setDimensionsError] = useState(null);
@@ -777,6 +778,19 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     var delivery = shipment.delivery || {};
     var pickupLoc = pickup.location || {};
     var deliveryLoc = delivery.location || {};
+    
+    var quoteNumber = rateCalculationID || 'QUOTE-' + Date.now().toString().slice(-7);
+    var quoteDate = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+    var dueDate = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+
+    // Build items table rows
+    var itemsRows = '';
+    if (accessorials.length > 0) {
+      accessorials.forEach(function(acc) {
+        itemsRows += '<tr><td>' + (acc.name || acc.code || 'Accessorial') + '</td><td>$' + formatNumber(acc.price || 0) + '</td><td>01</td><td>$' + formatNumber(acc.price || 0) + '</td></tr>';
+      });
+    }
+    itemsRows += '<tr><td>Linehaul Service</td><td>$' + formatNumber(linehaul || 0) + '</td><td>01</td><td>$' + formatNumber(linehaul || 0) + '</td></tr>';
 
     return `
 <!DOCTYPE html>
@@ -785,292 +799,316 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   <meta charset="UTF-8">
   <style>
     @page {
-      margin: 15mm;
+      margin: 0;
       size: Letter;
     }
     * {
       box-sizing: border-box;
+      margin: 0;
+      padding: 0;
     }
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       margin: 0;
       padding: 0;
-      color: #0f172a;
-      line-height: 1.5;
+      color: #1a1a1a;
+      line-height: 1.4;
       font-size: 12px;
+      background: white;
     }
-    .logo-container {
+    .header-bar {
+      background: #2d2d2d;
+      color: white;
+      padding: 20px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .brand-section {
+      flex: 1;
+    }
+    .brand-name {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 5px;
+      color: white;
+    }
+    .brand-slogan {
+      font-size: 12px;
+      color: #e5e5e5;
+      opacity: 0.9;
+    }
+    .contact-info {
+      font-size: 9px;
+      color: #b0b0b0;
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+    .quote-label {
+      background: #2563eb;
+      color: white;
+      padding: 15px 25px;
+      font-size: 32px;
+      font-weight: 700;
       text-align: center;
-      margin-bottom: 12px;
-      padding-bottom: 10px;
-      border-bottom: 2px solid #e2e8f0;
+      align-self: center;
     }
-    .logo-container img {
-      max-width: 200px;
-      max-height: 50px;
-      height: auto;
-      width: auto;
-      display: block;
-      margin: 0 auto;
-      object-fit: contain;
+    .main-content {
+      padding: 30px;
     }
-    .header {
-      margin-bottom: 12px;
-    }
-    .header h1 {
-      margin: 0 0 3px 0;
-      color: #0f172a;
-      font-size: 18px;
-      font-weight: 600;
-    }
-    .header p {
-      margin: 0;
-      color: #64748b;
-      font-size: 10px;
-    }
-    .section {
-      margin-bottom: 12px;
+    .top-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 30px;
     }
     .section-title {
       font-size: 13px;
       font-weight: 600;
-      color: #0f172a;
-      margin-bottom: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid #e2e8f0;
-      padding-bottom: 5px;
-    }
-    .info-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-    .info-item {
-      margin-bottom: 8px;
-    }
-    .info-label {
-      font-size: 10px;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 3px;
-      font-weight: 500;
-    }
-    .info-value {
-      font-size: 13px;
-      color: #0f172a;
-      font-weight: 500;
-    }
-    .quote-total {
-      text-align: center;
-      padding: 12px;
-      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-      color: white;
-      border-radius: 10px;
+      color: #2563eb;
       margin-bottom: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    .quote-total-label {
-      font-size: 11px;
-      opacity: 0.95;
-      margin-bottom: 5px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
-    .quote-total-value {
-      font-size: 28px;
+    .quote-to-name {
+      font-size: 20px;
       font-weight: 700;
-      letter-spacing: -0.02em;
-    }
-    .quote-summary {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 10px;
-      padding: 12px;
+      color: #1a1a1a;
       margin-bottom: 12px;
     }
-    .quote-details {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+    .info-line {
+      font-size: 11px;
+      color: #4a4a4a;
+      margin-bottom: 6px;
+      line-height: 1.6;
     }
-    .quote-detail-item {
-      padding: 10px;
-      background: white;
-      border-radius: 6px;
-      border: 1px solid #e2e8f0;
+    .info-line strong {
+      color: #1a1a1a;
     }
-    .quote-detail-label {
-      font-size: 10px;
-      color: #64748b;
-      margin-bottom: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
+    .invoice-details {
+      text-align: right;
     }
-    .quote-detail-value {
-      font-size: 15px;
+    .invoice-detail-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+    .invoice-detail-label {
+      color: #4a4a4a;
+      margin-right: 15px;
+    }
+    .invoice-detail-value {
+      color: #1a1a1a;
       font-weight: 600;
-      color: #0f172a;
     }
-    .accessorials-table {
+    .items-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8px;
-      font-size: 11px;
+      margin-bottom: 20px;
     }
-    .accessorials-table th,
-    .accessorials-table td {
-      padding: 8px;
+    .items-table thead {
+      background: #3a3a3a;
+      color: white;
+    }
+    .items-table th {
+      padding: 12px 15px;
       text-align: left;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .accessorials-table th {
-      background: #f1f5f9;
+      font-size: 11px;
       font-weight: 600;
-      color: #475569;
-      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.5px;
     }
-    .accessorials-table td {
-      color: #0f172a;
+    .items-table td {
+      padding: 12px 15px;
+      font-size: 11px;
+      color: #1a1a1a;
+      border-bottom: 1px solid #e5e5e5;
     }
-    .badges {
+    .items-table tbody tr:nth-child(even) {
+      background: #f5f5f5;
+    }
+    .items-table tbody tr:nth-child(odd) {
+      background: white;
+    }
+    .summary-section {
+      margin-bottom: 30px;
+    }
+    .summary-row {
       display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      margin-top: 8px;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 12px;
     }
-    .badge {
-      display: inline-block;
-      padding: 4px 10px;
-      background: #e0e7ff;
-      color: #4f46e5;
-      border-radius: 6px;
-      font-size: 10px;
-      font-weight: 500;
+    .summary-label {
+      color: #4a4a4a;
     }
-    .footer {
-      margin-top: 12px;
-      padding-top: 10px;
-      border-top: 1px solid #e2e8f0;
-      text-align: center;
-      color: #64748b;
-      font-size: 9px;
+    .summary-value {
+      color: #1a1a1a;
+      font-weight: 600;
     }
-    .compact-grid {
+    .grand-total {
+      background: #2563eb;
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+    }
+    .grand-total-label {
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .grand-total-value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .bottom-section {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 40px;
+      margin-top: 40px;
+    }
+    .payment-section {
+      margin-bottom: 30px;
+    }
+    .terms-section {
+      margin-bottom: 30px;
+    }
+    .terms-text {
+      font-size: 9px;
+      color: #6a6a6a;
+      line-height: 1.6;
+      margin-top: 8px;
+    }
+    .signature-section {
+      text-align: right;
+    }
+    .thank-you-bar {
+      background: #2d2d2d;
+      color: white;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 15px;
+    }
+    .signature-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-top: 10px;
+    }
+    .signature-title {
+      font-size: 11px;
+      color: #6a6a6a;
+      margin-top: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
     @media print {
       body {
         font-size: 11px;
       }
       .section {
-        margin-bottom: 12px;
         page-break-inside: avoid;
       }
     }
   </style>
 </head>
 <body>
-  <div class="logo-container">
-    <img src="https://drive.google.com/file/d/1DpWfi_FMisj4OzBCDtbE6zCq-U2N9q9n" alt="First Class Trucking QuotePilot" />
+  <div class="header-bar">
+    <div class="brand-section">
+      <div class="brand-name">FIRST CLASS TRUCKING</div>
+      <div class="brand-slogan">Freight Logistics Simplified</div>
+      <div class="contact-info">
+        Phone: +1 (555) 123-4567 | Email: info@firstclasstrucking.com | Website: www.firstclasstrucking.com
+      </div>
+    </div>
+    <div class="quote-label">QUOTE</div>
   </div>
   
-  <div class="header">
-    <h1>Freight Quote</h1>
-    <p>Generated on ${new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })}</p>
-  </div>
-
-  <div class="compact-grid">
-    <div class="section">
-      <div class="section-title">Contact Information</div>
-      <div class="info-grid">
-      <div class="info-item">
-        <div class="info-label">Name</div>
-        <div class="info-value">${contact.name || 'N/A'}</div>
+  <div class="main-content">
+    <div class="top-section">
+      <div>
+        <div class="section-title">QUOTE TO</div>
+        <div class="quote-to-name">${contact.name || 'Customer'}</div>
+        <div class="info-line"><strong>PHONE:</strong> ${contact.phone || '+000 1234 5678'}</div>
+        <div class="info-line"><strong>EMAIL:</strong> ${contact.email || 'email@example.com'}</div>
+        <div class="info-line"><strong>ADDRESS:</strong> ${contact.address || 'Business Address Here'}</div>
       </div>
-      <div class="info-item">
-        <div class="info-label">Email</div>
-        <div class="info-value">${contact.email || 'N/A'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-label">Phone</div>
-        <div class="info-value">${contact.phone || 'N/A'}</div>
+      <div class="invoice-details">
+        <div class="section-title">QUOTE DETAILS</div>
+        <div class="invoice-detail-row">
+          <span class="invoice-detail-label">Quote #</span>
+          <span class="invoice-detail-value">${quoteNumber}</span>
+        </div>
+        <div class="invoice-detail-row">
+          <span class="invoice-detail-label">Date</span>
+          <span class="invoice-detail-value">${quoteDate}</span>
+        </div>
+        <div class="invoice-detail-row">
+          <span class="invoice-detail-label">Due Date</span>
+          <span class="invoice-detail-value">${dueDate}</span>
+        </div>
+        ${pickup.date ? '<div class="invoice-detail-row"><span class="invoice-detail-label">Pickup Date</span><span class="invoice-detail-value">' + new Date(pickup.date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) + '</span></div>' : ''}
       </div>
     </div>
+
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th>Item Description</th>
+          <th>Unit Price</th>
+          <th>Quantity</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemsRows}
+      </tbody>
+    </table>
+
+    <div class="summary-section">
+      <div class="summary-row">
+        <span class="summary-label">Sub Total</span>
+        <span class="summary-value">${formatCurrency(total)}</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Tax</span>
+        <span class="summary-value">0.00%</span>
+      </div>
+      <div class="grand-total">
+        <span class="grand-total-label">GRAND TOTAL</span>
+        <span class="grand-total-value">${formatCurrency(total)}</span>
+      </div>
     </div>
 
-    <div class="section">
-      <div class="section-title">Shipment Details</div>
-      <div class="info-grid">
-      <div class="info-item">
-        <div class="info-label">Pickup Location</div>
-        <div class="info-value">${[pickupLoc.city, pickupLoc.state, pickupLoc.zip].filter(Boolean).join(', ') || 'N/A'}</div>
+    <div class="bottom-section">
+      <div>
+        <div class="payment-section">
+          <div class="section-title">PAYMENT METHOD</div>
+          <div class="info-line"><strong>Account Name:</strong> First Class Trucking</div>
+          <div class="info-line"><strong>A/C Number:</strong> 000-0000-0000</div>
+          <div class="info-line"><strong>Bank A/C:</strong> Your Bank A/C</div>
+        </div>
+        <div class="terms-section">
+          <div class="section-title">TERMS & CONDITIONS</div>
+          <div class="terms-text">
+            This quote is valid for 15 days from the date of issue. All rates are subject to change based on final shipment details. Payment terms are net 30 days. Transit time estimates are approximate and may vary based on weather, traffic, and other factors beyond our control.
+          </div>
+        </div>
       </div>
-      <div class="info-item">
-        <div class="info-label">Delivery Location</div>
-        <div class="info-value">${[deliveryLoc.city, deliveryLoc.state, deliveryLoc.zip].filter(Boolean).join(', ') || 'N/A'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-label">Pickup Date</div>
-        <div class="info-value">${pickup.date ? new Date(pickup.date).toLocaleDateString() : 'N/A'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-label">Weight</div>
-        <div class="info-value">${shipment.weight ? shipment.weight.value + ' ' + (shipment.weight.unit || 'lbs') : 'N/A'}</div>
-      </div>
-      <div class="info-item">
-        <div class="info-label">Pieces</div>
-        <div class="info-value">${shipment.pieces ? shipment.pieces.quantity + ' ' + (shipment.pieces.unit || 'pieces') : 'N/A'}</div>
+      <div class="signature-section">
+        <div class="thank-you-bar">Thank You For Your Business!</div>
+        <div style="height: 50px; margin-top: 10px;"></div>
+        <div class="signature-name">First Class Trucking</div>
+        <div class="signature-title">Freight Logistics Team</div>
       </div>
     </div>
-    </div>
-  </div>
-
-  <div class="quote-total">
-    <div class="quote-total-label">Total Quote Amount</div>
-    <div class="quote-total-value">${formatCurrency(total)}</div>
-  </div>
-
-  <div class="quote-summary">
-    <div class="section-title">Quote Breakdown</div>
-    <div class="quote-details">
-      <div class="quote-detail-item">
-        <div class="quote-detail-label">Linehaul</div>
-        <div class="quote-detail-value">${formatCurrency(linehaul)}</div>
-      </div>
-      <div class="quote-detail-item">
-        <div class="quote-detail-label">Rate per Mile</div>
-        <div class="quote-detail-value">${typeof rpm === 'number' ? '$' + formatNumber(rpm) + ' / mi' : 'N/A'}</div>
-      </div>
-      <div class="quote-detail-item">
-        <div class="quote-detail-label">Accessorials Total</div>
-        <div class="quote-detail-value">${formatCurrency(accessorialsTotal)}</div>
-      </div>
-      <div class="quote-detail-item">
-        <div class="quote-detail-label">Transit Time</div>
-        <div class="quote-detail-value">${typeof transitTime === 'number' ? transitTime + ' day' + (transitTime === 1 ? '' : 's') : 'N/A'}</div>
-      </div>
-    </div>
-    ${truckType ? '<div class="badges"><span class="badge">' + truckType + '</span></div>' : ''}
-    ${rateCalculationID ? '<div style="margin-top: 10px; font-size: 12px; color: #6b7280;">Rate Calculation ID: ' + rateCalculationID + '</div>' : ''}
-  </div>
-
-
-  <div class="footer">
-    <p>This quote is valid for the shipment details provided above.</p>
-    <p>First Class Trucking - Freight Logistics Simplified</p>
   </div>
 </body>
 </html>
@@ -1079,11 +1117,14 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 
   async function handleContactSubmit(e) {
     e.preventDefault();
-    if (!selectedQuote) return;
-    var nameSnapshot = contactName;
+    if (!selectedQuote || isSubmittingContact) return;
     
-    // Build shipment details from form fields
-    var shipmentDetails = buildPayload();
+    setIsSubmittingContact(true);
+    try {
+      var nameSnapshot = contactName;
+      
+      // Build shipment details from form fields
+      var shipmentDetails = buildPayload();
     
     // Prepare contact info
     var contactInfo = {
@@ -1254,6 +1295,9 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     );
     resetContactForm();
     handleCloseContactModal();
+    } finally {
+      setIsSubmittingContact(false);
+    }
   }
 
   async function onSubmit(e) {
@@ -1731,11 +1775,18 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     />
                   </label>
                   <div className="modal-actions">
-                    <button type="button" className="btn btn-ghost" onClick={handleCloseContactModal}>
+                    <button type="button" className="btn btn-ghost" onClick={handleCloseContactModal} disabled={isSubmittingContact}>
                       Cancel
                     </button>
-                    <button type="submit" className="btn">
-                      Submit info
+                    <button type="submit" className="btn" disabled={isSubmittingContact}>
+                      {isSubmittingContact ? (
+                        <>
+                          <span className="btn-spinner"></span>
+                          Processing...
+                        </>
+                      ) : (
+                        'Submit info'
+                      )}
                     </button>
                   </div>
                 </form>
@@ -1854,11 +1905,18 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   />
                 </label>
                 <div className="modal-actions">
-                  <button type="button" className="btn btn-ghost" onClick={handleCloseContactModal}>
+                  <button type="button" className="btn btn-ghost" onClick={handleCloseContactModal} disabled={isSubmittingContact}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn">
-                    Submit info
+                  <button type="submit" className="btn" disabled={isSubmittingContact}>
+                    {isSubmittingContact ? (
+                      <>
+                        <span className="quote-modal-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px', display: 'inline-block', marginRight: '8px', verticalAlign: 'middle' }}></span>
+                        Processing...
+                      </>
+                    ) : (
+                      'Submit info'
+                    )}
                   </button>
                 </div>
               </form>
