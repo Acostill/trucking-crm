@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Truck, 
   MapPin, 
@@ -29,12 +29,141 @@ export default function LanelyLandingPage() {
     length: '',
     width: '',
     height: '',
-    additionalInfo: ''
+    additionalInfo: '',
+    originCity: '',
+    originState: '',
+    destinationCity: '',
+    destinationState: ''
   });
+
+  const [originZipOptions, setOriginZipOptions] = useState([]);
+  const [originZipLoading, setOriginZipLoading] = useState(false);
+  const [originZipError, setOriginZipError] = useState(null);
+  const [showOriginZipOptions, setShowOriginZipOptions] = useState(false);
+
+  const [destinationZipOptions, setDestinationZipOptions] = useState([]);
+  const [destinationZipLoading, setDestinationZipLoading] = useState(false);
+  const [destinationZipError, setDestinationZipError] = useState(null);
+  const [showDestinationZipOptions, setShowDestinationZipOptions] = useState(false);
+
+  const originZipAbortRef = useRef(null);
+  const destinationZipAbortRef = useRef(null);
+
+  const buildZipSearchUrl = (code) => {
+    const base = 'https://app.zipcodebase.com/api/v1/search';
+    const apiKey = '44ceb090-0620-11f1-b2cd-796c895a7671';
+    return base + '?apikey=' + encodeURIComponent(apiKey) + '&codes=' + encodeURIComponent(code) + '&country=US';
+  };
+
+  const mapZipResults = (code, payload) => {
+    const results = payload && payload.results ? payload.results[code] : null;
+    if (!Array.isArray(results)) return [];
+    return results
+      .filter((item) => !item.country_code || item.country_code === 'US')
+      .map((item) => ({
+        zip: item.postal_code,
+        city: item.city_en || item.city || '',
+        state: item.state_code || item.state || '',
+        country: item.country_code || 'US'
+      }));
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  useEffect(() => {
+    const value = (formData.origin || '').trim();
+    if (!/^\d{3,}$/.test(value)) {
+      setOriginZipOptions([]);
+      setOriginZipLoading(false);
+      setOriginZipError(null);
+      return;
+    }
+    if (originZipAbortRef.current) {
+      originZipAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    originZipAbortRef.current = controller;
+    setOriginZipLoading(true);
+    setOriginZipError(null);
+    fetch(buildZipSearchUrl(value), { signal: controller.signal })
+      .then((resp) => {
+        if (!resp.ok) throw new Error('Zip search failed');
+        return resp.json();
+      })
+      .then((data) => {
+        setOriginZipOptions(mapZipResults(value, data));
+      })
+      .catch((err) => {
+        if (err && err.name === 'AbortError') return;
+        setOriginZipError('Zip search failed.');
+        setOriginZipOptions([]);
+      })
+      .finally(() => {
+        setOriginZipLoading(false);
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [formData.origin]);
+
+  useEffect(() => {
+    const value = (formData.destination || '').trim();
+    if (!/^\d{3,}$/.test(value)) {
+      setDestinationZipOptions([]);
+      setDestinationZipLoading(false);
+      setDestinationZipError(null);
+      return;
+    }
+    if (destinationZipAbortRef.current) {
+      destinationZipAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    destinationZipAbortRef.current = controller;
+    setDestinationZipLoading(true);
+    setDestinationZipError(null);
+    fetch(buildZipSearchUrl(value), { signal: controller.signal })
+      .then((resp) => {
+        if (!resp.ok) throw new Error('Zip search failed');
+        return resp.json();
+      })
+      .then((data) => {
+        setDestinationZipOptions(mapZipResults(value, data));
+      })
+      .catch((err) => {
+        if (err && err.name === 'AbortError') return;
+        setDestinationZipError('Zip search failed.');
+        setDestinationZipOptions([]);
+      })
+      .finally(() => {
+        setDestinationZipLoading(false);
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [formData.destination]);
+
+  const applyZipSelection = (option, kind) => {
+    if (!option) return;
+    if (kind === 'origin') {
+      setFormData((prev) => ({
+        ...prev,
+        origin: option.zip || '',
+        originCity: option.city || '',
+        originState: option.state || ''
+      }));
+      setShowOriginZipOptions(false);
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        destination: option.zip || '',
+        destinationCity: option.city || '',
+        destinationState: option.state || ''
+      }));
+      setShowDestinationZipOptions(false);
+    }
   };
 
   const handleSubmit = (e) => {
@@ -45,9 +174,11 @@ export default function LanelyLandingPage() {
     const isZip = function(value) { return /^\d{5}(-\d{4})?$/.test(value); };
 
     const prefill = {
-      pickupCity: isZip(origin) ? '' : origin,
+      pickupCity: isZip(origin) ? (formData.originCity || '') : origin,
+      pickupState: isZip(origin) ? (formData.originState || '') : '',
       pickupZip: isZip(origin) ? origin : '',
-      deliveryCity: isZip(destination) ? '' : destination,
+      deliveryCity: isZip(destination) ? (formData.destinationCity || '') : destination,
+      deliveryState: isZip(destination) ? (formData.destinationState || '') : '',
       deliveryZip: isZip(destination) ? destination : '',
       pickupDate: formData.pickupDate || '',
       equipmentType: formData.equipment || '',
@@ -145,10 +276,37 @@ export default function LanelyLandingPage() {
                         name="origin"
                         value={formData.origin}
                         onChange={handleInputChange}
+                        onFocus={() => setShowOriginZipOptions(true)}
+                        onBlur={() => setTimeout(() => setShowOriginZipOptions(false), 150)}
                         placeholder="City or Zip"
                         className="w-full pl-9 pr-4 py-2.5 bg-white/60 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
                         style={{ width: '100%', paddingLeft: '36px', paddingRight: '16px', paddingTop: '10px', paddingBottom: '10px', backgroundColor: 'rgba(255, 255, 255, 0.6)', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: 500, color: '#0f172a' }}
                       />
+                      {showOriginZipOptions && (originZipLoading || originZipOptions.length || originZipError) ? (
+                        <div className="zip-dropdown">
+                          {originZipLoading && <div className="zip-loading">Searching…</div>}
+                          {!originZipLoading && originZipError && <div className="zip-empty">{originZipError}</div>}
+                          {!originZipLoading && !originZipError && !originZipOptions.length && (
+                            <div className="zip-empty">No matches.</div>
+                          )}
+                          {!originZipLoading && !originZipError && originZipOptions.map((option, idx) => (
+                            <button
+                              key={option.zip + '-' + idx}
+                              type="button"
+                              className="zip-option"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                applyZipSelection(option, 'origin');
+                              }}
+                            >
+                              <span>{option.zip}</span>
+                              <span className="zip-option-meta">
+                                {option.city}{option.state ? ', ' + option.state : ''}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -161,10 +319,37 @@ export default function LanelyLandingPage() {
                         name="destination"
                         value={formData.destination}
                         onChange={handleInputChange}
+                        onFocus={() => setShowDestinationZipOptions(true)}
+                        onBlur={() => setTimeout(() => setShowDestinationZipOptions(false), 150)}
                         placeholder="City or Zip"
                         className="w-full pl-9 pr-4 py-2.5 bg-white/60 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
                         style={{ width: '100%', paddingLeft: '36px', paddingRight: '16px', paddingTop: '10px', paddingBottom: '10px', backgroundColor: 'rgba(255, 255, 255, 0.6)', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: 500, color: '#0f172a' }}
                       />
+                      {showDestinationZipOptions && (destinationZipLoading || destinationZipOptions.length || destinationZipError) ? (
+                        <div className="zip-dropdown">
+                          {destinationZipLoading && <div className="zip-loading">Searching…</div>}
+                          {!destinationZipLoading && destinationZipError && <div className="zip-empty">{destinationZipError}</div>}
+                          {!destinationZipLoading && !destinationZipError && !destinationZipOptions.length && (
+                            <div className="zip-empty">No matches.</div>
+                          )}
+                          {!destinationZipLoading && !destinationZipError && destinationZipOptions.map((option, idx) => (
+                            <button
+                              key={option.zip + '-' + idx}
+                              type="button"
+                              className="zip-option"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                applyZipSelection(option, 'destination');
+                              }}
+                            >
+                              <span>{option.zip}</span>
+                              <span className="zip-option-meta">
+                                {option.city}{option.state ? ', ' + option.state : ''}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>

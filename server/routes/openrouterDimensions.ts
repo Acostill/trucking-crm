@@ -7,7 +7,7 @@ const upload = multer({
   limits: { fileSize: 8 * 1024 * 1024 }
 });
 
-const DEFAULT_MODEL = 'allenai/molmo-2-8b:free';
+const DEFAULT_MODEL = 'allenai/molmo-2-8b';
 
 function parseJsonFromText(text: string): any | null {
   if (!text) return null;
