@@ -301,7 +301,9 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           zip: item.postal_code,
           city: item.city_en || item.city || '',
           state: item.state_code || item.state || '',
-          country: item.country_code || 'US'
+          country: item.country_code || 'US',
+          lat: item.latitude != null ? Number(item.latitude) : null,
+          lng: item.longitude != null ? Number(item.longitude) : null
         };
       });
   }
@@ -329,7 +331,11 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         return resp.json();
       })
       .then(function(data) {
-        setPickupZipOptions(mapZipResults(code, data));
+        var mapped = mapZipResults(code, data);
+        setPickupZipOptions(mapped);
+        if (!pickupMarker && mapped.length && mapped[0].lat != null && mapped[0].lng != null) {
+          setPickupMarker({ lat: mapped[0].lat, lng: mapped[0].lng });
+        }
       })
       .catch(function(err) {
         if (err && err.name === 'AbortError') return;
@@ -367,7 +373,11 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         return resp.json();
       })
       .then(function(data) {
-        setDeliveryZipOptions(mapZipResults(code, data));
+        var mapped = mapZipResults(code, data);
+        setDeliveryZipOptions(mapped);
+        if (!deliveryMarker && mapped.length && mapped[0].lat != null && mapped[0].lng != null) {
+          setDeliveryMarker({ lat: mapped[0].lat, lng: mapped[0].lng });
+        }
       })
       .catch(function(err) {
         if (err && err.name === 'AbortError') return;
@@ -684,7 +694,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         }
       },
       pieces: {
-        unit: piecesUnit,
+        unit: piecesUnit || 'in',
         quantity: piecesRows.length,
         parts: piecesRows.map(function(row) {
           return {
@@ -696,7 +706,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         })
       },
       weight: {
-        unit: weightUnit,
+        unit: weightUnit || 'lbs',
         value: totalWeight
       },
       hazardousMaterial: {
@@ -1403,14 +1413,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                 <legend>Pickup</legend>
                 <div className="row-4">
                   <label>
-                    City
-                    <input value={pickupCity} onChange={function(e){ setPickupCity(e.target.value); }} />
-                  </label>
-                  <label>
-                    State
-                    <input value={pickupState} onChange={function(e){ setPickupState(e.target.value); }} />
-                  </label>
-                  <label>
                     Zip
                     <div className="zip-select">
                       <input
@@ -1448,6 +1450,14 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     </div>
                   </label>
                   <label>
+                    City
+                    <input value={pickupCity} onChange={function(e){ setPickupCity(e.target.value); }} />
+                  </label>
+                  <label>
+                    State
+                    <input value={pickupState} onChange={function(e){ setPickupState(e.target.value); }} />
+                  </label>
+                  <label>
                     Country
                     <input value={pickupCountry} onChange={function(e){ setPickupCountry(e.target.value); }} />
                   </label>
@@ -1465,14 +1475,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
               <fieldset>
                 <legend>Delivery</legend>
                 <div className="row-4">
-                  <label>
-                    City
-                    <input value={deliveryCity} onChange={function(e){ setDeliveryCity(e.target.value); }} />
-                  </label>
-                  <label>
-                    State
-                    <input value={deliveryState} onChange={function(e){ setDeliveryState(e.target.value); }} />
-                  </label>
                   <label>
                     Zip
                     <div className="zip-select">
@@ -1511,30 +1513,16 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     </div>
                   </label>
                   <label>
+                    City
+                    <input value={deliveryCity} onChange={function(e){ setDeliveryCity(e.target.value); }} />
+                  </label>
+                  <label>
+                    State
+                    <input value={deliveryState} onChange={function(e){ setDeliveryState(e.target.value); }} />
+                  </label>
+                  <label>
                     Country
                     <input value={deliveryCountry} onChange={function(e){ setDeliveryCountry(e.target.value); }} />
-                  </label>
-                </div>
-              </fieldset>
-
-              <fieldset>
-                <legend>Units</legend>
-                <div className="row-2">
-                  <label>
-                    Length Unit
-                    <select value={piecesUnit} onChange={function(e){ setPiecesUnit(e.target.value); }}>
-                      <option value="in">in</option>
-                      <option value="ft">ft</option>
-                      <option value="cm">cm</option>
-                      <option value="mm">mm</option>
-                    </select>
-                  </label>
-                  <label>
-                    Weight Unit
-                    <select value={weightUnit} onChange={function(e){ setWeightUnit(e.target.value); }}>
-                      <option value="lbs">lbs</option>
-                      <option value="kg">kg</option>
-                    </select>
                   </label>
                 </div>
               </fieldset>
@@ -1771,8 +1759,9 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
             type="button"
             className="ai-widget-toggle"
             onClick={function() { setAiOpen(!aiOpen); }}
+            aria-label={aiOpen ? 'Close assistant' : 'Open assistant'}
           >
-            {aiOpen ? 'Close Assistant' : 'AI Assistant'}
+            <i className="fa-regular fa-message" aria-hidden="true"></i>
           </button>
           {aiOpen && (
             <div className="ai-widget-panel">

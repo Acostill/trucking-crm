@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { Menu, X } from 'lucide-react';
 
 export default function LandingNavbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { user } = useAuth();
+  const isAuthed = !!user;
 
   return (
     <nav className="landing-navbar">
@@ -23,8 +26,8 @@ export default function LandingNavbar() {
 
           {/* CTA Buttons */}
           <div className="landing-navbar-actions">
-            <Link to="/loads" className="landing-navbar-link">
-              Log in
+            <Link to={isAuthed ? '/dashboard' : '/loads'} className="landing-navbar-link">
+              {isAuthed ? 'Dashboard' : 'Log in'}
             </Link>
             <Link to="/calculate-rate" className="landing-navbar-cta">
               Get a Quote
@@ -52,7 +55,9 @@ export default function LandingNavbar() {
           <a href="#tracking" className="landing-navbar-mobile-link">Track Shipment</a>
           <hr className="landing-navbar-mobile-divider" />
           <div className="landing-navbar-mobile-actions">
-            <Link to="/loads" className="landing-navbar-mobile-link">Log in</Link>
+            <Link to={isAuthed ? '/dashboard' : '/loads'} className="landing-navbar-mobile-link">
+              {isAuthed ? 'Dashboard' : 'Log in'}
+            </Link>
             <Link to="/calculate-rate" className="landing-navbar-mobile-cta">Get a Quote</Link>
           </div>
         </div>
