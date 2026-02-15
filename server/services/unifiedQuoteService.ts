@@ -69,6 +69,7 @@ function applyProfitMargin(total: number | undefined, marginPct: number): number
  */
 function normalizeExpediteAll(data: ExpediteAllResponse): StandardizedQuote {
   if ('error' in data) {
+    console.error('[ExpediteAll] Error in response:', data.error);
     return { source: 'ExpediteAll', error: data.error };
   }
 
@@ -95,6 +96,7 @@ function normalizeExpediteAll(data: ExpediteAllResponse): StandardizedQuote {
  */
 function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
   if ('error' in data) {
+    console.error('[ForwardAir] Error in response:', data.error);
     return { source: 'ForwardAir', error: data.error };
   }
 
@@ -132,6 +134,7 @@ function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
  */
 function normalizeDATForecast(data: DATForecastResponse): StandardizedQuote {
   if ('error' in data) {
+    console.error('[DAT] Error in response:', data.error);
     return { source: 'DAT', error: data.error };
   }
 
@@ -179,15 +182,27 @@ export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<Unifi
   // Extract and normalize results, handling both success and failure cases
   const expediteAll: StandardizedQuote = expediteAllResult.status === 'fulfilled' 
     ? normalizeExpediteAll(expediteAllResult.value.data as ExpediteAllResponse)
-    : { source: 'ExpediteAll', error: expediteAllResult.reason?.message || 'Failed to fetch ExpediteAll quote' };
+    : (() => {
+        const error = expediteAllResult.reason?.message || 'Failed to fetch ExpediteAll quote';
+        console.error('[ExpediteAll] Error:', error, expediteAllResult.reason);
+        return { source: 'ExpediteAll', error };
+      })();
   
   const forwardAir: StandardizedQuote = forwardAirResult.status === 'fulfilled' 
     ? normalizeForwardAir(forwardAirResult.value.data as ForwardAirResponse)
-    : { source: 'ForwardAir', error: forwardAirResult.reason?.message || 'Failed to fetch Forward Air quote' };
+    : (() => {
+        const error = forwardAirResult.reason?.message || 'Failed to fetch Forward Air quote';
+        console.error('[ForwardAir] Error:', error, forwardAirResult.reason);
+        return { source: 'ForwardAir', error };
+      })();
 
   const datForecast: StandardizedQuote = datForecastResult.status === 'fulfilled' 
     ? normalizeDATForecast(datForecastResult.value.data as DATForecastResponse)
-    : { source: 'DAT', error: datForecastResult.reason?.message || 'Failed to fetch DAT forecast' };
+    : (() => {
+        const error = datForecastResult.reason?.message || 'Failed to fetch DAT forecast';
+        console.error('[DAT] Error:', error, datForecastResult.reason);
+        return { source: 'DAT', error };
+      })();
 
   const withMargin = (quote: StandardizedQuote): StandardizedQuote => {
     if (quote.error) return quote;
