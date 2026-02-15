@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { buildApiUrl } from '../config';
 import { 
   Truck, 
   MapPin, 
@@ -15,7 +16,10 @@ import LandingNavbar from '../components/LandingNavbar';
 const EquipmentType = {
   DRY_VAN: 'Dry Van',
   REEFER: 'Reefer',
-  FLATBED: 'Flatbed'
+  FLATBED: 'Flatbed',
+  BOX_TRUCK: 'Box Truck',
+  FLATBED_HOTSHOT: 'Flatbed Hotshot',
+  SPRINTER_VAN: 'Sprinter Van'
 };
 
 export default function LanelyLandingPage() {
@@ -25,16 +29,17 @@ export default function LanelyLandingPage() {
     destination: '',
     pickupDate: '',
     equipment: EquipmentType.DRY_VAN,
-    weight: '',
-    length: '',
-    width: '',
-    height: '',
     additionalInfo: '',
     originCity: '',
     originState: '',
     destinationCity: '',
     destinationState: ''
   });
+
+  const [piecesRows, setPiecesRows] = useState([
+    { length: '', width: '', height: '', weight: '' }
+  ]);
+  const [manualTotalWeight, setManualTotalWeight] = useState('');
 
   const [originZipOptions, setOriginZipOptions] = useState([]);
   const [originZipLoading, setOriginZipLoading] = useState(false);
@@ -48,6 +53,14 @@ export default function LanelyLandingPage() {
 
   const originZipAbortRef = useRef(null);
   const destinationZipAbortRef = useRef(null);
+
+  // AI Assistant state
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+  const [aiListening, setAiListening] = useState(false);
+  const recognitionRef = useRef(null);
 
   const buildZipSearchUrl = (code) => {
     const base = 'https://app.zipcodebase.com/api/v1/search';
@@ -72,6 +85,47 @@ export default function LanelyLandingPage() {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
+
+  // Piece management functions
+  const addPieceRow = () => {
+    setPiecesRows(prev => [...prev, { length: '', width: '', height: '', weight: '' }]);
+  };
+
+  const removePieceRow = (idx) => {
+    if (piecesRows.length > 1) {
+      setPiecesRows(prev => prev.filter((_, i) => i !== idx));
+    }
+  };
+
+  const updatePieceRow = (idx, field, value) => {
+    setPiecesRows(prev => prev.map((row, i) => 
+      i === idx ? { ...row, [field]: value } : row
+    ));
+  };
+
+  // Calculate total weight from all pieces
+  const computeTotalWeight = (rows) => {
+    return rows.reduce((sum, row) => {
+      const val = Number(row.weight);
+      if (Number.isNaN(val)) return sum;
+      return sum + val;
+    }, 0);
+  };
+
+  // Check if any piece has missing weight
+  const hasMissingWeights = (rows) => {
+    return rows.some((row) => {
+      const weight = row.weight;
+      return weight === '' || weight === null || weight === undefined || Number(weight) === 0;
+    });
+  };
+
+  // Sync manual total weight: clear it when all pieces have weights (switch back to computed mode)
+  useEffect(() => {
+    if (!hasMissingWeights(piecesRows) && manualTotalWeight !== '') {
+      setManualTotalWeight('');
+    }
+  }, [piecesRows, manualTotalWeight]);
 
   useEffect(() => {
     const value = (formData.origin || '').trim();
@@ -173,6 +227,14 @@ export default function LanelyLandingPage() {
     const destination = (formData.destination || '').trim();
     const isZip = function(value) { return /^\d{5}(-\d{4})?$/.test(value); };
 
+    // Calculate total weight - use manual if provided and pieces have missing weights, otherwise computed
+    const computedWeight = computeTotalWeight(piecesRows);
+    const hasMissing = hasMissingWeights(piecesRows);
+    const manualWeightNum = Number(manualTotalWeight);
+    const totalWeight = hasMissing && manualTotalWeight !== '' && !Number.isNaN(manualWeightNum)
+      ? manualWeightNum
+      : computedWeight;
+
     const prefill = {
       pickupCity: isZip(origin) ? (formData.originCity || '') : origin,
       pickupState: isZip(origin) ? (formData.originState || '') : '',
@@ -184,18 +246,220 @@ export default function LanelyLandingPage() {
       equipmentType: formData.equipment || '',
       piecesUnit: 'in',
       weightUnit: 'lbs',
-      piecesRows: [
-        {
-          length: formData.length || '',
-          width: formData.width || '',
-          height: formData.height || '',
-          weight: formData.weight || ''
-        }
-      ]
+      piecesRows: piecesRows.filter(row => row.length || row.width || row.height || row.weight),
+      // Pass manual total weight separately if it was set and pieces have missing weights
+      manualTotalWeight: hasMissing && manualTotalWeight !== '' && !Number.isNaN(manualWeightNum) 
+        ? manualTotalWeight 
+        : undefined
     };
 
     navigate('/calculate-rate', { state: { prefill } });
   };
+
+  // AI Assistant functions
+  function ensureRecognition() {
+    if (recognitionRef.current) return recognitionRef.current;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = function(event) {
+      const transcript = event.results && event.results[0] && event.results[0][0]
+        ? event.results[0][0].transcript
+        : '';
+      if (transcript) {
+        setAiInput(transcript);
+      }
+    };
+    recognition.onend = function() {
+      setAiListening(false);
+    };
+    recognition.onerror = function(event) {
+      setAiListening(false);
+      var reason = event && event.error ? String(event.error) : 'unknown';
+      if (reason === 'not-allowed' || reason === 'service-not-allowed') {
+        setAiError('Microphone access was blocked. Allow mic permissions and use HTTPS or localhost.');
+        return;
+      }
+      if (reason === 'no-speech') {
+        setAiError('No speech detected. Please try again or type your request.');
+        return;
+      }
+      if (reason === 'audio-capture') {
+        setAiError('No microphone found. Please connect a mic or type your request.');
+        return;
+      }
+      setAiError('Voice input failed (' + reason + '). Please type your request.');
+    };
+    recognitionRef.current = recognition;
+    return recognition;
+  }
+
+  function handleStartVoice() {
+    const recognition = ensureRecognition();
+    if (!recognition) {
+      setAiError('Voice input is not supported in this browser.');
+      return;
+    }
+    setAiError(null);
+    setAiListening(true);
+    try {
+      recognition.start();
+    } catch (_err) {
+      setAiListening(false);
+      setAiError('Voice input failed to start. Please type your request.');
+    }
+  }
+
+  function handleStopVoice() {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+    }
+    setAiListening(false);
+  }
+
+  function applyAiResult(parsed) {
+    if (!parsed || typeof parsed !== 'object') return;
+    
+    // Map pickup location
+    if (parsed.pickup) {
+      if (parsed.pickup.zip) {
+        setFormData(prev => ({
+          ...prev,
+          origin: parsed.pickup.zip,
+          originCity: parsed.pickup.city || prev.originCity,
+          originState: parsed.pickup.state || prev.originState
+        }));
+      } else if (parsed.pickup.city) {
+        setFormData(prev => ({
+          ...prev,
+          origin: parsed.pickup.city + (parsed.pickup.state ? ', ' + parsed.pickup.state : ''),
+          originCity: parsed.pickup.city,
+          originState: parsed.pickup.state || prev.originState
+        }));
+      }
+      if (parsed.pickup.date) {
+        // Convert ISO date to YYYY-MM-DD format for date input
+        const dateStr = parsed.pickup.date;
+        let dateValue = dateStr;
+        if (dateStr.includes('T')) {
+          dateValue = dateStr.split('T')[0];
+        } else if (dateStr.includes(' ')) {
+          dateValue = dateStr.split(' ')[0];
+        }
+        setFormData(prev => ({ ...prev, pickupDate: dateValue }));
+      }
+    }
+    
+    // Map delivery location
+    if (parsed.delivery) {
+      if (parsed.delivery.zip) {
+        setFormData(prev => ({
+          ...prev,
+          destination: parsed.delivery.zip,
+          destinationCity: parsed.delivery.city || prev.destinationCity,
+          destinationState: parsed.delivery.state || prev.destinationState
+        }));
+      } else if (parsed.delivery.city) {
+        setFormData(prev => ({
+          ...prev,
+          destination: parsed.delivery.city + (parsed.delivery.state ? ', ' + parsed.delivery.state : ''),
+          destinationCity: parsed.delivery.city,
+          destinationState: parsed.delivery.state || prev.destinationState
+        }));
+      }
+    }
+    
+    // Map equipment type
+    if (parsed.equipmentType) {
+      const equipmentMap = {
+        'Dry Van': EquipmentType.DRY_VAN,
+        'Reefer': EquipmentType.REEFER,
+        'Flatbed': EquipmentType.FLATBED,
+        'Box Truck': EquipmentType.BOX_TRUCK,
+        'Flatbed Hotshot': EquipmentType.FLATBED_HOTSHOT,
+        'Sprinter Van': EquipmentType.SPRINTER_VAN
+      };
+      const mappedEquipment = equipmentMap[parsed.equipmentType] || parsed.equipmentType;
+      setFormData(prev => ({ ...prev, equipment: mappedEquipment }));
+    }
+    
+    // Map pieces (multiple pieces support)
+    if (parsed.pieces && Array.isArray(parsed.pieces.parts) && parsed.pieces.parts.length > 0) {
+      const nextRows = [];
+      parsed.pieces.parts.forEach(function(part) {
+        const count = Math.max(1, Math.floor(Number(part.count) || 1));
+        const pieceRow = {
+          length: part.length != null ? String(part.length) : '',
+          width: part.width != null ? String(part.width) : '',
+          height: part.height != null ? String(part.height) : '',
+          weight: part.weight != null ? String(part.weight) : ''
+        };
+        // Create 'count' number of rows with the same dimensions
+        for (let i = 0; i < count; i++) {
+          nextRows.push(pieceRow);
+        }
+      });
+      if (nextRows.length) {
+        setPiecesRows(nextRows);
+      }
+    }
+    
+    // Map total weight - handle both cases: with and without pieces
+    if (parsed.weight && parsed.weight.value != null) {
+      let weightValue = parsed.weight.value;
+      const weightUnit = (parsed.weight.unit || '').toLowerCase();
+      
+      // Convert kgs to lbs if needed (1 kg = 2.20462 lbs)
+      if (weightUnit === 'kg' || weightUnit === 'kgs' || weightUnit === 'kilogram' || weightUnit === 'kilograms') {
+        weightValue = weightValue * 2.20462;
+      }
+      
+      // If pieces were provided, set as manual total weight (since individual pieces might not have weights)
+      if (parsed.pieces && Array.isArray(parsed.pieces.parts) && parsed.pieces.parts.length > 0) {
+        setManualTotalWeight(String(Math.round(weightValue * 100) / 100)); // Round to 2 decimal places
+      } else {
+        // If no pieces provided, set weight on first piece
+        setPiecesRows(prev => {
+          if (prev.length === 0) {
+            return [{ length: '', width: '', height: '', weight: String(Math.round(weightValue * 100) / 100) }];
+          }
+          const next = prev.slice();
+          next[0] = { ...next[0], weight: String(Math.round(weightValue * 100) / 100) };
+          return next;
+        });
+      }
+    }
+  }
+
+  async function handleAiSubmit() {
+    if (!aiInput.trim()) {
+      setAiError('Please enter a request or use voice input.');
+      return;
+    }
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const resp = await fetch(buildApiUrl('/api/ai/parse-calculate-rate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: aiInput })
+      });
+      if (!resp.ok) {
+        const msg = await resp.text();
+        throw new Error(msg || 'Failed to parse input.');
+      }
+      const data = await resp.json();
+      applyAiResult(data);
+      setAiInput(''); // Clear input after successful submission
+    } catch (err) {
+      setAiError(err && err.message ? err.message : 'Failed to parse input.');
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 relative overflow-x-hidden selection:bg-indigo-100 selection:text-indigo-900" style={{ backgroundColor: '#F8FAFC' }}>
@@ -385,6 +649,9 @@ export default function LanelyLandingPage() {
                         <option value={EquipmentType.DRY_VAN}>Dry Van</option>
                         <option value={EquipmentType.REEFER}>Reefer</option>
                         <option value={EquipmentType.FLATBED}>Flatbed</option>
+                        <option value={EquipmentType.BOX_TRUCK}>Box Truck</option>
+                        <option value={EquipmentType.FLATBED_HOTSHOT}>Flatbed Hotshot</option>
+                        <option value={EquipmentType.SPRINTER_VAN}>Sprinter Van</option>
                       </select>
                     </div>
                   </div>
@@ -396,25 +663,121 @@ export default function LanelyLandingPage() {
                     <Package size={12} />
                     Shipment Details
                   </h4>
-                  <div className="grid grid-cols-2 gap-3 mb-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                    <div className="relative group" style={{ position: 'relative' }}>
-                       <Scale size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                       <input 
-                        type="text" 
-                        name="weight"
-                        value={formData.weight}
-                        onChange={handleInputChange}
-                        placeholder="Weight (lbs)"
-                        className="w-full pl-8 pr-2 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-                        style={{ width: '100%', paddingLeft: '32px', paddingRight: '8px', paddingTop: '8px', paddingBottom: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a' }}
-                      />
+                  {piecesRows.map((row, idx) => (
+                    <div key={idx} className="mb-3 last:mb-0" style={{ marginBottom: idx < piecesRows.length - 1 ? '12px' : '0' }}>
+                      <div className="grid grid-cols-2 gap-3 mb-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '8px' }}>
+                        <div className="relative group" style={{ position: 'relative' }}>
+                          <Scale size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                          <input 
+                            type="text" 
+                            value={row.weight}
+                            onChange={(e) => updatePieceRow(idx, 'weight', e.target.value)}
+                            placeholder="Weight (lbs)"
+                            className="w-full pl-8 pr-2 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                            style={{ width: '100%', paddingLeft: '32px', paddingRight: '8px', paddingTop: '8px', paddingBottom: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', color: '#0f172a' }}
+                          />
+                        </div>
+                        <div className="flex gap-1" style={{ display: 'flex', gap: '4px' }}>
+                          <input 
+                            type="text" 
+                            placeholder="L" 
+                            className="w-full px-2 py-2 text-center bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" 
+                            onChange={(e) => updatePieceRow(idx, 'length', e.target.value)} 
+                            value={row.length} 
+                            style={{ width: '100%', padding: '8px', textAlign: 'center', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }} 
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="W" 
+                            className="w-full px-2 py-2 text-center bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" 
+                            onChange={(e) => updatePieceRow(idx, 'width', e.target.value)} 
+                            value={row.width} 
+                            style={{ width: '100%', padding: '8px', textAlign: 'center', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }} 
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="H" 
+                            className="w-full px-2 py-2 text-center bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" 
+                            onChange={(e) => updatePieceRow(idx, 'height', e.target.value)} 
+                            value={row.height} 
+                            style={{ width: '100%', padding: '8px', textAlign: 'center', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }} 
+                          />
+                        </div>
+                      </div>
+                      {piecesRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removePieceRow(idx)}
+                          className="text-xs text-slate-500 hover:text-red-500 transition-colors"
+                          style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      )}
                     </div>
-                    <div className="flex gap-1" style={{ display: 'flex', gap: '4px' }}>
-                      <input type="text" name="length" placeholder="L" className="w-full px-2 py-2 text-center bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" onChange={handleInputChange} value={formData.length} style={{ width: '100%', padding: '8px', textAlign: 'center', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }} />
-                      <input type="text" name="width" placeholder="W" className="w-full px-2 py-2 text-center bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" onChange={handleInputChange} value={formData.width} style={{ width: '100%', padding: '8px', textAlign: 'center', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }} />
-                      <input type="text" name="height" placeholder="H" className="w-full px-2 py-2 text-center bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500" onChange={handleInputChange} value={formData.height} style={{ width: '100%', padding: '8px', textAlign: 'center', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }} />
+                  ))}
+                  {piecesRows.length > 1 && (
+                    <div className="mt-3 pt-3 border-t border-slate-200" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
+                      <div className="flex items-center justify-between gap-3" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                        <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider flex-shrink-0" style={{ fontSize: '11px', fontWeight: 600, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+                          Total Weight
+                        </span>
+                        {hasMissingWeights(piecesRows) ? (
+                          <input
+                            type="number"
+                            value={manualTotalWeight !== '' ? manualTotalWeight : computeTotalWeight(piecesRows)}
+                            onChange={(e) => setManualTotalWeight(e.target.value)}
+                            placeholder={String(computeTotalWeight(piecesRows))}
+                            className="flex-1 text-sm font-bold text-slate-900 bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                            style={{ 
+                              flex: 1, 
+                              fontSize: '14px', 
+                              fontWeight: 700, 
+                              color: '#0f172a', 
+                              backgroundColor: 'white', 
+                              border: '1px solid #e2e8f0', 
+                              borderRadius: '8px', 
+                              padding: '6px 8px',
+                              textAlign: 'right'
+                            }}
+                          />
+                        ) : (
+                          <span className="text-sm font-bold text-slate-900" style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                            {computeTotalWeight(piecesRows).toLocaleString()} lbs
+                          </span>
+                        )}
+                        {hasMissingWeights(piecesRows) && (
+                          <span className="text-xs text-slate-500 flex-shrink-0" style={{ fontSize: '12px', color: '#64748b', flexShrink: 0 }}>
+                            lbs
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={addPieceRow}
+                    className="w-full mt-3 flex items-center justify-center gap-2 bg-white/80 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 text-indigo-600 hover:text-indigo-700 font-medium py-2.5 px-4 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
+                    style={{ 
+                      width: '100%', 
+                      marginTop: '12px', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '8px', 
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)', 
+                      border: '1px solid #e2e8f0', 
+                      color: '#4f46e5', 
+                      fontWeight: 500, 
+                      padding: '10px 16px', 
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <Package size={14} style={{ width: '14px', height: '14px' }} />
+                    <span style={{ fontSize: '13px' }}>Add Piece</span>
+                  </button>
                   <div className="relative group" style={{ position: 'relative' }}>
                      <Info size={14} className="absolute left-2.5 top-3 text-slate-400 group-focus-within:text-indigo-500 transition-colors" style={{ position: 'absolute', left: '10px', top: '12px', color: '#94a3b8' }} />
                      <textarea 
@@ -517,6 +880,57 @@ export default function LanelyLandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* AI Assistant Widget */}
+      <div className="ai-widget-fixed">
+        <button
+          type="button"
+          className="ai-widget-toggle"
+          onClick={() => setAiOpen(!aiOpen)}
+          aria-label={aiOpen ? 'Close assistant' : 'Open assistant'}
+        >
+          <i className="fa-regular fa-message" aria-hidden="true"></i>
+        </button>
+        {aiOpen && (
+          <div className="ai-widget-panel">
+            <div className="ai-widget-header">
+              <div className="ai-widget-title">Shipment Assistant</div>
+              <div className="ai-widget-subtitle">
+                Describe the load and we'll fill the form.
+              </div>
+            </div>
+            <div className="ai-box">
+              <label>
+                Tell us the shipment details
+                <textarea
+                  className="ai-textarea"
+                  placeholder="Example: Pickup in Dallas TX 75201 on Jan 15, deliver to Phoenix AZ 85001. 2 pallets 48x40x48 inches, 2500 lbs, dry van."
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                />
+              </label>
+              <div className="ai-actions">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={aiListening ? handleStopVoice : handleStartVoice}
+                >
+                  {aiListening ? 'Stop Voice' : 'Use Voice'}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={handleAiSubmit}
+                  disabled={aiLoading}
+                >
+                  {aiLoading ? 'Applying…' : 'Apply to Form'}
+                </button>
+              </div>
+              {aiError && <div className="ai-error">{aiError}</div>}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -24,6 +24,72 @@ const router = express.Router();
 const DEFAULT_OPENROUTER_EMAIL_MODEL = 'meta-llama/llama-3.1-8b-instruct';
 const DEFAULT_OPENROUTER_RATE_MODEL = 'meta-llama/llama-3.1-8b-instruct';
 
+// Airport codes mapping for resolving airport codes to locations
+const AIRPORT_CODES: Record<string, { city: string; state: string; zip: string }> = {
+  'IAH': { city: 'Houston', state: 'TX', zip: '77032' }, // George Bush Intercontinental
+  'HOU': { city: 'Houston', state: 'TX', zip: '77061' }, // William P. Hobby
+  'LAX': { city: 'Los Angeles', state: 'CA', zip: '90045' },
+  'JFK': { city: 'Jamaica', state: 'NY', zip: '11430' },
+  'LGA': { city: 'Queens', state: 'NY', zip: '11371' },
+  'EWR': { city: 'Newark', state: 'NJ', zip: '07114' },
+  'ORD': { city: 'Chicago', state: 'IL', zip: '60666' },
+  'MDW': { city: 'Chicago', state: 'IL', zip: '60638' },
+  'DFW': { city: 'Dallas', state: 'TX', zip: '75261' },
+  'DAL': { city: 'Dallas', state: 'TX', zip: '75235' },
+  'ATL': { city: 'Atlanta', state: 'GA', zip: '30320' },
+  'MIA': { city: 'Miami', state: 'FL', zip: '33126' },
+  'FLL': { city: 'Fort Lauderdale', state: 'FL', zip: '33315' },
+  'SEA': { city: 'Seattle', state: 'WA', zip: '98158' },
+  'SFO': { city: 'San Francisco', state: 'CA', zip: '94128' },
+  'DEN': { city: 'Denver', state: 'CO', zip: '80249' },
+  'LAS': { city: 'Las Vegas', state: 'NV', zip: '89119' },
+  'PHX': { city: 'Phoenix', state: 'AZ', zip: '85034' },
+  'CLT': { city: 'Charlotte', state: 'NC', zip: '28208' },
+  'BOS': { city: 'Boston', state: 'MA', zip: '02128' },
+  'DTW': { city: 'Detroit', state: 'MI', zip: '48242' },
+  'MSP': { city: 'Minneapolis', state: 'MN', zip: '55450' },
+  'PHL': { city: 'Philadelphia', state: 'PA', zip: '19153' },
+  'BWI': { city: 'Baltimore', state: 'MD', zip: '21240' },
+  'DCA': { city: 'Arlington', state: 'VA', zip: '22202' },
+  'IAD': { city: 'Dulles', state: 'VA', zip: '20166' },
+  'SLC': { city: 'Salt Lake City', state: 'UT', zip: '84122' },
+  'PDX': { city: 'Portland', state: 'OR', zip: '97218' },
+  'STL': { city: 'St. Louis', state: 'MO', zip: '63145' },
+  'MCI': { city: 'Kansas City', state: 'MO', zip: '64153' },
+  'FCO': { city: 'El Paso', state: 'TX', zip: '79925' } // Fort Bliss/El Paso area
+};
+
+// Helper function to resolve airport codes in location data
+function resolveAirportCode(location: any): any {
+  if (!location || typeof location !== 'object') return location;
+  
+  const city = location.city || '';
+  const upperCity = city.toUpperCase().trim();
+  
+  // Extract airport code if it's in format like "IAH airport" or just "IAH"
+  let airportCode = upperCity;
+  if (upperCity.includes(' ')) {
+    // Try to extract 3-letter code from the beginning
+    const match = upperCity.match(/^([A-Z]{3})\s/);
+    if (match) {
+      airportCode = match[1];
+    }
+  }
+  
+  // Check if city matches an airport code
+  if (AIRPORT_CODES[airportCode]) {
+    const airportInfo = AIRPORT_CODES[airportCode];
+    return {
+      ...location,
+      city: airportInfo.city,
+      state: location.state || airportInfo.state,
+      zip: location.zip || airportInfo.zip
+    };
+  }
+  
+  return location;
+}
+
 function generateLoadNumber() {
   const random = Math.floor(Math.random() * 900) + 100; // 3-digit entropy
   return 'EMAIL-' + Date.now() + '-' + random;
@@ -193,6 +259,10 @@ async function parseCalculateRateWithOpenRouter(inputText: string): Promise<any>
     modelCandidates.push(DEFAULT_OPENROUTER_RATE_MODEL);
   }
 
+  const airportCodesList = Object.entries(AIRPORT_CODES)
+    .map(([code, loc]) => `  ${code}: ${loc.city}, ${loc.state} ${loc.zip}`)
+    .join('\n');
+
   const prompt = [
     'You extract shipping quote details from user instructions.',
     'Return ONLY valid JSON (no markdown). Use this schema and omit unknown fields:',
@@ -208,6 +278,16 @@ async function parseCalculateRateWithOpenRouter(inputText: string): Promise<any>
     '  "referenceNumber": string',
     '}',
     'If no parts are provided, return an empty array. If no arrays, return empty arrays.',
+    '',
+    'IMPORTANT: For pieces, if the user specifies a quantity (e.g., "2 pallets", "3 crates"), set the "count" field to that number.',
+    'Example: "2 pallets @ 43.3x48x64.9 in each" should have count: 2 with length: 43.3, width: 48, height: 64.9.',
+    'If no quantity is specified, default count to 1.',
+    '',
+    'AIRPORT CODES: If the user mentions an airport code (3-letter code like IAH, LAX, JFK) or "airport",',
+    'you MUST look up the proper city, state, and zip code for that airport. Common airport codes:',
+    airportCodesList,
+    'If you encounter an airport code not in this list, use your knowledge to provide the correct city, state, and zip.',
+    'Do NOT use the airport code as the city name. Always use the actual city name where the airport is located.',
     '',
     'USER INPUT:',
     inputText
@@ -276,6 +356,15 @@ async function parseCalculateRateWithOpenRouter(inputText: string): Promise<any>
     if (!parsed || typeof parsed !== 'object') {
       throw new Error('OpenRouter response was not a JSON object');
     }
+    
+    // Post-process to resolve airport codes
+    if (parsed.pickup) {
+      parsed.pickup = resolveAirportCode(parsed.pickup);
+    }
+    if (parsed.delivery) {
+      parsed.delivery = resolveAirportCode(parsed.delivery);
+    }
+    
     return parsed;
   } catch (parseErr: any) {
     const err: any = new Error('Failed to parse JSON from OpenRouter response');
@@ -534,8 +623,37 @@ router.post('/calculate-rate', async function(req: Request, res: Response, next:
     // Get unified quotes from all three APIs
     const unifiedResponse = await getUnifiedQuotes(body);
 
-    // Return combined response
-    res.status(200).json(unifiedResponse);
+    // Helper function to check if a quote has a valid total
+    function isValidQuote(quote: any): boolean {
+      if (!quote || typeof quote !== 'object') return false;
+      if (quote.error) return false; // Exclude quotes with errors
+      
+      // Check both total and lineHaul (some quotes might only have lineHaul)
+      const total = quote.total;
+      const lineHaul = quote.lineHaul;
+      
+      // Exclude quotes with invalid totals (0, null, undefined, NaN)
+      const hasValidTotal = total !== null && total !== undefined && total !== 0 && !Number.isNaN(total);
+      const hasValidLineHaul = lineHaul !== null && lineHaul !== undefined && lineHaul !== 0 && !Number.isNaN(lineHaul);
+      
+      // Quote is valid if it has either a valid total or valid lineHaul
+      return hasValidTotal || hasValidLineHaul;
+    }
+
+    // Filter out quotes with invalid totals
+    const filteredResponse: any = {};
+    if (isValidQuote(unifiedResponse.expediteAll)) {
+      filteredResponse.expediteAll = unifiedResponse.expediteAll;
+    }
+    if (isValidQuote(unifiedResponse.forwardAir)) {
+      filteredResponse.forwardAir = unifiedResponse.forwardAir;
+    }
+    if (isValidQuote(unifiedResponse.datForecast)) {
+      filteredResponse.datForecast = unifiedResponse.datForecast;
+    }
+
+    // Return filtered response
+    res.status(200).json(filteredResponse);
   } catch (err) {
     next(err);
   }

@@ -14,23 +14,23 @@ function getDefaultPickupDateIso() {
 }
 
 const DEFAULT_INITIAL_VALUES = {
-  pickupCity: 'Chicago',
-  pickupState: 'IL',
-  pickupZip: '60605',
+  pickupCity: '',
+  pickupState: '',
+  pickupZip: '',
   pickupCountry: 'US',
   pickupDate: getDefaultPickupDateIso(),
-  deliveryCity: 'Atlanta',
-  deliveryState: 'GA',
-  deliveryZip: '30303',
+  deliveryCity: '',
+  deliveryState: '',
+  deliveryZip: '',
   deliveryCountry: 'US',
-  piecesUnit: 'in',
-  part1Length: '74',
-  part1Width: '51',
-  part1Height: '67',
+  piecesUnit: '',
+  part1Length: '',
+  part1Width: '',
+  part1Height: '',
   part2Length: '',
   part2Width: '',
   part2Height: '',
-  weightUnit: 'lbs',
+  weightUnit: '',
   hazardousUnNumbersText: '',
   accessorialCodesText: '',
   shipmentId: '',
@@ -47,12 +47,12 @@ const EMBEDDED_DEFAULT_VALUES = {
   pickupCity: '',
   pickupState: '',
   pickupZip: '',
-  pickupCountry: '',
+  pickupCountry: 'US',
   pickupDate: '',
   deliveryCity: '',
   deliveryState: '',
   deliveryZip: '',
-  deliveryCountry: '',
+  deliveryCountry: 'US',
   piecesUnit: '',
   part1Length: '',
   part1Width: '',
@@ -151,18 +151,19 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [pickupCity, setPickupCity] = useState(init.pickupCity);
   const [pickupState, setPickupState] = useState(init.pickupState);
   const [pickupZip, setPickupZip] = useState(init.pickupZip);
-  const [pickupCountry, setPickupCountry] = useState(init.pickupCountry);
+  const [pickupCountry, setPickupCountry] = useState(init.pickupCountry || 'US');
   const [pickupDate, setPickupDate] = useState(init.pickupDate);
 
   const [deliveryCity, setDeliveryCity] = useState(init.deliveryCity);
   const [deliveryState, setDeliveryState] = useState(init.deliveryState);
   const [deliveryZip, setDeliveryZip] = useState(init.deliveryZip);
-  const [deliveryCountry, setDeliveryCountry] = useState(init.deliveryCountry);
+  const [deliveryCountry, setDeliveryCountry] = useState(init.deliveryCountry || 'US');
 
   const [piecesUnit, setPiecesUnit] = useState(init.piecesUnit);
   const [piecesRows, setPiecesRows] = useState(buildPiecesRowsFrom(init));
 
   const [weightUnit, setWeightUnit] = useState(init.weightUnit);
+  const [manualTotalWeight, setManualTotalWeight] = useState('');
 
   const [hazardousUnNumbersText, setHazardousUnNumbersText] = useState(init.hazardousUnNumbersText);
   const [accessorialCodesText, setAccessorialCodesText] = useState(init.accessorialCodesText);
@@ -238,7 +239,29 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     apply(setShipmentId, mergedPrefill.shipmentId);
     apply(setReferenceNumber, mergedPrefill.referenceNumber);
     apply(setEquipmentType, mergedPrefill.equipmentType || mergedPrefill.truckType);
+
+    // Set manual total weight if provided in prefill
+    if (mergedPrefill.manualTotalWeight !== undefined && mergedPrefill.manualTotalWeight !== null && mergedPrefill.manualTotalWeight !== '') {
+      setManualTotalWeight(String(mergedPrefill.manualTotalWeight));
+    }
   }, [mergedPrefill]);
+
+  // Ensure country fields are always set to "US"
+  React.useEffect(function() {
+    if (pickupCountry !== 'US') {
+      setPickupCountry('US');
+    }
+    if (deliveryCountry !== 'US') {
+      setDeliveryCountry('US');
+    }
+  }, [pickupCountry, deliveryCountry]);
+
+  // Sync manual total weight: clear it when all pieces have weights (switch back to computed mode)
+  React.useEffect(function() {
+    if (!hasMissingWeights(piecesRows) && manualTotalWeight !== '') {
+      setManualTotalWeight('');
+    }
+  }, [piecesRows, manualTotalWeight]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -489,13 +512,19 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       if (parsed.delivery.country) setDeliveryCountry(parsed.delivery.country);
     }
     if (parsed.pieces && Array.isArray(parsed.pieces.parts)) {
-      const nextRows = parsed.pieces.parts.map(function(part) {
-        return {
+      const nextRows = [];
+      parsed.pieces.parts.forEach(function(part) {
+        const count = Math.max(1, Math.floor(Number(part.count) || 1));
+        const pieceRow = {
           length: part.length != null ? String(part.length) : '',
           width: part.width != null ? String(part.width) : '',
           height: part.height != null ? String(part.height) : '',
           weight: part.weight != null ? String(part.weight) : ''
         };
+        // Create 'count' number of rows with the same dimensions
+        for (let i = 0; i < count; i++) {
+          nextRows.push(pieceRow);
+        }
       });
       if (nextRows.length) {
         setPiecesRows(nextRows);
@@ -630,6 +659,13 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     }, 0);
   }
 
+  function hasMissingWeights(rows) {
+    return rows.some(function(row) {
+      var weight = row.weight;
+      return weight === '' || weight === null || weight === undefined || Number(weight) === 0;
+    });
+  }
+
   async function handleExtractDimensions() {
     if (!dimensionsFile) {
       setDimensionsError('Please select an image first.');
@@ -671,7 +707,12 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   }
 
   function buildPayload() {
-    var totalWeight = computeTotalWeight(piecesRows);
+    var computedWeight = computeTotalWeight(piecesRows);
+    var hasMissing = hasMissingWeights(piecesRows);
+    var manualWeightNum = Number(manualTotalWeight);
+    var totalWeight = hasMissing && manualTotalWeight !== '' && !Number.isNaN(manualWeightNum)
+      ? manualWeightNum
+      : computedWeight;
     function toNumberOrUndefined(value) {
       var num = Number(value);
       return Number.isNaN(num) ? undefined : num;
@@ -1358,7 +1399,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           setResult(expediteAllFormatted);
             }
       } else if (expediteAllQuote && expediteAllQuote.error) {
-        console.error('ExpediteAll API error:', expediteAllQuote.error);
+        console.error('[ExpediteAll] Quote error:', expediteAllQuote.error, expediteAllQuote);
           }
 
       // Set Forward Air result
@@ -1368,7 +1409,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           setForwardResult(forwardAirFormatted);
         }
       } else if (forwardAirQuote && forwardAirQuote.error) {
-        console.error('Forward Air API error:', forwardAirQuote.error);
+        console.error('[ForwardAir] Quote error:', forwardAirQuote.error, forwardAirQuote);
       }
 
       // Set DAT Forecast result
@@ -1378,7 +1419,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           setDatResult(datFormatted);
         }
       } else if (datQuote && datQuote.error) {
-        console.error('DAT Forecast API error:', datQuote.error);
+        console.error('[DAT] Quote error:', datQuote.error, datQuote);
       }
     } catch (err) {
       setError(err && err.message ? err.message : String(err));
@@ -1503,7 +1544,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   </label>
                   <label>
                     Country
-                    <input value={pickupCountry} onChange={function(e){ setPickupCountry(e.target.value); }} />
+                    <input value={pickupCountry || 'US'} onChange={function(e){ setPickupCountry(e.target.value); }} disabled />
                   </label>
                 </div>
                 <label>
@@ -1566,7 +1607,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   </label>
                   <label>
                     Country
-                    <input value={deliveryCountry} onChange={function(e){ setDeliveryCountry(e.target.value); }} />
+                    <input value={deliveryCountry || 'US'} onChange={function(e){ setDeliveryCountry(e.target.value); }} disabled />
                   </label>
                 </div>
               </fieldset>
@@ -1663,7 +1704,16 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                 <div className="row-2">
                   <label>
                     Total Weight ({weightUnit || 'lbs'})
-                    <input type="number" value={computeTotalWeight(piecesRows)} readOnly />
+                    {hasMissingWeights(piecesRows) ? (
+                      <input 
+                        type="number" 
+                        value={manualTotalWeight !== '' ? manualTotalWeight : computeTotalWeight(piecesRows)} 
+                        onChange={function(e) { setManualTotalWeight(e.target.value); }}
+                        placeholder={String(computeTotalWeight(piecesRows))}
+                      />
+                    ) : (
+                      <input type="number" value={computeTotalWeight(piecesRows)} readOnly />
+                    )}
                   </label>
                   <label>
                     Pieces Count
