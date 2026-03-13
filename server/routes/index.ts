@@ -17,6 +17,7 @@ import { callExpediteAllAPI } from '../services/expediteAll';
 import { callForwardAirAPI } from '../services/forwardAir';
 import { generatePDFFromHTML } from '../services/pdfGenerator';
 import { getUnifiedQuotes } from '../services/unifiedQuoteService';
+import { searchZipcodebase, searchCityZipcodebase, ZipcodebaseError } from '../services/zipcodebase';
 import { UnifiedQuoteRequest } from '../types/quote';
 
 const router = express.Router();
@@ -796,6 +797,57 @@ router.post('/api/ai/parse-calculate-rate', async function(req: Request, res: Re
     const parsed = await parseCalculateRateWithOpenRouter(content);
     res.status(200).json(parsed);
   } catch (err) {
+    next(err);
+  }
+});
+
+// GET proxy for ZIP code search (zipcodebase) - used by client for origin/destination lookups
+router.get('/api/zip-search', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawCode = (req.query.code as string) || '';
+    const code = rawCode.trim();
+
+    if (!code || code.length < 3) {
+      res.status(400).json({ error: 'code query parameter (at least 3 characters) is required' });
+      return;
+    }
+
+    const json = await searchZipcodebase(code, 'US');
+
+    // Pass through the zipcodebase JSON as-is so existing client mappers keep working
+    res.status(200).json(json);
+  } catch (err: any) {
+    if (err instanceof ZipcodebaseError) {
+      res.status(err.status || 502).json({ error: err.message });
+      return;
+    }
+
+    console.error('[zip-search] Unexpected error calling zipcodebase:', err);
+    next(err);
+  }
+});
+
+// GET proxy for city-based ZIP search (zipcodebase) - for city text fields
+router.get('/api/city-search', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const rawCity = (req.query.city as string) || '';
+    const city = rawCity.trim();
+
+    if (!city || city.length < 2) {
+      res.status(400).json({ error: 'city query parameter (at least 2 characters) is required' });
+      return;
+    }
+
+    const json = await searchCityZipcodebase(city, 'US');
+
+    res.status(200).json(json);
+  } catch (err: any) {
+    if (err instanceof ZipcodebaseError) {
+      res.status(err.status || 502).json({ error: err.message });
+      return;
+    }
+
+    console.error('[city-search] Unexpected error calling zipcodebase city API:', err);
     next(err);
   }
 });

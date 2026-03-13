@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSidebar } from '../context/SidebarContext';
 import { 
   LayoutDashboard, 
   Package, 
@@ -9,7 +10,8 @@ import {
   Kanban,
   DollarSign,
   Percent,
-  MapPin
+  MapPin,
+  X
 } from 'lucide-react';
 import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
@@ -18,12 +20,47 @@ function Sidebar() {
   const auth = useAuth();
   const user = auth && auth.user;
   const isAdmin = user && Array.isArray(user.roles) && user.roles.indexOf('admin') > -1;
+  const { isOpen, closeSidebar } = useSidebar();
+  const sidebarRef = useRef(null);
 
   function handleSignOut() {
     if (auth && auth.signOut) {
       auth.signOut();
     }
   }
+
+  // Close sidebar when clicking outside on mobile
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (window.innerWidth <= 768 && isOpen && sidebarRef.current && !sidebarRef.current.contains(event.target)) {
+        // Check if click is not on the menu button
+        const menuButton = document.querySelector('.mobile-menu-button');
+        if (menuButton && !menuButton.contains(event.target)) {
+          closeSidebar();
+        }
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      // Prevent body scroll when sidebar is open on mobile
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.body.style.overflow = '';
+    };
+  }, [isOpen, closeSidebar]);
+
+  // Close sidebar when route changes on mobile
+  useEffect(() => {
+    if (window.innerWidth <= 768) {
+      closeSidebar();
+    }
+  }, [location.pathname, closeSidebar]);
 
   const navItems = [
     { id: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -41,9 +78,22 @@ function Sidebar() {
   const isActive = (path) => location.pathname === path;
 
   return (
-    <div className="sidebar">
-      {/* Logo */}
-      <div className="sidebar-logo">
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
+      
+      <div className={`sidebar ${isOpen ? 'open' : ''}`} ref={sidebarRef}>
+        {/* Mobile Close Button */}
+        <button 
+          className="sidebar-close-button"
+          onClick={closeSidebar}
+          aria-label="Close sidebar"
+        >
+          <X size={20} />
+        </button>
+        
+        {/* Logo */}
+        <div className="sidebar-logo">
         <div className="sidebar-logo-icon">
           <img 
             src={paperPlaneIcon} 
@@ -119,6 +169,7 @@ function Sidebar() {
         )}
       </div>
     </div>
+    </>
   );
 }
 

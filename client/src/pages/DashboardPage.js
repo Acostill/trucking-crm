@@ -17,6 +17,7 @@ import CalculateRatePage from './CalculateRatePage';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
 import { buildApiUrl } from '../config';
+import MobileMenuButton from '../components/MobileMenuButton';
 
 export default function DashboardPage() {
   const { user, checking, setUser } = useAuth();
@@ -260,6 +261,7 @@ export default function DashboardPage() {
   return (
     <div className="app-layout">
       <Sidebar />
+      <MobileMenuButton floating={true} />
       <main className="app-main">
         {/* Decorative Background Blobs */}
         <div className="app-blob app-blob-1" />
