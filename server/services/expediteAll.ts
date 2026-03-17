@@ -89,7 +89,10 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
         const contentType = (apiRes.headers && apiRes.headers['content-type']) || 'application/json';
         if (contentType.indexOf('application/json') > -1) {
           try {
-            resolve({ statusCode: apiRes.statusCode || 500, data: JSON.parse(data) as ExpediteAllResponse });
+            const parsed = JSON.parse(data) as ExpediteAllResponse;
+            // Log raw ExpediteAll response for debugging (full JSON, no [Object])
+            console.log('[ExpediteAll] Raw response:', JSON.stringify({ statusCode: apiRes.statusCode, data: parsed }, null, 2));
+            resolve({ statusCode: apiRes.statusCode || 500, data: parsed });
           } catch (e) {
             resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Failed to parse JSON response', raw: data } as ErrorResponse });
           }

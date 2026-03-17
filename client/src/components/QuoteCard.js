@@ -26,6 +26,8 @@ export default function QuoteCard(props) {
   var truckType = quote.truckType;
   var transitTime = quote.transitTime;
   var rateCalculationID = quote.rateCalculationID;
+  var mileage = quote.mileage;
+  var equipmentCategory = quote.equipmentCategory;
 
   var accessorialsTotal = priceAccessorials.reduce(function(sum, a) { return sum + (Number(a.price) || 0); }, 0);
 
@@ -58,9 +60,6 @@ export default function QuoteCard(props) {
             {mapSourceLabel(source)}
           </span>
         )}
-        {truckType && <span className="badge">{truckType}</span>}
-        {typeof transitTime === 'number' && <span className="badge">{transitTime} day{transitTime === 1 ? '' : 's'}</span>}
-        {rateCalculationID && <span className="badge muted">ID: {rateCalculationID}</span>}
       </div>
 
       <div className="grid-2">
@@ -83,6 +82,39 @@ export default function QuoteCard(props) {
 
         <div className="panel">
           <div className="panel-title">Additional info</div>
+          {truckType && (
+            <div className="kv">
+              <div className="k">Truck type</div>
+              <div className="v">{truckType}</div>
+            </div>
+          )}
+          {typeof transitTime === 'number' && (
+            <div className="kv">
+              <div className="k">Transit time</div>
+              <div className="v">
+                {transitTime} day{transitTime === 1 ? '' : 's'}
+              </div>
+            </div>
+          )}
+          {equipmentCategory && (
+            <div className="kv">
+              <div className="k">Equipment</div>
+              <div className="v">{equipmentCategory}</div>
+            </div>
+          )}
+          {typeof mileage === 'number' && (
+            <div className="kv">
+              <div className="k">Mileage</div>
+              <div className="v">{formatNumber(mileage)} mi</div>
+            </div>
+          )}
+          {rateCalculationID && (
+            <div className="kv">
+              <div className="k">Quote ID</div>
+              <div className="v">{rateCalculationID}</div>
+            </div>
+          )}
+          <div className="divider" />
           <div className="muted" style={{ fontSize: 13 }}>
             This quote is based on standard access and handling.
             <br />

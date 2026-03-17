@@ -1,6 +1,8 @@
 import { callExpediteAllAPI, ExpediteAllResponse } from './expediteAll';
 import { callForwardAirAPI, ForwardAirResponse } from './forwardAir';
 import { callDATForecastAPI, DATForecastResponse } from './datForecast';
+import { resolveZipFromCityState } from './zipcodebase';
+import { normalizeStateToCode } from '../utils/stateCodes';
 import { UnifiedQuoteRequest, ErrorResponse, StandardizedQuote } from '../types/quote';
 import db from '../db';
 
@@ -166,17 +168,83 @@ export interface UnifiedQuoteResponse {
 }
 
 /**
+ * Ensure pickup/delivery have normalized state (2-letter code) and zip when only city/state present.
+ * ExpediteAll and DAT require state to be a 2-letter code (e.g. CT not "Connecticut").
+ */
+async function ensureZipsAndStateInQuoteRequest(body: UnifiedQuoteRequest): Promise<UnifiedQuoteRequest> {
+  const pickup = body.pickup || {};
+  const pickupLoc = pickup.location || {};
+  const delivery = body.delivery || {};
+  const deliveryLoc = delivery.location || {};
+
+  const pickupStateCode = normalizeStateToCode(pickupLoc.state ?? pickupLoc.state_code);
+  const deliveryStateCode = normalizeStateToCode(deliveryLoc.state ?? deliveryLoc.state_code);
+
+  const needsPickupZip =
+    !(pickupLoc.zip && String(pickupLoc.zip).trim()) &&
+    (pickupLoc.city && String(pickupLoc.city).trim());
+  const needsDeliveryZip =
+    !(deliveryLoc.zip && String(deliveryLoc.zip).trim()) &&
+    (deliveryLoc.city && String(deliveryLoc.city).trim());
+
+  const [pickupZipResolved, deliveryZipResolved] =
+    needsPickupZip || needsDeliveryZip
+      ? await Promise.all([
+          needsPickupZip
+            ? resolveZipFromCityState(
+                String(pickupLoc.city),
+                String(pickupLoc.state || ''),
+                String(pickupLoc.country || 'US')
+              )
+            : Promise.resolve(null),
+          needsDeliveryZip
+            ? resolveZipFromCityState(
+                String(deliveryLoc.city),
+                String(deliveryLoc.state || ''),
+                String(deliveryLoc.country || 'US')
+              )
+            : Promise.resolve(null)
+        ])
+      : [null, null];
+
+  const out: UnifiedQuoteRequest = {
+    ...body,
+    pickup: {
+      ...pickup,
+      location: {
+        ...pickupLoc,
+        state: pickupStateCode,
+        state_code: pickupStateCode,
+        zip: (needsPickupZip && pickupZipResolved ? pickupZipResolved : pickupLoc.zip)
+      }
+    },
+    delivery: {
+      ...delivery,
+      location: {
+        ...deliveryLoc,
+        state: deliveryStateCode,
+        state_code: deliveryStateCode,
+        zip: (needsDeliveryZip && deliveryZipResolved ? deliveryZipResolved : deliveryLoc.zip)
+      }
+    }
+  };
+  return out;
+}
+
+/**
  * Calls all three quote APIs in parallel and combines the results
  * @param body - The request body containing pickup, delivery, and shipment details
  * @returns Promise resolving to a unified response with all three API results
  */
 export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<UnifiedQuoteResponse> {
   const marginPct = await getDefaultProfitMarginPct();
+  const normalizedBody = await ensureZipsAndStateInQuoteRequest(body || {});
+
   // Call all three APIs in parallel
   const [expediteAllResult, forwardAirResult, datForecastResult] = await Promise.allSettled([
-    callExpediteAllAPI(body),
-    callForwardAirAPI(body),
-    callDATForecastAPI(body)
+    callExpediteAllAPI(normalizedBody),
+    callForwardAirAPI(normalizedBody),
+    callDATForecastAPI(normalizedBody)
   ]);
 
   // Extract and normalize results, handling both success and failure cases
@@ -218,11 +286,23 @@ export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<Unifi
     };
   };
 
+  // Apply margin and log unified results for debugging
+  const expediteAllWithMargin = withMargin(expediteAll);
+  const forwardAirWithMargin = withMargin(forwardAir);
+  const datForecastWithMargin = withMargin(datForecast);
+
+  // Log all three standardized quotes (with margin applied)
+  console.log('[Quotes] Unified results with margin applied:', {
+    expediteAll: expediteAllWithMargin,
+    forwardAir: forwardAirWithMargin,
+    datForecast: datForecastWithMargin
+  });
+
   // Return combined response with standardized format
   return {
-    expediteAll: withMargin(expediteAll),
-    forwardAir: withMargin(forwardAir),
-    datForecast: withMargin(datForecast)
+    expediteAll: expediteAllWithMargin,
+    forwardAir: forwardAirWithMargin,
+    datForecast: datForecastWithMargin
   };
 }
 

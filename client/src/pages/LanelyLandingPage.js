@@ -12,14 +12,13 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import LandingNavbar from '../components/LandingNavbar';
+import CalculateRatePage from './CalculateRatePage';
 
 const EquipmentType = {
-  DRY_VAN: 'Dry Van',
-  REEFER: 'Reefer',
+  CARGO_VAN: 'Cargo Van',
+  VAN: 'Van',
   FLATBED: 'Flatbed',
-  BOX_TRUCK: 'Box Truck',
-  FLATBED_HOTSHOT: 'Flatbed Hotshot',
-  SPRINTER_VAN: 'Sprinter Van'
+  REEFER: 'Reefer'
 };
 
 export default function LanelyLandingPage() {
@@ -28,7 +27,7 @@ export default function LanelyLandingPage() {
     origin: '',
     destination: '',
     pickupDate: '',
-    equipment: EquipmentType.DRY_VAN,
+    equipment: EquipmentType.VAN,
     additionalInfo: '',
     originCity: '',
     originState: '',
@@ -54,19 +53,14 @@ export default function LanelyLandingPage() {
   const originZipAbortRef = useRef(null);
   const destinationZipAbortRef = useRef(null);
 
-  // AI Assistant state
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiInput, setAiInput] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(null);
-  const [aiListening, setAiListening] = useState(false);
-  const recognitionRef = useRef(null);
+  // Quick AI Input state (text box above shipment details)
+  const [quickAiInput, setQuickAiInput] = useState('');
+  const [quickAiLoading, setQuickAiLoading] = useState(false);
+  const [quickAiError, setQuickAiError] = useState(null);
 
-  const buildZipSearchUrl = (code) => {
-    const base = 'https://app.zipcodebase.com/api/v1/search';
-    const apiKey = '44ceb090-0620-11f1-b2cd-796c895a7671';
-    return base + '?apikey=' + encodeURIComponent(apiKey) + '&codes=' + encodeURIComponent(code) + '&country=US';
-  };
+  // Instant Rates modal state (reuse CalculateRatePage embedded modal)
+  const [showRatesModal, setShowRatesModal] = useState(false);
+  const [ratesPrefill, setRatesPrefill] = useState(null);
 
   const mapZipResults = (code, payload) => {
     const results = payload && payload.results ? payload.results[code] : null;
@@ -77,7 +71,8 @@ export default function LanelyLandingPage() {
         zip: item.postal_code,
         city: item.city_en || item.city || '',
         state: item.state_code || item.state || '',
-        country: item.country_code || 'US'
+        country: item.country_code || 'US',
+        airport_iata: item.airport_iata || ''
       }));
   };
 
@@ -142,7 +137,7 @@ export default function LanelyLandingPage() {
     originZipAbortRef.current = controller;
     setOriginZipLoading(true);
     setOriginZipError(null);
-    fetch(buildZipSearchUrl(value), { signal: controller.signal })
+    fetch(buildApiUrl('/api/zip-search?code=' + encodeURIComponent(value)), { signal: controller.signal })
       .then((resp) => {
         if (!resp.ok) throw new Error('Zip search failed');
         return resp.json();
@@ -178,7 +173,7 @@ export default function LanelyLandingPage() {
     destinationZipAbortRef.current = controller;
     setDestinationZipLoading(true);
     setDestinationZipError(null);
-    fetch(buildZipSearchUrl(value), { signal: controller.signal })
+    fetch(buildApiUrl('/api/zip-search?code=' + encodeURIComponent(value)), { signal: controller.signal })
       .then((resp) => {
         if (!resp.ok) throw new Error('Zip search failed');
         return resp.json();
@@ -220,9 +215,7 @@ export default function LanelyLandingPage() {
     }
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log("Generating quote for:", formData);
+  function buildPrefillFromForm() {
     const origin = (formData.origin || '').trim();
     const destination = (formData.destination || '').trim();
     const isZip = function(value) { return /^\d{5}(-\d{4})?$/.test(value); };
@@ -235,7 +228,7 @@ export default function LanelyLandingPage() {
       ? manualWeightNum
       : computedWeight;
 
-    const prefill = {
+    return {
       pickupCity: isZip(origin) ? (formData.originCity || '') : origin,
       pickupState: isZip(origin) ? (formData.originState || '') : '',
       pickupZip: isZip(origin) ? origin : '',
@@ -252,73 +245,14 @@ export default function LanelyLandingPage() {
         ? manualTotalWeight 
         : undefined
     };
+  }
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log("Generating quote for:", formData);
+    const prefill = buildPrefillFromForm();
     navigate('/calculate-rate', { state: { prefill } });
   };
-
-  // AI Assistant functions
-  function ensureRecognition() {
-    if (recognitionRef.current) return recognitionRef.current;
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = function(event) {
-      const transcript = event.results && event.results[0] && event.results[0][0]
-        ? event.results[0][0].transcript
-        : '';
-      if (transcript) {
-        setAiInput(transcript);
-      }
-    };
-    recognition.onend = function() {
-      setAiListening(false);
-    };
-    recognition.onerror = function(event) {
-      setAiListening(false);
-      var reason = event && event.error ? String(event.error) : 'unknown';
-      if (reason === 'not-allowed' || reason === 'service-not-allowed') {
-        setAiError('Microphone access was blocked. Allow mic permissions and use HTTPS or localhost.');
-        return;
-      }
-      if (reason === 'no-speech') {
-        setAiError('No speech detected. Please try again or type your request.');
-        return;
-      }
-      if (reason === 'audio-capture') {
-        setAiError('No microphone found. Please connect a mic or type your request.');
-        return;
-      }
-      setAiError('Voice input failed (' + reason + '). Please type your request.');
-    };
-    recognitionRef.current = recognition;
-    return recognition;
-  }
-
-  function handleStartVoice() {
-    const recognition = ensureRecognition();
-    if (!recognition) {
-      setAiError('Voice input is not supported in this browser.');
-      return;
-    }
-    setAiError(null);
-    setAiListening(true);
-    try {
-      recognition.start();
-    } catch (_err) {
-      setAiListening(false);
-      setAiError('Voice input failed to start. Please type your request.');
-    }
-  }
-
-  function handleStopVoice() {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    setAiListening(false);
-  }
 
   function applyAiResult(parsed) {
     if (!parsed || typeof parsed !== 'object') return;
@@ -375,12 +309,10 @@ export default function LanelyLandingPage() {
     // Map equipment type
     if (parsed.equipmentType) {
       const equipmentMap = {
-        'Dry Van': EquipmentType.DRY_VAN,
-        'Reefer': EquipmentType.REEFER,
+        'Cargo Van': EquipmentType.CARGO_VAN,
+        'Van': EquipmentType.VAN,
         'Flatbed': EquipmentType.FLATBED,
-        'Box Truck': EquipmentType.BOX_TRUCK,
-        'Flatbed Hotshot': EquipmentType.FLATBED_HOTSHOT,
-        'Sprinter Van': EquipmentType.SPRINTER_VAN
+        'Reefer': EquipmentType.REEFER
       };
       const mappedEquipment = equipmentMap[parsed.equipmentType] || parsed.equipmentType;
       setFormData(prev => ({ ...prev, equipment: mappedEquipment }));
@@ -434,18 +366,18 @@ export default function LanelyLandingPage() {
     }
   }
 
-  async function handleAiSubmit() {
-    if (!aiInput.trim()) {
-      setAiError('Please enter a request or use voice input.');
+  async function handleQuickAiSubmit() {
+    if (!quickAiInput.trim()) {
+      setQuickAiError('Please enter shipment details.');
       return;
     }
-    setAiLoading(true);
-    setAiError(null);
+    setQuickAiLoading(true);
+    setQuickAiError(null);
     try {
       const resp = await fetch(buildApiUrl('/api/ai/parse-calculate-rate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: aiInput })
+        body: JSON.stringify({ content: quickAiInput })
       });
       if (!resp.ok) {
         const msg = await resp.text();
@@ -453,11 +385,11 @@ export default function LanelyLandingPage() {
       }
       const data = await resp.json();
       applyAiResult(data);
-      setAiInput(''); // Clear input after successful submission
+      setQuickAiInput(''); // Clear input after successful submission
     } catch (err) {
-      setAiError(err && err.message ? err.message : 'Failed to parse input.');
+      setQuickAiError(err && err.message ? err.message : 'Failed to parse input.');
     } finally {
-      setAiLoading(false);
+      setQuickAiLoading(false);
     }
   }
 
@@ -565,7 +497,7 @@ export default function LanelyLandingPage() {
                             >
                               <span>{option.zip}</span>
                               <span className="zip-option-meta">
-                                {option.city}{option.state ? ', ' + option.state : ''}
+                                {option.city}{option.state ? ', ' + option.state : ''}{option.airport_iata ? ' · ' + option.airport_iata : ''}
                               </span>
                             </button>
                           ))}
@@ -608,7 +540,7 @@ export default function LanelyLandingPage() {
                             >
                               <span>{option.zip}</span>
                               <span className="zip-option-meta">
-                                {option.city}{option.state ? ', ' + option.state : ''}
+                                {option.city}{option.state ? ', ' + option.state : ''}{option.airport_iata ? ' · ' + option.airport_iata : ''}
                               </span>
                             </button>
                           ))}
@@ -646,13 +578,81 @@ export default function LanelyLandingPage() {
                         className="w-full pl-9 pr-8 py-2.5 bg-white/60 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm appearance-none cursor-pointer"
                         style={{ width: '100%', paddingLeft: '36px', paddingRight: '32px', paddingTop: '10px', paddingBottom: '10px', backgroundColor: 'rgba(255, 255, 255, 0.6)', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: 500, color: '#0f172a' }}
                       >
-                        <option value={EquipmentType.DRY_VAN}>Dry Van</option>
-                        <option value={EquipmentType.REEFER}>Reefer</option>
+                        <option value={EquipmentType.CARGO_VAN}>Cargo Van</option>
+                        <option value={EquipmentType.VAN}>Van</option>
                         <option value={EquipmentType.FLATBED}>Flatbed</option>
-                        <option value={EquipmentType.BOX_TRUCK}>Box Truck</option>
-                        <option value={EquipmentType.FLATBED_HOTSHOT}>Flatbed Hotshot</option>
-                        <option value={EquipmentType.SPRINTER_VAN}>Sprinter Van</option>
+                        <option value={EquipmentType.REEFER}>Reefer</option>
                       </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick AI Input Section */}
+                <div className="bg-gradient-to-br from-indigo-50/80 to-purple-50/80 rounded-xl p-3 border border-indigo-100/50" style={{ background: 'linear-gradient(to bottom right, rgba(238, 242, 255, 0.8), rgba(250, 245, 255, 0.8))', borderRadius: '12px', padding: '12px', border: '1px solid rgba(199, 210, 254, 0.5)' }}>
+                  <h4 className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider mb-2 flex items-center gap-1" style={{ fontSize: '10px', fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Sparkles size={12} />
+                    Quick Fill with AI
+                  </h4>
+                  <div className="space-y-2" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <textarea
+                      value={quickAiInput}
+                      onChange={(e) => setQuickAiInput(e.target.value)}
+                      placeholder="Paste or type shipment details here... Example: Pickup in Dallas TX 75201 on Jan 15, deliver to Phoenix AZ 85001. 2 pallets 48x40x48 inches, 2500 lbs, dry van."
+                      className="w-full px-3 py-2 bg-white/80 border border-indigo-200/50 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
+                      style={{ 
+                        width: '100%', 
+                        padding: '8px 12px', 
+                        backgroundColor: 'rgba(255, 255, 255, 0.8)', 
+                        border: '1px solid rgba(199, 210, 254, 0.5)', 
+                        borderRadius: '8px', 
+                        fontSize: '14px', 
+                        color: '#0f172a',
+                        minHeight: '60px',
+                        resize: 'none',
+                        fontFamily: 'inherit'
+                      }}
+                      rows={3}
+                      disabled={quickAiLoading}
+                    />
+                    <div className="flex items-center justify-between gap-2" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                      {quickAiError && (
+                        <span className="text-xs text-red-500 flex-1" style={{ fontSize: '12px', color: '#ef4444', flex: 1 }}>
+                          {quickAiError}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleQuickAiSubmit}
+                        disabled={quickAiLoading || !quickAiInput.trim()}
+                        className="ml-auto px-4 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                        style={{ 
+                          marginLeft: 'auto',
+                          padding: '6px 16px', 
+                          backgroundColor: '#4f46e5', 
+                          color: 'white', 
+                          fontSize: '12px', 
+                          fontWeight: 600, 
+                          borderRadius: '8px',
+                          border: 'none',
+                          cursor: quickAiLoading || !quickAiInput.trim() ? 'not-allowed' : 'pointer',
+                          opacity: quickAiLoading || !quickAiInput.trim() ? 0.5 : 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        {quickAiLoading ? (
+                          <>
+                            <span className="spinner" style={{ width: '12px', height: '12px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }}></span>
+                            <span>Processing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles size={12} />
+                            <span>Apply to Form</span>
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -793,9 +793,14 @@ export default function LanelyLandingPage() {
                 </div>
 
                 <button 
-                  type="submit"
+                  type="button"
                   className="w-full mt-2 group relative flex items-center justify-center gap-2 bg-slate-900 hover:bg-indigo-600 text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-300 shadow-lg hover:shadow-indigo-500/25 active:scale-[0.98] overflow-hidden"
                   style={{ width: '100%', marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', backgroundColor: '#0f172a', color: 'white', fontWeight: 600, padding: '14px 24px', borderRadius: '12px', position: 'relative', overflow: 'hidden' }}
+                  onClick={() => {
+                    const prefill = buildPrefillFromForm();
+                    setRatesPrefill(prefill);
+                    setShowRatesModal(true);
+                  }}
                 >
                   <Sparkles size={18} className="relative z-10 transition-transform group-hover:rotate-12" style={{ position: 'relative', zIndex: 10 }} />
                   <span className="relative z-10" style={{ position: 'relative', zIndex: 10 }}>View Instant Rates</span>
@@ -806,6 +811,31 @@ export default function LanelyLandingPage() {
           </div>
         </div>
       </main>
+
+      {/* Instant Rates Modal (reuses CalculateRatePage embedded view) */}
+      {showRatesModal && (
+        <div className="quote-modal-overlay" onClick={() => setShowRatesModal(false)}>
+          <div className="quote-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="quote-modal-header">
+              <div>
+                <h2 className="quote-modal-title">Your Quotes</h2>
+              </div>
+              <button className="quote-modal-close" onClick={() => setShowRatesModal(false)}>
+                ×
+              </button>
+            </div>
+            <div className="quote-modal-body">
+              <CalculateRatePage
+                embedded
+                initialValues={{}}
+                prefill={ratesPrefill}
+                autoSubmit
+                onSelectQuote={null}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Value Proposition Section */}
       <section id="features" className="relative z-10 py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto" style={{ padding: '48px 16px', maxWidth: '1280px', margin: '0 auto' }}>
@@ -880,57 +910,6 @@ export default function LanelyLandingPage() {
           </div>
         </div>
       </footer>
-
-      {/* AI Assistant Widget */}
-      <div className="ai-widget-fixed">
-        <button
-          type="button"
-          className="ai-widget-toggle"
-          onClick={() => setAiOpen(!aiOpen)}
-          aria-label={aiOpen ? 'Close assistant' : 'Open assistant'}
-        >
-          <i className="fa-regular fa-message" aria-hidden="true"></i>
-        </button>
-        {aiOpen && (
-          <div className="ai-widget-panel">
-            <div className="ai-widget-header">
-              <div className="ai-widget-title">Shipment Assistant</div>
-              <div className="ai-widget-subtitle">
-                Describe the load and we'll fill the form.
-              </div>
-            </div>
-            <div className="ai-box">
-              <label>
-                Tell us the shipment details
-                <textarea
-                  className="ai-textarea"
-                  placeholder="Example: Pickup in Dallas TX 75201 on Jan 15, deliver to Phoenix AZ 85001. 2 pallets 48x40x48 inches, 2500 lbs, dry van."
-                  value={aiInput}
-                  onChange={(e) => setAiInput(e.target.value)}
-                />
-              </label>
-              <div className="ai-actions">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={aiListening ? handleStopVoice : handleStartVoice}
-                >
-                  {aiListening ? 'Stop Voice' : 'Use Voice'}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={handleAiSubmit}
-                  disabled={aiLoading}
-                >
-                  {aiLoading ? 'Applying…' : 'Apply to Form'}
-                </button>
-              </div>
-              {aiError && <div className="ai-error">{aiError}</div>}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

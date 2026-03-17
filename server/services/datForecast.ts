@@ -139,6 +139,7 @@ function getDATAccessToken(): Promise<string> {
  * @returns DAT equipment category string (defaults to "VAN")
  */
 function mapEquipmentCategory(truckType?: string): string {
+  console.log('truckType', truckType);
   if (!truckType) return 'VAN';
   
   const normalized = String(truckType).toUpperCase();
@@ -211,6 +212,8 @@ export function callDATForecastAPI(body: UnifiedQuoteRequest): Promise<APIRespon
           if (contentType.indexOf('application/json') > -1) {
             try {
               const parsedData = JSON.parse(data);
+              // Log raw DAT Forecast response for debugging (full JSON, no [Object])
+              console.log('[DATForecast] Raw response:', JSON.stringify({ statusCode: apiRes.statusCode, data: parsedData }, null, 2));
               
               // Enrich response with dummy forecasts if missing
               if (!parsedData.forecasts) {

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import QuoteCard from '../components/QuoteCard';
 import { buildApiUrl } from '../config';
 import GlobalTopbar from '../components/GlobalTopbar';
+import Sidebar from '../components/Sidebar';
 import { useLocation } from 'react-router-dom';
 import { MapContainer, Marker, TileLayer, Polyline, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -17,6 +18,7 @@ const DEFAULT_INITIAL_VALUES = {
   pickupCity: '',
   pickupState: '',
   pickupZip: '',
+  // Country is fixed to US in payload; no input field.
   pickupCountry: 'US',
   pickupDate: getDefaultPickupDateIso(),
   deliveryCity: '',
@@ -47,6 +49,7 @@ const EMBEDDED_DEFAULT_VALUES = {
   pickupCity: '',
   pickupState: '',
   pickupZip: '',
+  // Country is fixed to US in payload; no input field.
   pickupCountry: 'US',
   pickupDate: '',
   deliveryCity: '',
@@ -142,7 +145,7 @@ function buildPiecesRowsFrom(source) {
   return rows;
 }
 
-export default function CalculateRatePage({ embedded, initialValues, prefill, onSelectQuote }) {
+export default function CalculateRatePage({ embedded, initialValues, prefill, onSelectQuote, autoSubmit }) {
   const location = useLocation();
   const mergedPrefill = prefill || (location && location.state ? location.state.prefill : null);
   var baseInit = embedded ? EMBEDDED_DEFAULT_VALUES : DEFAULT_INITIAL_VALUES;
@@ -151,13 +154,15 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [pickupCity, setPickupCity] = useState(init.pickupCity);
   const [pickupState, setPickupState] = useState(init.pickupState);
   const [pickupZip, setPickupZip] = useState(init.pickupZip);
-  const [pickupCountry, setPickupCountry] = useState(init.pickupCountry || 'US');
+  const [pickupAirportCode, setPickupAirportCode] = useState('');
+  const [pickupCountry] = useState('US');
   const [pickupDate, setPickupDate] = useState(init.pickupDate);
 
   const [deliveryCity, setDeliveryCity] = useState(init.deliveryCity);
   const [deliveryState, setDeliveryState] = useState(init.deliveryState);
   const [deliveryZip, setDeliveryZip] = useState(init.deliveryZip);
-  const [deliveryCountry, setDeliveryCountry] = useState(init.deliveryCountry || 'US');
+  const [deliveryAirportCode, setDeliveryAirportCode] = useState('');
+  const [deliveryCountry] = useState('US');
 
   const [piecesUnit, setPiecesUnit] = useState(init.piecesUnit);
   const [piecesRows, setPiecesRows] = useState(buildPiecesRowsFrom(init));
@@ -187,13 +192,13 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     apply(setPickupCity, mergedPrefill.pickupCity);
     apply(setPickupState, mergedPrefill.pickupState);
     apply(setPickupZip, mergedPrefill.pickupZip);
-    apply(setPickupCountry, mergedPrefill.pickupCountry);
+    // Country is fixed to US; ignore prefill country.
     apply(setPickupDate, mergedPrefill.pickupDate);
 
     apply(setDeliveryCity, mergedPrefill.deliveryCity);
     apply(setDeliveryState, mergedPrefill.deliveryState);
     apply(setDeliveryZip, mergedPrefill.deliveryZip);
-    apply(setDeliveryCountry, mergedPrefill.deliveryCountry);
+    // Country is fixed to US; ignore prefill country.
 
     apply(setPiecesUnit, mergedPrefill.piecesUnit);
     apply(setWeightUnit, mergedPrefill.weightUnit);
@@ -246,15 +251,17 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     }
   }, [mergedPrefill]);
 
-  // Ensure country fields are always set to "US"
+  // Auto-submit quotes when requested (e.g., from landing page "View Instant Rates")
   React.useEffect(function() {
-    if (pickupCountry !== 'US') {
-      setPickupCountry('US');
-    }
-    if (deliveryCountry !== 'US') {
-      setDeliveryCountry('US');
-    }
-  }, [pickupCountry, deliveryCountry]);
+    if (!autoSubmit) return;
+    // Basic guard: require at least pickup and delivery to be present
+    var hasPickup = (pickupZip || pickupCity);
+    var hasDelivery = (deliveryZip || deliveryCity);
+    if (!hasPickup || !hasDelivery) return;
+    // Trigger submit once after prefill has been applied
+    onSubmit({ preventDefault: function() {} });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmit, pickupZip, pickupCity, deliveryZip, deliveryCity]);
 
   // Sync manual total weight: clear it when all pieces have weights (switch back to computed mode)
   React.useEffect(function() {
@@ -302,18 +309,24 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [deliveryZipError, setDeliveryZipError] = useState(null);
   const [showDeliveryZipOptions, setShowDeliveryZipOptions] = useState(false);
 
+  const [pickupCityOptions, setPickupCityOptions] = useState([]);
+  const [pickupCityLoading, setPickupCityLoading] = useState(false);
+  const [pickupCityError, setPickupCityError] = useState(null);
+  const [showPickupCityOptions, setShowPickupCityOptions] = useState(false);
+
+  const [deliveryCityOptions, setDeliveryCityOptions] = useState([]);
+  const [deliveryCityLoading, setDeliveryCityLoading] = useState(false);
+  const [deliveryCityError, setDeliveryCityError] = useState(null);
+  const [showDeliveryCityOptions, setShowDeliveryCityOptions] = useState(false);
+
   const pickupZipAbortRef = useRef(null);
   const deliveryZipAbortRef = useRef(null);
+  const pickupCityAbortRef = useRef(null);
+  const deliveryCityAbortRef = useRef(null);
 
   const pickupDeliveryLine = React.useMemo(function() {
     return buildPickupDeliveryLine(pickupMarker, deliveryMarker);
   }, [pickupMarker, deliveryMarker]);
-
-  function buildZipSearchUrl(code) {
-    var base = 'https://app.zipcodebase.com/api/v1/search';
-    var apiKey = '44ceb090-0620-11f1-b2cd-796c895a7671';
-    return base + '?apikey=' + encodeURIComponent(apiKey) + '&codes=' + encodeURIComponent(code) + '&country=US';
-  }
 
   function mapZipResults(code, payload) {
     var results = payload && payload.results ? payload.results[code] : null;
@@ -326,10 +339,43 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           city: item.city_en || item.city || '',
           state: item.state_code || item.state || '',
           country: item.country_code || 'US',
+          airport_iata: item.airport_iata || '',
           lat: item.latitude != null ? Number(item.latitude) : null,
           lng: item.longitude != null ? Number(item.longitude) : null
         };
       });
+  }
+
+  // Map response from zipcodebase city search:
+  // {
+  //   query: { city: "jamaica", state: null, country: "us" },
+  //   results: ["11430", "11432", ...]
+  // }
+  function mapCityResults(payload, cityName) {
+    var results = payload && Array.isArray(payload.results) ? payload.results : [];
+    var details = payload && payload.zip_details ? payload.zip_details : null;
+    if (!results.length) return [];
+    var country =
+      (payload && payload.query && payload.query.country
+        ? String(payload.query.country).toUpperCase()
+        : 'US');
+    var city = cityName || (payload && payload.query && payload.query.city) || '';
+    return results
+      .map(function(zip) {
+        var zipStr = String(zip);
+        var info = details && details[zipStr] ? details[zipStr] : null;
+        // Only keep ZIPs that have been enriched with details (state, etc.)
+        if (!info) return null;
+        return {
+          zip: zipStr,
+          city: (info.city || city) || city,
+          state: (info.state || info.state_code) || '',
+          state_code: (info.state_code || info.state) || '',
+          country: info.country_code || country,
+          airport_iata: info.airport_iata ? info.airport_iata : ''
+        };
+      })
+      .filter(function(item) { return item !== null; });
   }
 
   React.useEffect(function() {
@@ -347,7 +393,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     pickupZipAbortRef.current = controller;
     setPickupZipLoading(true);
     setPickupZipError(null);
-    fetch(buildZipSearchUrl(code), { signal: controller.signal })
+    fetch(buildApiUrl('/api/zip-search?code=' + encodeURIComponent(code)), { signal: controller.signal })
       .then(function(resp) {
         if (!resp.ok) {
           throw new Error('Zip search failed');
@@ -389,7 +435,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     deliveryZipAbortRef.current = controller;
     setDeliveryZipLoading(true);
     setDeliveryZipError(null);
-    fetch(buildZipSearchUrl(code), { signal: controller.signal })
+    fetch(buildApiUrl('/api/zip-search?code=' + encodeURIComponent(code)), { signal: controller.signal })
       .then(function(resp) {
         if (!resp.ok) {
           throw new Error('Zip search failed');
@@ -416,20 +462,174 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     };
   }, [deliveryZip]);
 
+  React.useEffect(function() {
+    var city = String(pickupCity || '').trim();
+    // Only search when at least 2 non-numeric characters are present
+    if (city.length < 2 || /^\d+$/.test(city)) {
+      setPickupCityOptions([]);
+      setPickupCityLoading(false);
+      setPickupCityError(null);
+      return;
+    }
+    // Debounce by 500ms before firing city search
+    var timeoutId = setTimeout(function() {
+      if (pickupCityAbortRef.current) {
+        pickupCityAbortRef.current.abort();
+      }
+      var controller = new AbortController();
+      pickupCityAbortRef.current = controller;
+      setPickupCityLoading(true);
+      setPickupCityError(null);
+      fetch(buildApiUrl('/api/city-search?city=' + encodeURIComponent(city)), { signal: controller.signal })
+        .then(function(resp) {
+          if (!resp.ok) {
+            throw new Error('City search failed');
+          }
+          return resp.json();
+        })
+        .then(function(data) {
+          var mapped = mapCityResults(data, city);
+          setPickupCityOptions(mapped);
+        })
+        .catch(function(err) {
+          if (err && err.name === 'AbortError') return;
+          setPickupCityError('City search failed.');
+          setPickupCityOptions([]);
+        })
+        .finally(function() {
+          setPickupCityLoading(false);
+        });
+    }, 500);
+    return function() {
+      clearTimeout(timeoutId);
+      if (pickupCityAbortRef.current) {
+        pickupCityAbortRef.current.abort();
+      }
+    };
+  }, [pickupCity]);
+
+  React.useEffect(function() {
+    var city = String(deliveryCity || '').trim();
+    if (city.length < 2 || /^\d+$/.test(city)) {
+      setDeliveryCityOptions([]);
+      setDeliveryCityLoading(false);
+      setDeliveryCityError(null);
+      return;
+    }
+    var timeoutId = setTimeout(function() {
+      if (deliveryCityAbortRef.current) {
+        deliveryCityAbortRef.current.abort();
+      }
+      var controller = new AbortController();
+      deliveryCityAbortRef.current = controller;
+      setDeliveryCityLoading(true);
+      setDeliveryCityError(null);
+      fetch(buildApiUrl('/api/city-search?city=' + encodeURIComponent(city)), { signal: controller.signal })
+        .then(function(resp) {
+          if (!resp.ok) {
+            throw new Error('City search failed');
+          }
+          return resp.json();
+        })
+        .then(function(data) {
+          var mapped = mapCityResults(data, city);
+          setDeliveryCityOptions(mapped);
+        })
+        .catch(function(err) {
+          if (err && err.name === 'AbortError') return;
+          setDeliveryCityError('City search failed.');
+          setDeliveryCityOptions([]);
+        })
+        .finally(function() {
+          setDeliveryCityLoading(false);
+        });
+    }, 500);
+    return function() {
+      clearTimeout(timeoutId);
+      if (deliveryCityAbortRef.current) {
+        deliveryCityAbortRef.current.abort();
+      }
+    };
+  }, [deliveryCity]);
+
+  function setMarkerFromOption(option, kind) {
+    if (!option) return;
+    var lat = option.lat;
+    var lng = option.lng;
+    if (lat != null && lng != null) {
+      var point = { lat: Number(lat), lng: Number(lng) };
+      if (kind === 'pickup') {
+        setPickupMarker(point);
+      } else {
+        setDeliveryMarker(point);
+      }
+      return;
+    }
+
+    // Fallback: if we don't have coordinates but we do have a ZIP,
+    // approximate the location via OpenStreetMap Nominatim.
+    var zip = option.zip;
+    var country = option.country || 'US';
+    if (!zip) return;
+    setMapLookupLoading(true);
+    setMapLookupError(null);
+    forwardGeocodeZip(zip, country)
+      .then(function(point) {
+        if (!point || point.lat == null || point.lng == null) return;
+        if (kind === 'pickup') {
+          setPickupMarker(point);
+        } else {
+          setDeliveryMarker(point);
+        }
+      })
+      .catch(function(_err) {
+        // Swallow errors; user can still click on the map manually
+      })
+      .finally(function() {
+        setMapLookupLoading(false);
+      });
+  }
+
   function applyZipSelection(option, kind) {
     if (!option) return;
     if (kind === 'pickup') {
       setPickupZip(option.zip || '');
       setPickupCity(option.city || '');
       setPickupState(option.state || '');
-      setPickupCountry(option.country || 'US');
+      setPickupAirportCode(option.airport_iata || '');
       setShowPickupZipOptions(false);
+      setMarkerFromOption(option, 'pickup');
     } else {
       setDeliveryZip(option.zip || '');
       setDeliveryCity(option.city || '');
       setDeliveryState(option.state || '');
-      setDeliveryCountry(option.country || 'US');
+      setDeliveryAirportCode(option.airport_iata || '');
       setShowDeliveryZipOptions(false);
+      setMarkerFromOption(option, 'delivery');
+    }
+  }
+
+  function applyCitySelection(option, kind) {
+    if (!option) return;
+    if (kind === 'pickup') {
+      setPickupCity(option.city || '');
+      setPickupState(option.state || option.state_code || '');
+      if (option.zip) {
+        setPickupZip(option.zip);
+      }
+      setPickupAirportCode(option.airport_iata || '');
+      setShowPickupCityOptions(false);
+      setMarkerFromOption(option, 'pickup');
+    } else {
+      setDeliveryCity(option.city || '');
+      setDeliveryState(option.state || option.state_code || '');
+      if (option.zip) {
+        setDeliveryZip(option.zip);
+      }
+      setDeliveryCountry(option.country || 'US');
+      setDeliveryAirportCode(option.airport_iata || '');
+      setShowDeliveryCityOptions(false);
+      setMarkerFromOption(option, 'delivery');
     }
   }
 
@@ -502,14 +702,12 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       if (parsed.pickup.city) setPickupCity(parsed.pickup.city);
       if (parsed.pickup.state) setPickupState(parsed.pickup.state);
       if (parsed.pickup.zip) setPickupZip(parsed.pickup.zip);
-      if (parsed.pickup.country) setPickupCountry(parsed.pickup.country);
       if (parsed.pickup.date) setPickupDate(parsed.pickup.date);
     }
     if (parsed.delivery) {
       if (parsed.delivery.city) setDeliveryCity(parsed.delivery.city);
       if (parsed.delivery.state) setDeliveryState(parsed.delivery.state);
       if (parsed.delivery.zip) setDeliveryZip(parsed.delivery.zip);
-      if (parsed.delivery.country) setDeliveryCountry(parsed.delivery.country);
     }
     if (parsed.pieces && Array.isArray(parsed.pieces.parts)) {
       const nextRows = [];
@@ -602,6 +800,37 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     return { city, state, zip, country };
   }
 
+  async function forwardGeocodeZip(zip, country) {
+    const trimmedZip = String(zip || '').trim();
+    if (!trimmedZip) {
+      throw new Error('ZIP code is required');
+    }
+    const countryCode = String(country || 'US').toLowerCase();
+    const url =
+      'https://nominatim.openstreetmap.org/search' +
+      '?format=jsonv2' +
+      '&postalcode=' + encodeURIComponent(trimmedZip) +
+      '&countrycodes=' + encodeURIComponent(countryCode) +
+      '&limit=1' +
+      '&email=support@trucking-crm.app';
+    const resp = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!resp.ok) {
+      throw new Error('Failed to look up ZIP location');
+    }
+    const data = await resp.json();
+    if (!Array.isArray(data) || !data.length) {
+      throw new Error('No location found for ZIP');
+    }
+    const item = data[0] || {};
+    if (item.lat == null || item.lon == null) {
+      throw new Error('Location response missing coordinates');
+    }
+    return {
+      lat: Number(item.lat),
+      lng: Number(item.lon)
+    };
+  }
+
   async function handleMapPick(latlng) {
     if (mapMode === 'pickup') {
       setPickupMarker(latlng);
@@ -616,12 +845,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         setPickupCity(details.city || '');
         setPickupState(details.state || '');
         setPickupZip(details.zip || '');
-        setPickupCountry(details.country || 'US');
       } else {
         setDeliveryCity(details.city || '');
         setDeliveryState(details.state || '');
         setDeliveryZip(details.zip || '');
-        setDeliveryCountry(details.country || 'US');
       }
     } catch (_err) {
       setMapLookupError('Address lookup failed. You can edit the fields manually.');
@@ -723,7 +950,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           city: pickupCity,
           state: pickupState,
           zip: pickupZip,
-          country: pickupCountry
+          country: 'US'
         },
         date: pickupDate
       },
@@ -732,7 +959,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           city: deliveryCity,
           state: deliveryState,
           zip: deliveryZip,
-          country: deliveryCountry
+          country: 'US'
         }
       },
       pieces: {
@@ -1388,7 +1615,8 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           truckType: standardizedQuote.additionalInfo?.truckType,
           transitTime: standardizedQuote.additionalInfo?.transitTime,
           rateCalculationID: standardizedQuote.additionalInfo?.rateCalculationID,
-          mileage: standardizedQuote.additionalInfo?.mileage
+          mileage: standardizedQuote.additionalInfo?.mileage,
+          equipmentCategory: standardizedQuote.additionalInfo?.equipmentCategory
         };
       }
 
@@ -1430,11 +1658,18 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 
   var card = (
         <div className="card">
+          {! (embedded && autoSubmit) && (
           <div className="card-header">
             <h2 className="title">Shipment details</h2>
             <div className="subtitle">Enter pickup, delivery and freight info</div>
           </div>
+          )}
           <div className="card-body">
+            {embedded && autoSubmit && loading && (
+              <div className="quote-loading-overlay">
+                <span className="quote-loading-spinner" />
+              </div>
+            )}
             {!embedded && (
               <fieldset>
                 <legend>Map</legend>
@@ -1456,19 +1691,33 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     </button>
                   </div>
                   <div className="map-coordinates">
-                    <div>
+                    <div className="map-location-details">
                       <span className="map-label">Pickup</span>
-                      <span className="map-value">
-                        {[pickupCity, pickupState].filter(Boolean).join(', ') +
-                          (pickupZip ? (pickupCity || pickupState ? ' ' : '') + pickupZip : '') || '-'}
+                      <span className="map-location-line-primary">
+                        {(
+                          [pickupCity, pickupState].filter(Boolean).join(', ') +
+                          (pickupZip ? (pickupCity || pickupState ? ' ' : '') + pickupZip : '')
+                        ) || '-'}
                       </span>
+                      {pickupAirportCode && (
+                        <span className="map-location-line-secondary">
+                          Airport: {pickupAirportCode}
+                        </span>
+                      )}
                     </div>
-                    <div>
+                    <div className="map-location-details">
                       <span className="map-label">Delivery</span>
-                      <span className="map-value">
-                        {[deliveryCity, deliveryState].filter(Boolean).join(', ') +
-                          (deliveryZip ? (deliveryCity || deliveryState ? ' ' : '') + deliveryZip : '') || '-'}
+                      <span className="map-location-line-primary">
+                        {(
+                          [deliveryCity, deliveryState].filter(Boolean).join(', ') +
+                          (deliveryZip ? (deliveryCity || deliveryState ? ' ' : '') + deliveryZip : '')
+                        ) || '-'}
                       </span>
+                      {deliveryAirportCode && (
+                        <span className="map-location-line-secondary">
+                          Airport: {deliveryAirportCode}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1493,21 +1742,42 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                 </div>
               </fieldset>
             )}
+            {!(embedded && autoSubmit) && (
             <form onSubmit={onSubmit} className="form-grid">
               <fieldset>
                 <legend>Pickup</legend>
-                <div className="row-4">
+                <div className="row-3">
                   <label>
-                    Zip
+                    Location
                     <div className="zip-select">
                       <input
-                        value={pickupZip}
-                        onChange={function(e){ setPickupZip(e.target.value); }}
-                        onFocus={function(){ setShowPickupZipOptions(true); }}
-                        onBlur={function(){ setTimeout(function(){ setShowPickupZipOptions(false); }, 150); }}
-                        placeholder="Search ZIP"
+                        value={pickupZip || pickupCity}
+                        onChange={function(e){
+                          var value = e.target.value || '';
+                          var trimmed = value.trim();
+                          if (/^\d/.test(trimmed)) {
+                            setPickupZip(value);
+                            setPickupCity('');
+                          } else {
+                            setPickupCity(value);
+                            setPickupZip('');
+                          }
+                        }}
+                        onFocus={function(){
+                          setShowPickupZipOptions(true);
+                          setShowPickupCityOptions(true);
+                        }}
+                        onBlur={function(){
+                          setTimeout(function(){
+                            setShowPickupZipOptions(false);
+                            setShowPickupCityOptions(false);
+                          }, 150);
+                        }}
+                        placeholder="ZIP or City"
                       />
-                      {showPickupZipOptions && (pickupZipLoading || pickupZipOptions.length || pickupZipError) ? (
+                      {(/^\d/.test(String(pickupZip || pickupCity || '').trim()) &&
+                        showPickupZipOptions &&
+                        (pickupZipLoading || pickupZipOptions.length || pickupZipError)) ? (
                         <div className="zip-dropdown">
                           {pickupZipLoading && <div className="zip-loading">Searching…</div>}
                           {!pickupZipLoading && pickupZipError && <div className="zip-empty">{pickupZipError}</div>}
@@ -1526,7 +1796,35 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                                 }}
                               >
                                 <span>{option.zip}</span>
-                                <span className="zip-option-meta">{option.city}{option.state ? ', ' + option.state : ''}</span>
+                                <span className="zip-option-meta">{option.city}{option.state ? ', ' + option.state : ''}{option.airport_iata ? ' · ' + option.airport_iata : ''}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (!/^\d/.test(String(pickupZip || pickupCity || '').trim()) &&
+                        showPickupCityOptions &&
+                        (pickupCityLoading || pickupCityOptions.length || pickupCityError)) ? (
+                        <div className="zip-dropdown">
+                          {pickupCityLoading && <div className="zip-loading">Searching…</div>}
+                          {!pickupCityLoading && pickupCityError && <div className="zip-empty">{pickupCityError}</div>}
+                          {!pickupCityLoading && !pickupCityError && !pickupCityOptions.length && (
+                            <div className="zip-empty">No matches.</div>
+                          )}
+                          {!pickupCityLoading && !pickupCityError && pickupCityOptions.map(function(option, idx) {
+                            return (
+                              <button
+                                key={(option.zip || 'zip') + '-' + (option.city || '') + '-' + idx}
+                                type="button"
+                                className="zip-option"
+                                onMouseDown={function(e) {
+                                  e.preventDefault();
+                                  applyCitySelection(option, 'pickup');
+                                }}
+                              >
+                                <span>{option.zip}</span>
+                                <span className="zip-option-meta">
+                                  {(option.city || '') + (option.state ? ', ' + option.state : '') + (option.airport_iata ? ' · ' + option.airport_iata : '')}
+                                </span>
                               </button>
                             );
                           })}
@@ -1535,16 +1833,14 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     </div>
                   </label>
                   <label>
-                    City
-                    <input value={pickupCity} onChange={function(e){ setPickupCity(e.target.value); }} />
-                  </label>
-                  <label>
-                    State
-                    <input value={pickupState} onChange={function(e){ setPickupState(e.target.value); }} />
-                  </label>
-                  <label>
-                    Country
-                    <input value={pickupCountry || 'US'} onChange={function(e){ setPickupCountry(e.target.value); }} disabled />
+                    Details
+                    <div className="location-summary-inline">
+                      {(
+                        [pickupCity, pickupState].filter(Boolean).join(', ') +
+                        (pickupZip ? (pickupCity || pickupState ? ' ' : '') + pickupZip : '')
+                      ) || 'No pickup selected yet.'}
+                      {pickupAirportCode ? ' · Airport: ' + pickupAirportCode : ''}
+                    </div>
                   </label>
                 </div>
                 <label>
@@ -1559,18 +1855,38 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 
               <fieldset>
                 <legend>Delivery</legend>
-                <div className="row-4">
+                <div className="row-3">
                   <label>
-                    Zip
+                    Location
                     <div className="zip-select">
                       <input
-                        value={deliveryZip}
-                        onChange={function(e){ setDeliveryZip(e.target.value); }}
-                        onFocus={function(){ setShowDeliveryZipOptions(true); }}
-                        onBlur={function(){ setTimeout(function(){ setShowDeliveryZipOptions(false); }, 150); }}
-                        placeholder="Search ZIP"
+                        value={deliveryZip || deliveryCity}
+                        onChange={function(e){
+                          var value = e.target.value || '';
+                          var trimmed = value.trim();
+                          if (/^\d/.test(trimmed)) {
+                            setDeliveryZip(value);
+                            setDeliveryCity('');
+                          } else {
+                            setDeliveryCity(value);
+                            setDeliveryZip('');
+                          }
+                        }}
+                        onFocus={function(){
+                          setShowDeliveryZipOptions(true);
+                          setShowDeliveryCityOptions(true);
+                        }}
+                        onBlur={function(){
+                          setTimeout(function(){
+                            setShowDeliveryZipOptions(false);
+                            setShowDeliveryCityOptions(false);
+                          }, 150);
+                        }}
+                        placeholder="ZIP or City"
                       />
-                      {showDeliveryZipOptions && (deliveryZipLoading || deliveryZipOptions.length || deliveryZipError) ? (
+                      {(/^\d/.test(String(deliveryZip || deliveryCity || '').trim()) &&
+                        showDeliveryZipOptions &&
+                        (deliveryZipLoading || deliveryZipOptions.length || deliveryZipError)) ? (
                         <div className="zip-dropdown">
                           {deliveryZipLoading && <div className="zip-loading">Searching…</div>}
                           {!deliveryZipLoading && deliveryZipError && <div className="zip-empty">{deliveryZipError}</div>}
@@ -1589,7 +1905,35 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                                 }}
                               >
                                 <span>{option.zip}</span>
-                                <span className="zip-option-meta">{option.city}{option.state ? ', ' + option.state : ''}</span>
+                                <span className="zip-option-meta">{option.city}{option.state ? ', ' + option.state : ''}{option.airport_iata ? ' · ' + option.airport_iata : ''}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (!/^\d/.test(String(deliveryZip || deliveryCity || '').trim()) &&
+                        showDeliveryCityOptions &&
+                        (deliveryCityLoading || deliveryCityOptions.length || deliveryCityError)) ? (
+                        <div className="zip-dropdown">
+                          {deliveryCityLoading && <div className="zip-loading">Searching…</div>}
+                          {!deliveryCityLoading && deliveryCityError && <div className="zip-empty">{deliveryCityError}</div>}
+                          {!deliveryCityLoading && !deliveryCityError && !deliveryCityOptions.length && (
+                            <div className="zip-empty">No matches.</div>
+                          )}
+                          {!deliveryCityLoading && !deliveryCityError && deliveryCityOptions.map(function(option, idx) {
+                            return (
+                              <button
+                                key={(option.zip || 'zip') + '-' + (option.city || '') + '-' + idx}
+                                type="button"
+                                className="zip-option"
+                                onMouseDown={function(e) {
+                                  e.preventDefault();
+                                  applyCitySelection(option, 'delivery');
+                                }}
+                              >
+                                <span>{option.zip}</span>
+                                <span className="zip-option-meta">
+                                  {(option.city || '') + (option.state ? ', ' + option.state : '') + (option.airport_iata ? ' · ' + option.airport_iata : '')}
+                                </span>
                               </button>
                             );
                           })}
@@ -1598,16 +1942,14 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     </div>
                   </label>
                   <label>
-                    City
-                    <input value={deliveryCity} onChange={function(e){ setDeliveryCity(e.target.value); }} />
-                  </label>
-                  <label>
-                    State
-                    <input value={deliveryState} onChange={function(e){ setDeliveryState(e.target.value); }} />
-                  </label>
-                  <label>
-                    Country
-                    <input value={deliveryCountry || 'US'} onChange={function(e){ setDeliveryCountry(e.target.value); }} disabled />
+                    Details
+                    <div className="location-summary-inline">
+                      {(
+                        [deliveryCity, deliveryState].filter(Boolean).join(', ') +
+                        (deliveryZip ? (deliveryCity || deliveryState ? ' ' : '') + deliveryZip : '')
+                      ) || 'No delivery selected yet.'}
+                      {deliveryAirportCode ? ' · Airport: ' + deliveryAirportCode : ''}
+                    </div>
                   </label>
                 </div>
               </fieldset>
@@ -1728,12 +2070,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   Equipment
                   <select value={equipmentType} onChange={function(e){ setEquipmentType(e.target.value); }}>
                     <option value="">Select equipment</option>
-                    <option value="Box Truck">Box Truck</option>
-                    <option value="Flatbed Hotshot">Flatbed Hotshot</option>
-                    <option value="Sprinter Van">Sprinter Van</option>
-                    <option value="Reefer">Reefer</option>
-                    <option value="Dry Van">Dry Van</option>
+                    <option value="Cargo Van">Cargo Van</option>
+                    <option value="Van">Van</option>
                     <option value="Flatbed">Flatbed</option>
+                    <option value="Reefer">Reefer</option>
                   </select>
                 </label>
               </fieldset>
@@ -1744,8 +2084,15 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                 </button>
               </div>
             </form>
+            )}
 
             <div className="status">
+              {loading && !(embedded && autoSubmit) && (
+                <div className="quote-loading">
+                  <span className="quote-loading-spinner" />
+                  <span>Fetching quotes…</span>
+                </div>
+              )}
               {error && (
                 <div className="error">Error: {error}</div>
               )}
@@ -1849,11 +2196,17 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   }
 
   return (
-    <div className="shell calculate-rate-page">
-      <GlobalTopbar />
-      <div className="container">
-        {card}
-      </div>
+    <div className="calculate-rate-page">
+      <main className="app-main">
+        <GlobalTopbar />
+        <div className="app-blob app-blob-1" />
+        <div className="app-blob app-blob-2" />
+        <div className="app-content">
+          <div className="container">
+            {card}
+          </div>
+        </div>
+      </main>
       {!embedded && (
         <div className="ai-widget-fixed">
           <button

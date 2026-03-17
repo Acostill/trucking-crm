@@ -3,6 +3,12 @@
   box-sizing: border-box;
 }
 
+/* Prevent horizontal overflow globally */
+img, video, iframe, embed, object {
+  max-width: 100%;
+  height: auto;
+}
+
 :root {
   /* First Class Trucking Palette */
   --lanely-indigo-50: #eef2ff;
@@ -36,6 +42,9 @@
 
 html, body, #root {
   min-height: 100%;
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
 }
 
 body {
@@ -45,6 +54,8 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  position: relative;
+  overflow-x: hidden;
 }
 
 /* ========== Layout ========== */
@@ -567,6 +578,47 @@ label {
   margin-top: 24px;
 }
 
+.quote-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.quote-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.5);
+  border-top-color: #4f46e5;
+  animation: quote-spin 0.6s linear infinite;
+}
+
+.quote-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.65);
+  z-index: 2;
+}
+
+.quote-loading-overlay .quote-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border-width: 3px;
+  border-color: rgba(148, 163, 184, 0.5);
+  border-top-color: #4f46e5;
+}
+
+@keyframes quote-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .calculate-rate-page .error,
 .calculate-rate-embedded .error {
   padding: 14px 18px;
@@ -807,6 +859,28 @@ label {
   font-size: 13px;
 }
 
+.map-location-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.map-location-line-primary {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.map-location-line-secondary {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.location-summary-inline {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .map-label {
   display: block;
   font-size: 11px;
@@ -1043,7 +1117,13 @@ label {
 .data-table td {
   padding: 14px 16px;
   text-align: left;
-  white-space: nowrap;
+}
+
+@media (min-width: 769px) {
+  .data-table th,
+  .data-table td {
+    white-space: nowrap;
+  }
 }
 
 .data-table thead th {
@@ -1366,6 +1446,7 @@ label {
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+  position: relative;
 }
 
 .quote-modal-message {
@@ -1464,6 +1545,9 @@ label {
   height: 100%;
   min-width: max-content;
   padding: 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 .pipeline-column {
@@ -1580,9 +1664,9 @@ label {
   font-weight: 500;
   color: var(--text);
   margin: 0 0 4px 0;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .pipeline-card-route {
@@ -1596,9 +1680,9 @@ label {
 
 .pipeline-card-city {
   max-width: 80px;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .pipeline-card-arrow {
@@ -1617,9 +1701,9 @@ label {
   font-size: 11px;
   color: var(--lanely-slate-400);
   max-width: 120px;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-word;
 }
 
 .pipeline-card-rate {
@@ -2307,6 +2391,9 @@ label {
   display: flex;
   min-height: 100vh;
   background: var(--bg);
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
 }
 
 .app-main {
@@ -2316,7 +2403,11 @@ label {
   position: relative;
   z-index: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 100vh;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .app-content {
@@ -2324,6 +2415,12 @@ label {
   margin: 0 auto;
   position: relative;
   z-index: 1;
+}
+
+/* Calculate Rate page without sidebar: reset main layout */
+.calculate-rate-page .app-main {
+  margin-left: 0;
+  padding: 32px;
 }
 
 .app-loading {
@@ -2351,6 +2448,7 @@ label {
   background: rgba(199, 210, 254, 0.2);
   filter: blur(100px);
   transform: translate(-20%, -20%);
+  max-width: 100vw;
 }
 
 .app-blob-2 {
@@ -2360,6 +2458,7 @@ label {
   height: 400px;
   background: rgba(167, 243, 208, 0.15);
   filter: blur(100px);
+  max-width: 100vw;
 }
 
 /* ========== Sidebar ========== */
@@ -3327,7 +3426,12 @@ label {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   text-align: left;
-  white-space: nowrap;
+}
+
+@media (min-width: 769px) {
+  .glass-table th {
+    white-space: nowrap;
+  }
 }
 
 .glass-table tbody tr {
@@ -3693,13 +3797,23 @@ label {
 }
 
 @media (max-width: 768px) {
+  /* Prevent horizontal overflow */
+  * {
+    max-width: 100%;
+  }
+  
   .container {
     padding: 20px 16px;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
   }
   
   .card-header,
   .card-body {
     padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .calculate-rate-page .row-4,
@@ -3714,31 +3828,188 @@ label {
   
   .topbar {
     padding: 12px 16px;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
   }
   
+  /* Hide navigation links on mobile - accessible via hamburger menu */
   .nav-links {
     display: none;
+  }
+  
+  /* Hide topbar navigation group buttons on mobile */
+  .topbar-nav-group {
+    display: none;
+  }
+  
+  /* Show only brand and hamburger menu on mobile */
+  .global-topbar {
+    justify-content: space-between;
+  }
+  
+  .global-topbar .brand {
+    flex: 0 0 auto;
+  }
+  
+  /* Show hamburger menu button on mobile */
+  .global-topbar .mobile-menu-button {
+    display: flex !important;
   }
   
   .shipment-list-header {
     flex-direction: column;
     gap: 16px;
+    width: 100%;
   }
   
   .shipment-list-toolbar {
     flex-direction: column;
+    width: 100%;
   }
   
   .shipment-search {
     max-width: 100%;
+    width: 100%;
   }
   
   .shipment-table-card {
     overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  /* Fix app-main on mobile */
+  .app-main {
+    margin-left: 0;
+    padding: 16px;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  
+  /* Fix app-content */
+  .app-content {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Fix app-layout */
+  .app-layout {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  
+  /* Fix decorative blobs on mobile */
+  .app-blob-1,
+  .app-blob-2 {
+    display: none;
+  }
+  
+  /* Fix shell blobs */
+  .shell::before,
+  .shell::after {
+    max-width: 100vw;
+  }
+  
+  /* Ensure all inputs and selects don't overflow */
+  input, select, textarea {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Fix card overflow */
+  .card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Fix quote cards */
+  .calculate-rate-page .quote-card,
+  .calculate-rate-embedded .quote-card {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Fix modals */
+  .calculate-rate-page .modal,
+  .calculate-rate-embedded .modal {
+    width: calc(100vw - 32px);
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+  }
+  
+  /* Fix AI widget */
+  .ai-widget-panel {
+    width: calc(100vw - 32px);
+    max-width: calc(100vw - 32px);
+    box-sizing: border-box;
+  }
+  
+  /* Fix map container */
+  .map-container {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  .leaflet-map {
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  /* Fix pipeline */
+  .pipeline-board-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .pipeline-column {
+    min-width: 260px;
+  }
+  
+  /* Fix finance cards */
+  .finance-grid,
+  .finance-visuals,
+  .finance-charts {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+  
+  /* Fix tables */
+  .table-wrapper,
+  .admin-table-wrapper,
+  .finance-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Fix form grids */
+  .form-grid {
+    width: 100%;
+  }
+  
+  /* Fix fieldset */
+  .calculate-rate-page fieldset,
+  .calculate-rate-embedded fieldset {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 }
 
 @media (max-width: 480px) {
+  /* Extra strict overflow prevention for small screens */
+  * {
+    max-width: 100%;
+  }
+  
   .calculate-rate-page .row-2,
   .calculate-rate-page .row-3,
   .calculate-rate-page .row-4,
@@ -3746,10 +4017,13 @@ label {
   .calculate-rate-embedded .row-3,
   .calculate-rate-embedded .row-4 {
     grid-template-columns: 1fr;
+    width: 100%;
   }
   
   .app-main {
-    padding: 16px;
+    padding: 12px;
+    width: 100%;
+    max-width: 100vw;
   }
   
   .shipment-list-actions {
@@ -3761,6 +4035,772 @@ label {
   .btn-create {
     width: 100%;
     justify-content: center;
+    box-sizing: border-box;
+  }
+  
+  /* Ensure all containers are within viewport */
+  .container,
+  .card,
+  .card-body,
+  .card-header {
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
+  
+  /* Fix topbar */
+  .topbar {
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
+  
+  /* Fix landing page elements */
+  .landing-page-main {
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
+  
+  /* Fix instant quote widget */
+  .instant-quote-widget {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Landing page grid layout - stack on mobile */
+  .landing-page-main > div[style*="grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  /* Remove sticky positioning on mobile for left side */
+  .landing-page-main > div[style*="grid"] > div:first-child {
+    position: static !important;
+    top: auto !important;
+    max-width: 100% !important;
+  }
+  
+  /* Instant quote widget container */
+  .landing-page-main > div[style*="grid"] > div:last-child {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  
+  /* Quote widget form */
+  .landing-page-main form {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  
+  /* Quote widget inner container */
+  .landing-page-main > div[style*="grid"] > div:last-child > div[style*="relative"] {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  
+  /* Quote widget card - ensure it fits viewport */
+  .landing-page-main > div[style*="grid"] > div:last-child > div[style*="relative"] > div[style*="relative"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 20px !important;
+    box-sizing: border-box;
+    margin: 0 !important;
+  }
+  
+  /* Remove decorative gradient blur on mobile */
+  .landing-page-main > div[style*="grid"] > div:last-child > div[style*="absolute"] {
+    display: none;
+  }
+  
+  /* Form grids inside quote widget - stack on mobile */
+  .landing-page-main form > div[style*="grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  /* Piece rows grid - stack on mobile */
+  .landing-page-main form > div[style*="grid"] > div[style*="grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    width: 100%;
+  }
+  
+  /* Piece row inner grid - make single column */
+  .landing-page-main form > div[style*="grid"] > div[style*="grid"] > div[style*="grid"] {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Input fields in quote widget */
+  .landing-page-main form input,
+  .landing-page-main form select,
+  .landing-page-main form textarea {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+  
+  /* ZIP dropdown - ensure it fits */
+  .landing-page-main .zip-dropdown {
+    max-width: calc(100vw - 32px);
+    left: 0 !important;
+    right: 0 !important;
+  }
+  
+  /* Hero section title - reduce size on mobile */
+  .landing-page-main h1 {
+    font-size: 2.5rem !important;
+    line-height: 1.2 !important;
+    word-wrap: break-word;
+  }
+  
+  /* Hero section padding */
+  .landing-page-main {
+    padding-top: 100px !important;
+    padding-bottom: 40px !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+  }
+  
+  /* Ensure main container doesn't overflow */
+  .landing-page-main > div {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Fix all grid layouts */
+  .grid {
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  /* Fix flex containers */
+  .flex {
+    flex-wrap: wrap;
+  }
+  
+  /* Ensure buttons don't overflow */
+  .btn {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Fix topbar nav group */
+  .topbar-nav-group {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  
+  /* Fix brand */
+  .brand {
+    max-width: calc(100% - 100px);
+    overflow: hidden;
+  }
+}
+
+/* ========== Enhanced Mobile Responsive Styles ========== */
+@media (max-width: 768px) {
+  /* Container and spacing */
+  .container {
+    padding: 20px 16px;
+  }
+  
+  .card-header,
+  .card-body {
+    padding: 16px;
+  }
+  
+  /* Typography adjustments */
+  .title {
+    font-size: 20px;
+  }
+  
+  .page-title {
+    font-size: 22px;
+  }
+  
+  .dashboard-title {
+    font-size: 22px;
+  }
+  
+  /* Form elements */
+  input, select, textarea {
+    padding: 12px 14px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  label {
+    font-size: 11px;
+    gap: 4px;
+  }
+  
+  /* Buttons */
+  .btn {
+    padding: 12px 18px;
+    font-size: 14px;
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .btn-secondary,
+  .btn-ghost {
+    width: 100%;
+  }
+  
+  /* Calculate rate page */
+  .calculate-rate-page fieldset,
+  .calculate-rate-embedded fieldset {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .calculate-rate-page .section-title,
+  .calculate-rate-embedded .section-title {
+    font-size: 11px;
+    margin: 12px 0 8px 0;
+  }
+  
+  /* Quote cards */
+  .calculate-rate-page .quote-card,
+  .calculate-rate-embedded .quote-card {
+    padding: 20px;
+    margin-top: 16px;
+  }
+  
+  .calculate-rate-page .quote-total .value,
+  .calculate-rate-embedded .quote-total .value {
+    font-size: 28px;
+  }
+  
+  .calculate-rate-page .quote-header,
+  .calculate-rate-embedded .quote-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .calculate-rate-page .quote-total,
+  .calculate-rate-embedded .quote-total {
+    width: 100%;
+  }
+  
+  .calculate-rate-page .quote-total .label,
+  .calculate-rate-embedded .quote-total .label {
+    text-align: left;
+  }
+  
+  .calculate-rate-page .quote-total .value,
+  .calculate-rate-embedded .quote-total .value {
+    text-align: left;
+  }
+  
+  /* Map components */
+  .map-container {
+    min-height: 300px;
+  }
+  
+  .leaflet-map {
+    height: 300px;
+  }
+  
+  .map-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .map-coordinates {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  /* AI Widget */
+  .ai-widget-fixed {
+    right: 16px;
+    bottom: 16px;
+  }
+  
+  .ai-widget-toggle {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .ai-widget-toggle i {
+    font-size: 20px;
+  }
+  
+  .ai-widget-panel {
+    width: calc(100vw - 32px);
+    max-width: 320px;
+    max-height: 60vh;
+  }
+  
+  .ai-textarea {
+    min-height: 100px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  .ai-actions {
+    flex-direction: column;
+  }
+  
+  .ai-actions .btn {
+    width: 100%;
+  }
+  
+  /* Modal improvements */
+  .calculate-rate-page .modal,
+  .calculate-rate-embedded .modal {
+    max-width: calc(100vw - 32px);
+    padding: 20px;
+  }
+  
+  .modal-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .modal-title {
+    font-size: 18px;
+  }
+  
+  .modal-body {
+    margin-top: 16px;
+    gap: 12px;
+  }
+  
+  .modal-actions {
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+  
+  .modal-actions .btn {
+    width: 100%;
+  }
+  
+  /* Topbar */
+  .topbar {
+    padding: 10px 16px;
+  }
+  
+  .brand {
+    font-size: 14px;
+  }
+  
+  /* Hide navigation buttons on mobile - accessible via hamburger menu */
+  .global-topbar .topbar-nav-group {
+    display: none !important;
+  }
+  
+  /* Show hamburger menu button on mobile */
+  .global-topbar .mobile-menu-button {
+    display: flex !important;
+  }
+  
+  /* Ensure topbar only shows brand and menu button on mobile */
+  .global-topbar {
+    justify-content: space-between;
+  }
+  
+  /* Sidebar adjustments - hide on mobile by default */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1000;
+    max-width: 100vw;
+    width: 256px;
+  }
+  
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  
+  /* Ensure sidebar is visible on desktop */
+  @media (min-width: 769px) {
+    .sidebar {
+      transform: translateX(0) !important;
+    }
+  }
+  
+  /* Sidebar overlay for mobile */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 999;
+    animation: fadeIn 0.2s ease;
+  }
+  
+  /* Mobile menu button */
+  .mobile-menu-button {
+    display: none !important;
+  }
+  
+  @media (max-width: 768px) {
+    .mobile-menu-button {
+      display: flex !important;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    /* Ensure navigation buttons are hidden on calculate-rate page */
+    .calculate-rate-page .topbar-nav-group,
+    .calculate-rate-page .nav-links,
+    .calculate-rate-page .topbar-actions {
+      display: none !important;
+    }
+    
+    /* Show hamburger menu on calculate-rate page */
+    .calculate-rate-page .mobile-menu-button {
+      display: flex !important;
+    }
+    
+    /* Floating mobile menu button for pages without GlobalTopbar */
+    .floating-mobile-menu {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1001;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .floating-mobile-menu:hover {
+      background: var(--lanely-slate-50);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+    }
+  }
+  
+  /* Sidebar close button (mobile only) */
+  .sidebar-close-button {
+    display: none;
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.15s ease;
+    z-index: 10;
+  }
+  
+  .sidebar-close-button:hover {
+    background: var(--lanely-slate-100);
+    color: var(--text);
+  }
+  
+  @media (max-width: 768px) {
+    .sidebar-close-button {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  }
+  
+  .app-main {
+    margin-left: 0;
+    padding: 16px;
+  }
+  
+  /* Dashboard */
+  .kpi-card {
+    height: auto;
+    min-height: 100px;
+    padding: 16px;
+  }
+  
+  .kpi-value {
+    font-size: 28px;
+  }
+  
+  /* Landing page specific */
+  .landing-page-main {
+    padding: 16px;
+  }
+  
+  /* Instant quote widget on landing page */
+  .instant-quote-widget {
+    padding: 20px;
+  }
+  
+  .instant-quote-widget fieldset {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .instant-quote-widget .form-grid {
+    gap: 16px;
+  }
+  
+  /* Piece rows on landing page */
+  .piece-row {
+    gap: 8px;
+    padding: 12px;
+  }
+  
+  .piece-row input {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* Equipment dropdown */
+  select {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  /* ZIP dropdown */
+  .zip-dropdown {
+    max-height: 200px;
+  }
+  
+  .zip-option {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+  
+  /* Quote view page */
+  .quote-view-page .quote-card {
+    padding: 20px;
+  }
+  
+  .quote-view-page .quote-total .value {
+    font-size: 28px;
+  }
+  
+  /* Shipment table */
+  .shipment-table th,
+  .shipment-table td {
+    padding: 12px 8px;
+    font-size: 13px;
+  }
+  
+  /* Finance cards */
+  .finance-card {
+    padding: 16px;
+  }
+  
+  .finance-value {
+    font-size: 22px;
+  }
+  
+  /* Pipeline */
+  .pipeline-column {
+    width: 260px;
+  }
+  
+  .pipeline-card {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Extra small devices */
+  .container {
+    padding: 16px 12px;
+  }
+  
+  .card-header,
+  .card-body {
+    padding: 14px;
+  }
+  
+  .title {
+    font-size: 18px;
+  }
+  
+  .page-title {
+    font-size: 20px;
+  }
+  
+  .calculate-rate-page .quote-total .value,
+  .calculate-rate-embedded .quote-total .value {
+    font-size: 24px;
+  }
+  
+  .kpi-value {
+    font-size: 24px;
+  }
+  
+  .finance-value {
+    font-size: 20px;
+  }
+  
+  .map-container {
+    min-height: 250px;
+  }
+  
+  .leaflet-map {
+    height: 250px;
+  }
+  
+  .ai-widget-panel {
+    width: calc(100vw - 24px);
+    max-height: 50vh;
+  }
+  
+  .calculate-rate-page .modal,
+  .calculate-rate-embedded .modal {
+    padding: 16px;
+    max-width: calc(100vw - 24px);
+  }
+  
+  .modal-title {
+    font-size: 16px;
+  }
+  
+  /* Stack form fields vertically */
+  .calculate-rate-page .row-2,
+  .calculate-rate-page .row-3,
+  .calculate-rate-page .row-4,
+  .calculate-rate-embedded .row-2,
+  .calculate-rate-embedded .row-3,
+  .calculate-rate-embedded .row-4 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  /* Reduce padding in panels */
+  .calculate-rate-page .panel,
+  .calculate-rate-embedded .panel {
+    padding: 14px;
+  }
+  
+  .calculate-rate-page .kv,
+  .calculate-rate-embedded .kv {
+    padding: 6px 0;
+    font-size: 13px;
+  }
+  
+  /* Badge adjustments */
+  .calculate-rate-page .badge,
+  .calculate-rate-embedded .badge {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+  
+  /* Quote badges wrap better */
+  .calculate-rate-page .quote-badges,
+  .calculate-rate-embedded .quote-badges {
+    gap: 6px;
+  }
+  
+  /* Actions stack */
+  .actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .actions .btn {
+    width: 100%;
+  }
+  
+  /* Landing page widget adjustments */
+  .instant-quote-widget {
+    padding: 16px;
+  }
+  
+  .instant-quote-widget fieldset {
+    padding: 12px;
+  }
+  
+  /* Piece row adjustments */
+  .piece-row {
+    padding: 10px;
+    gap: 6px;
+  }
+  
+  .piece-row input {
+    padding: 8px;
+    font-size: 14px;
+  }
+  
+  /* ZIP dropdown */
+  .zip-dropdown {
+    max-height: 180px;
+    padding: 4px;
+  }
+  
+  .zip-option {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  
+  /* Hero section */
+  .hero-section {
+    padding: 20px 12px;
+  }
+  
+  /* Form grid */
+  .form-grid {
+    gap: 10px;
+  }
+  
+  /* Table cells */
+  .data-table th,
+  .data-table td {
+    padding: 8px 6px;
+    font-size: 12px;
+  }
+  
+  /* Section titles */
+  .section-title {
+    font-size: 13px;
+  }
+  
+  /* Panel */
+  .panel {
+    padding: 12px;
+  }
+  
+  .panel-title {
+    font-size: 11px;
+  }
+  
+  /* Better button spacing */
+  .btn {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  
+  /* Compact panels */
+  .calculate-rate-page .panel,
+  .calculate-rate-embedded .panel {
+    padding: 12px;
+  }
+  
+  /* Smaller text in key-value pairs */
+  .calculate-rate-page .kv .k,
+  .calculate-rate-embedded .kv .k,
+  .calculate-rate-page .kv .v,
+  .calculate-rate-embedded .kv .v {
+    font-size: 12px;
   }
 }
 

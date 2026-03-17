@@ -18,6 +18,7 @@ import MapPage from './pages/MapPage';
 import { buildApiUrl } from './config';
 import GlobalTopbar from './components/GlobalTopbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SidebarProvider } from './context/SidebarContext';
 
 function DashboardApp() {
   const { user, checking, setUser } = useAuth();
@@ -138,7 +139,9 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <SidebarProvider>
+        <AppRoutes />
+      </SidebarProvider>
     </AuthProvider>
   );
 }

@@ -75,7 +75,7 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     <ShipperCustomerNumber>1234567</ShipperCustomerNumber>
     <Origin>
         <OriginAirportCode/>
-        <OriginZipCode>${pickupLoc.zip || '90746'}</OriginZipCode>
+        <OriginZipCode>${pickupLoc.zip}</OriginZipCode>
         <OriginCountryCode>US</OriginCountryCode>
         <Pickup>
             <AirportPickup>N</AirportPickup>
@@ -83,7 +83,7 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     </Origin>
     <Destination>
         <DestinationAirportCode/>
-        <DestinationZipCode>${deliveryLoc.zip || '48154'}</DestinationZipCode>
+        <DestinationZipCode>${deliveryLoc.zip}</DestinationZipCode>
         <DestinationCountryCode>US</DestinationCountryCode>
         <Delivery>
             <AirportDelivery>N</AirportDelivery>
@@ -91,18 +91,18 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     </Destination>
     <FreightDetails>
         <FreightDetail>
-            <Weight>${Number(weight.value || 1500)}</Weight>
+            <Weight>${Number(weight.value)}</Weight>
             <WeightType>${toWeightType(weight.unit)}</WeightType>
-            <Pieces>${Number(pieces.quantity || 1)}</Pieces>
+            <Pieces>${Number(pieces.quantity)}</Pieces>
             <FreightClass>60.0</FreightClass>
         </FreightDetail>
     </FreightDetails>
     <Dimensions>
         <Dimension>
-            <Pieces>${Number(pieces.quantity || 1)}</Pieces>
-            <Length>${Number(firstPart.length || 40)}</Length>
-            <Width>${Number(firstPart.width || 30)}</Width>
-            <Height>${Number(firstPart.height || 20)}</Height>
+            <Pieces>${Number(pieces.quantity)}</Pieces>
+            <Length>${Number(firstPart.length)}</Length>
+            <Width>${Number(firstPart.width)}</Width>
+            <Height>${Number(firstPart.height)}</Height>
         </Dimension>
     </Dimensions>
     <Hazmat>N</Hazmat>
@@ -111,6 +111,8 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     <ShippingDate>${toYMD(pickup.date)}</ShippingDate>
 </QuoteRequest>`;
 
+//https://api.forwardair.com
+//test-api.forwardair.com
     const options = {
       method: 'POST',
       hostname: 'test-api.forwardair.com',
@@ -139,13 +141,17 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
               if (err) {
                 resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Failed to parse XML response', raw: data } });
               } else {
+                // Log raw Forward Air parsed XML response for debugging (full JSON, no [Object])
+                console.log('[ForwardAir] Raw response:', JSON.stringify({ statusCode: apiRes.statusCode, data: result }, null, 2));
                 resolve({ statusCode: apiRes.statusCode || 500, data: result });
               }
             }
           );
         } else if (lowerContentType.indexOf('json') > -1) {
           try {
-            resolve({ statusCode: apiRes.statusCode || 500, data: JSON.parse(data) });
+            const parsed = JSON.parse(data);
+            console.log('[ForwardAir] Raw JSON response:', JSON.stringify({ statusCode: apiRes.statusCode, data: parsed }, null, 2));
+            resolve({ statusCode: apiRes.statusCode || 500, data: parsed });
           } catch (e) {
             resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Invalid JSON from upstream', raw: data } });
           }

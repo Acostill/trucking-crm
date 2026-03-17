@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Truck, LogOut, User, LayoutDashboard, Sparkles, ShieldCheck } from 'lucide-react';
+import { useSidebar } from '../context/SidebarContext';
+import { Truck, LogOut, User, LayoutDashboard, Sparkles, ShieldCheck, Menu } from 'lucide-react';
 import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
 function GlobalTopbar() {
@@ -9,6 +10,7 @@ function GlobalTopbar() {
   const user = auth && auth.user;
   const isAdmin = user && Array.isArray(user.roles) && user.roles.indexOf('admin') > -1;
   const location = useLocation();
+  const { toggleSidebar } = useSidebar();
 
   function handleSignOut() {
     if (auth && auth.signOut) {
@@ -46,6 +48,25 @@ function GlobalTopbar() {
       borderBottom: '1px solid rgba(226, 232, 240, 0.8)',
       padding: '12px 24px'
     }}>
+      {/* Mobile Menu Button */}
+      <button 
+        className="mobile-menu-button"
+        onClick={toggleSidebar}
+        aria-label="Toggle menu"
+        style={{
+          display: 'none',
+          background: 'transparent',
+          border: 'none',
+          padding: '8px',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          color: 'var(--text)',
+          marginRight: '12px'
+        }}
+      >
+        <Menu size={24} />
+      </button>
+      
       <Link to="/" className="brand" style={{ textDecoration: 'none', color: 'inherit' }}>
         <div className="brand-badge" style={{ 
           width: '32px', height: '32px', borderRadius: '8px', marginRight: '12px',
