@@ -626,7 +626,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       if (option.zip) {
         setDeliveryZip(option.zip);
       }
-      setDeliveryCountry(option.country || 'US');
       setDeliveryAirportCode(option.airport_iata || '');
       setShowDeliveryCityOptions(false);
       setMarkerFromOption(option, 'delivery');
