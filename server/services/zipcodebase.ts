@@ -369,6 +369,50 @@ export async function searchZipcodebase(code: string, country: string = 'US'): P
   return searchZipWithZipcodebaseAPI(trimmedCode, country);
 }
 
+/**
+ * Resolve a single ZIP from city + state (and optional country) using the local zip_codes table.
+ * Used when the client sends city/state (e.g. from city search) but no zip, so quote APIs get a zip.
+ * @returns First matching zip or null if not found
+ */
+export async function resolveZipFromCityState(
+  city: string,
+  state: string,
+  country: string = 'US'
+): Promise<string | null> {
+  const trimmedCity = (city || '').trim();
+  const trimmedState = (state || '').trim();
+  const trimmedCountry = (country || 'US').trim().toUpperCase();
+  if (!trimmedCity) return null;
+
+  try {
+    const hasState = trimmedState.length > 0;
+    const result = hasState
+      ? await db.query(
+          `SELECT zip
+           FROM public.zip_codes
+           WHERE country = $3
+             AND LOWER(TRIM(city)) = LOWER($1)
+             AND (TRIM(state_code) = $2 OR TRIM(state) = $2 OR LOWER(TRIM(state_code)) = LOWER($2) OR LOWER(TRIM(state)) = LOWER($2))
+           ORDER BY zip
+           LIMIT 1`,
+          [trimmedCity, trimmedState, trimmedCountry]
+        )
+      : await db.query(
+          `SELECT zip
+           FROM public.zip_codes
+           WHERE country = $2 AND LOWER(TRIM(city)) = LOWER($1)
+           ORDER BY zip
+           LIMIT 1`,
+          [trimmedCity, trimmedCountry]
+        );
+    const row = result.rows && result.rows[0];
+    return row ? String(row.zip).trim() : null;
+  } catch (err) {
+    console.error('[zipcodebase] resolveZipFromCityState error:', err);
+    return null;
+  }
+}
+
 export async function searchCityZipcodebase(city: string, country: string = 'US'): Promise<any> {
   const trimmedCity = (city || '').trim();
   if (!trimmedCity) {

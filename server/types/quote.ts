@@ -6,6 +6,7 @@
 export interface Location {
   city?: string;
   state?: string;
+  state_code?: string; // 2-letter code; normalized from state when full name is sent
   zip?: string;
   country?: string;
 }

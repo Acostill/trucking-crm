@@ -578,6 +578,47 @@ label {
   margin-top: 24px;
 }
 
+.quote-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.quote-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(148, 163, 184, 0.5);
+  border-top-color: #4f46e5;
+  animation: quote-spin 0.6s linear infinite;
+}
+
+.quote-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.65);
+  z-index: 2;
+}
+
+.quote-loading-overlay .quote-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border-width: 3px;
+  border-color: rgba(148, 163, 184, 0.5);
+  border-top-color: #4f46e5;
+}
+
+@keyframes quote-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .calculate-rate-page .error,
 .calculate-rate-embedded .error {
   padding: 14px 18px;
@@ -1405,6 +1446,7 @@ label {
   flex: 1;
   overflow-y: auto;
   padding: 24px 28px;
+  position: relative;
 }
 
 .quote-modal-message {

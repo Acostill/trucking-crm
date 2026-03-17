@@ -15,12 +15,10 @@ import LandingNavbar from '../components/LandingNavbar';
 import CalculateRatePage from './CalculateRatePage';
 
 const EquipmentType = {
-  DRY_VAN: 'Dry Van',
-  REEFER: 'Reefer',
+  CARGO_VAN: 'Cargo Van',
+  VAN: 'Van',
   FLATBED: 'Flatbed',
-  BOX_TRUCK: 'Box Truck',
-  FLATBED_HOTSHOT: 'Flatbed Hotshot',
-  SPRINTER_VAN: 'Sprinter Van'
+  REEFER: 'Reefer'
 };
 
 export default function LanelyLandingPage() {
@@ -29,7 +27,7 @@ export default function LanelyLandingPage() {
     origin: '',
     destination: '',
     pickupDate: '',
-    equipment: EquipmentType.DRY_VAN,
+    equipment: EquipmentType.VAN,
     additionalInfo: '',
     originCity: '',
     originState: '',
@@ -54,14 +52,6 @@ export default function LanelyLandingPage() {
 
   const originZipAbortRef = useRef(null);
   const destinationZipAbortRef = useRef(null);
-
-  // AI Assistant state
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiInput, setAiInput] = useState('');
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(null);
-  const [aiListening, setAiListening] = useState(false);
-  const recognitionRef = useRef(null);
 
   // Quick AI Input state (text box above shipment details)
   const [quickAiInput, setQuickAiInput] = useState('');
@@ -264,70 +254,6 @@ export default function LanelyLandingPage() {
     navigate('/calculate-rate', { state: { prefill } });
   };
 
-  // AI Assistant functions
-  function ensureRecognition() {
-    if (recognitionRef.current) return recognitionRef.current;
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onresult = function(event) {
-      const transcript = event.results && event.results[0] && event.results[0][0]
-        ? event.results[0][0].transcript
-        : '';
-      if (transcript) {
-        setAiInput(transcript);
-      }
-    };
-    recognition.onend = function() {
-      setAiListening(false);
-    };
-    recognition.onerror = function(event) {
-      setAiListening(false);
-      var reason = event && event.error ? String(event.error) : 'unknown';
-      if (reason === 'not-allowed' || reason === 'service-not-allowed') {
-        setAiError('Microphone access was blocked. Allow mic permissions and use HTTPS or localhost.');
-        return;
-      }
-      if (reason === 'no-speech') {
-        setAiError('No speech detected. Please try again or type your request.');
-        return;
-      }
-      if (reason === 'audio-capture') {
-        setAiError('No microphone found. Please connect a mic or type your request.');
-        return;
-      }
-      setAiError('Voice input failed (' + reason + '). Please type your request.');
-    };
-    recognitionRef.current = recognition;
-    return recognition;
-  }
-
-  function handleStartVoice() {
-    const recognition = ensureRecognition();
-    if (!recognition) {
-      setAiError('Voice input is not supported in this browser.');
-      return;
-    }
-    setAiError(null);
-    setAiListening(true);
-    try {
-      recognition.start();
-    } catch (_err) {
-      setAiListening(false);
-      setAiError('Voice input failed to start. Please type your request.');
-    }
-  }
-
-  function handleStopVoice() {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-    }
-    setAiListening(false);
-  }
-
   function applyAiResult(parsed) {
     if (!parsed || typeof parsed !== 'object') return;
     
@@ -383,12 +309,10 @@ export default function LanelyLandingPage() {
     // Map equipment type
     if (parsed.equipmentType) {
       const equipmentMap = {
-        'Dry Van': EquipmentType.DRY_VAN,
-        'Reefer': EquipmentType.REEFER,
+        'Cargo Van': EquipmentType.CARGO_VAN,
+        'Van': EquipmentType.VAN,
         'Flatbed': EquipmentType.FLATBED,
-        'Box Truck': EquipmentType.BOX_TRUCK,
-        'Flatbed Hotshot': EquipmentType.FLATBED_HOTSHOT,
-        'Sprinter Van': EquipmentType.SPRINTER_VAN
+        'Reefer': EquipmentType.REEFER
       };
       const mappedEquipment = equipmentMap[parsed.equipmentType] || parsed.equipmentType;
       setFormData(prev => ({ ...prev, equipment: mappedEquipment }));
@@ -439,33 +363,6 @@ export default function LanelyLandingPage() {
           return next;
         });
       }
-    }
-  }
-
-  async function handleAiSubmit() {
-    if (!aiInput.trim()) {
-      setAiError('Please enter a request or use voice input.');
-      return;
-    }
-    setAiLoading(true);
-    setAiError(null);
-    try {
-      const resp = await fetch(buildApiUrl('/api/ai/parse-calculate-rate'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: aiInput })
-      });
-      if (!resp.ok) {
-        const msg = await resp.text();
-        throw new Error(msg || 'Failed to parse input.');
-      }
-      const data = await resp.json();
-      applyAiResult(data);
-      setAiInput(''); // Clear input after successful submission
-    } catch (err) {
-      setAiError(err && err.message ? err.message : 'Failed to parse input.');
-    } finally {
-      setAiLoading(false);
     }
   }
 
@@ -681,12 +578,10 @@ export default function LanelyLandingPage() {
                         className="w-full pl-9 pr-8 py-2.5 bg-white/60 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm appearance-none cursor-pointer"
                         style={{ width: '100%', paddingLeft: '36px', paddingRight: '32px', paddingTop: '10px', paddingBottom: '10px', backgroundColor: 'rgba(255, 255, 255, 0.6)', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: 500, color: '#0f172a' }}
                       >
-                        <option value={EquipmentType.DRY_VAN}>Dry Van</option>
-                        <option value={EquipmentType.REEFER}>Reefer</option>
+                        <option value={EquipmentType.CARGO_VAN}>Cargo Van</option>
+                        <option value={EquipmentType.VAN}>Van</option>
                         <option value={EquipmentType.FLATBED}>Flatbed</option>
-                        <option value={EquipmentType.BOX_TRUCK}>Box Truck</option>
-                        <option value={EquipmentType.FLATBED_HOTSHOT}>Flatbed Hotshot</option>
-                        <option value={EquipmentType.SPRINTER_VAN}>Sprinter Van</option>
+                        <option value={EquipmentType.REEFER}>Reefer</option>
                       </select>
                     </div>
                   </div>
@@ -923,10 +818,7 @@ export default function LanelyLandingPage() {
           <div className="quote-modal" onClick={(e) => e.stopPropagation()}>
             <div className="quote-modal-header">
               <div>
-                <h2 className="quote-modal-title">Calculate Rate</h2>
-                <p className="quote-modal-subtitle">
-                  Enter pickup and delivery details to view instant rates.
-                </p>
+                <h2 className="quote-modal-title">Your Quotes</h2>
               </div>
               <button className="quote-modal-close" onClick={() => setShowRatesModal(false)}>
                 ×
@@ -937,6 +829,7 @@ export default function LanelyLandingPage() {
                 embedded
                 initialValues={{}}
                 prefill={ratesPrefill}
+                autoSubmit
                 onSelectQuote={null}
               />
             </div>
@@ -1017,57 +910,6 @@ export default function LanelyLandingPage() {
           </div>
         </div>
       </footer>
-
-      {/* AI Assistant Widget */}
-      <div className="ai-widget-fixed">
-        <button
-          type="button"
-          className="ai-widget-toggle"
-          onClick={() => setAiOpen(!aiOpen)}
-          aria-label={aiOpen ? 'Close assistant' : 'Open assistant'}
-        >
-          <i className="fa-regular fa-message" aria-hidden="true"></i>
-        </button>
-        {aiOpen && (
-          <div className="ai-widget-panel">
-            <div className="ai-widget-header">
-              <div className="ai-widget-title">Shipment Assistant</div>
-              <div className="ai-widget-subtitle">
-                Describe the load and we'll fill the form.
-              </div>
-            </div>
-            <div className="ai-box">
-              <label>
-                Tell us the shipment details
-                <textarea
-                  className="ai-textarea"
-                  placeholder="Example: Pickup in Dallas TX 75201 on Jan 15, deliver to Phoenix AZ 85001. 2 pallets 48x40x48 inches, 2500 lbs, dry van."
-                  value={aiInput}
-                  onChange={(e) => setAiInput(e.target.value)}
-                />
-              </label>
-              <div className="ai-actions">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={aiListening ? handleStopVoice : handleStartVoice}
-                >
-                  {aiListening ? 'Stop Voice' : 'Use Voice'}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={handleAiSubmit}
-                  disabled={aiLoading}
-                >
-                  {aiLoading ? 'Applying…' : 'Apply to Form'}
-                </button>
-              </div>
-              {aiError && <div className="ai-error">{aiError}</div>}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

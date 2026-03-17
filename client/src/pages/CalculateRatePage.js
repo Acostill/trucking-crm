@@ -18,6 +18,7 @@ const DEFAULT_INITIAL_VALUES = {
   pickupCity: '',
   pickupState: '',
   pickupZip: '',
+  // Country is fixed to US in payload; no input field.
   pickupCountry: 'US',
   pickupDate: getDefaultPickupDateIso(),
   deliveryCity: '',
@@ -48,6 +49,7 @@ const EMBEDDED_DEFAULT_VALUES = {
   pickupCity: '',
   pickupState: '',
   pickupZip: '',
+  // Country is fixed to US in payload; no input field.
   pickupCountry: 'US',
   pickupDate: '',
   deliveryCity: '',
@@ -143,7 +145,7 @@ function buildPiecesRowsFrom(source) {
   return rows;
 }
 
-export default function CalculateRatePage({ embedded, initialValues, prefill, onSelectQuote }) {
+export default function CalculateRatePage({ embedded, initialValues, prefill, onSelectQuote, autoSubmit }) {
   const location = useLocation();
   const mergedPrefill = prefill || (location && location.state ? location.state.prefill : null);
   var baseInit = embedded ? EMBEDDED_DEFAULT_VALUES : DEFAULT_INITIAL_VALUES;
@@ -153,14 +155,14 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   const [pickupState, setPickupState] = useState(init.pickupState);
   const [pickupZip, setPickupZip] = useState(init.pickupZip);
   const [pickupAirportCode, setPickupAirportCode] = useState('');
-  const [pickupCountry, setPickupCountry] = useState(init.pickupCountry || 'US');
+  const [pickupCountry] = useState('US');
   const [pickupDate, setPickupDate] = useState(init.pickupDate);
 
   const [deliveryCity, setDeliveryCity] = useState(init.deliveryCity);
   const [deliveryState, setDeliveryState] = useState(init.deliveryState);
   const [deliveryZip, setDeliveryZip] = useState(init.deliveryZip);
   const [deliveryAirportCode, setDeliveryAirportCode] = useState('');
-  const [deliveryCountry, setDeliveryCountry] = useState(init.deliveryCountry || 'US');
+  const [deliveryCountry] = useState('US');
 
   const [piecesUnit, setPiecesUnit] = useState(init.piecesUnit);
   const [piecesRows, setPiecesRows] = useState(buildPiecesRowsFrom(init));
@@ -190,13 +192,13 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
     apply(setPickupCity, mergedPrefill.pickupCity);
     apply(setPickupState, mergedPrefill.pickupState);
     apply(setPickupZip, mergedPrefill.pickupZip);
-    apply(setPickupCountry, mergedPrefill.pickupCountry);
+    // Country is fixed to US; ignore prefill country.
     apply(setPickupDate, mergedPrefill.pickupDate);
 
     apply(setDeliveryCity, mergedPrefill.deliveryCity);
     apply(setDeliveryState, mergedPrefill.deliveryState);
     apply(setDeliveryZip, mergedPrefill.deliveryZip);
-    apply(setDeliveryCountry, mergedPrefill.deliveryCountry);
+    // Country is fixed to US; ignore prefill country.
 
     apply(setPiecesUnit, mergedPrefill.piecesUnit);
     apply(setWeightUnit, mergedPrefill.weightUnit);
@@ -248,6 +250,18 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       setManualTotalWeight(String(mergedPrefill.manualTotalWeight));
     }
   }, [mergedPrefill]);
+
+  // Auto-submit quotes when requested (e.g., from landing page "View Instant Rates")
+  React.useEffect(function() {
+    if (!autoSubmit) return;
+    // Basic guard: require at least pickup and delivery to be present
+    var hasPickup = (pickupZip || pickupCity);
+    var hasDelivery = (deliveryZip || deliveryCity);
+    if (!hasPickup || !hasDelivery) return;
+    // Trigger submit once after prefill has been applied
+    onSubmit({ preventDefault: function() {} });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSubmit, pickupZip, pickupCity, deliveryZip, deliveryCity]);
 
   // Sync manual total weight: clear it when all pieces have weights (switch back to computed mode)
   React.useEffect(function() {
@@ -582,7 +596,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       setPickupZip(option.zip || '');
       setPickupCity(option.city || '');
       setPickupState(option.state || '');
-      setPickupCountry(option.country || 'US');
       setPickupAirportCode(option.airport_iata || '');
       setShowPickupZipOptions(false);
       setMarkerFromOption(option, 'pickup');
@@ -590,7 +603,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       setDeliveryZip(option.zip || '');
       setDeliveryCity(option.city || '');
       setDeliveryState(option.state || '');
-      setDeliveryCountry(option.country || 'US');
       setDeliveryAirportCode(option.airport_iata || '');
       setShowDeliveryZipOptions(false);
       setMarkerFromOption(option, 'delivery');
@@ -605,7 +617,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       if (option.zip) {
         setPickupZip(option.zip);
       }
-      setPickupCountry(option.country || 'US');
       setPickupAirportCode(option.airport_iata || '');
       setShowPickupCityOptions(false);
       setMarkerFromOption(option, 'pickup');
@@ -691,14 +702,12 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
       if (parsed.pickup.city) setPickupCity(parsed.pickup.city);
       if (parsed.pickup.state) setPickupState(parsed.pickup.state);
       if (parsed.pickup.zip) setPickupZip(parsed.pickup.zip);
-      if (parsed.pickup.country) setPickupCountry(parsed.pickup.country);
       if (parsed.pickup.date) setPickupDate(parsed.pickup.date);
     }
     if (parsed.delivery) {
       if (parsed.delivery.city) setDeliveryCity(parsed.delivery.city);
       if (parsed.delivery.state) setDeliveryState(parsed.delivery.state);
       if (parsed.delivery.zip) setDeliveryZip(parsed.delivery.zip);
-      if (parsed.delivery.country) setDeliveryCountry(parsed.delivery.country);
     }
     if (parsed.pieces && Array.isArray(parsed.pieces.parts)) {
       const nextRows = [];
@@ -836,12 +845,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         setPickupCity(details.city || '');
         setPickupState(details.state || '');
         setPickupZip(details.zip || '');
-        setPickupCountry(details.country || 'US');
       } else {
         setDeliveryCity(details.city || '');
         setDeliveryState(details.state || '');
         setDeliveryZip(details.zip || '');
-        setDeliveryCountry(details.country || 'US');
       }
     } catch (_err) {
       setMapLookupError('Address lookup failed. You can edit the fields manually.');
@@ -943,7 +950,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           city: pickupCity,
           state: pickupState,
           zip: pickupZip,
-          country: pickupCountry
+          country: 'US'
         },
         date: pickupDate
       },
@@ -952,7 +959,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           city: deliveryCity,
           state: deliveryState,
           zip: deliveryZip,
-          country: deliveryCountry
+          country: 'US'
         }
       },
       pieces: {
@@ -1650,11 +1657,18 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 
   var card = (
         <div className="card">
+          {! (embedded && autoSubmit) && (
           <div className="card-header">
             <h2 className="title">Shipment details</h2>
             <div className="subtitle">Enter pickup, delivery and freight info</div>
           </div>
+          )}
           <div className="card-body">
+            {embedded && autoSubmit && loading && (
+              <div className="quote-loading-overlay">
+                <span className="quote-loading-spinner" />
+              </div>
+            )}
             {!embedded && (
               <fieldset>
                 <legend>Map</legend>
@@ -1727,10 +1741,11 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                 </div>
               </fieldset>
             )}
+            {!(embedded && autoSubmit) && (
             <form onSubmit={onSubmit} className="form-grid">
               <fieldset>
                 <legend>Pickup</legend>
-                <div className="row-4">
+                <div className="row-3">
                   <label>
                     Location
                     <div className="zip-select">
@@ -1817,10 +1832,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                     </div>
                   </label>
                   <label>
-                    Country
-                    <input value={pickupCountry} onChange={function(e){ setPickupCountry(e.target.value); }} />
-                  </label>
-                  <label>
                     Details
                     <div className="location-summary-inline">
                       {(
@@ -1843,7 +1854,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 
               <fieldset>
                 <legend>Delivery</legend>
-                <div className="row-4">
+                <div className="row-3">
                   <label>
                     Location
                     <div className="zip-select">
@@ -1928,10 +1939,6 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                         </div>
                       ) : null}
                     </div>
-                  </label>
-                  <label>
-                    Country
-                    <input value={deliveryCountry} onChange={function(e){ setDeliveryCountry(e.target.value); }} />
                   </label>
                   <label>
                     Details
@@ -2062,12 +2069,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   Equipment
                   <select value={equipmentType} onChange={function(e){ setEquipmentType(e.target.value); }}>
                     <option value="">Select equipment</option>
-                    <option value="Box Truck">Box Truck</option>
-                    <option value="Flatbed Hotshot">Flatbed Hotshot</option>
-                    <option value="Sprinter Van">Sprinter Van</option>
-                    <option value="Reefer">Reefer</option>
-                    <option value="Dry Van">Dry Van</option>
+                    <option value="Cargo Van">Cargo Van</option>
+                    <option value="Van">Van</option>
                     <option value="Flatbed">Flatbed</option>
+                    <option value="Reefer">Reefer</option>
                   </select>
                 </label>
               </fieldset>
@@ -2078,8 +2083,15 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                 </button>
               </div>
             </form>
+            )}
 
             <div className="status">
+              {loading && !(embedded && autoSubmit) && (
+                <div className="quote-loading">
+                  <span className="quote-loading-spinner" />
+                  <span>Fetching quotes…</span>
+                </div>
+              )}
               {error && (
                 <div className="error">Error: {error}</div>
               )}
