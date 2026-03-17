@@ -1615,7 +1615,8 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
           truckType: standardizedQuote.additionalInfo?.truckType,
           transitTime: standardizedQuote.additionalInfo?.transitTime,
           rateCalculationID: standardizedQuote.additionalInfo?.rateCalculationID,
-          mileage: standardizedQuote.additionalInfo?.mileage
+          mileage: standardizedQuote.additionalInfo?.mileage,
+          equipmentCategory: standardizedQuote.additionalInfo?.equipmentCategory
         };
       }
 
@@ -2195,8 +2196,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
   }
 
   return (
-    <div className="app-layout calculate-rate-page">
-      <Sidebar />
+    <div className="calculate-rate-page">
       <main className="app-main">
         <GlobalTopbar />
         <div className="app-blob app-blob-1" />

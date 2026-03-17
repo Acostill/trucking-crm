@@ -2417,6 +2417,12 @@ label {
   z-index: 1;
 }
 
+/* Calculate Rate page without sidebar: reset main layout */
+.calculate-rate-page .app-main {
+  margin-left: 0;
+  padding: 32px;
+}
+
 .app-loading {
   display: flex;
   align-items: center;

@@ -83,15 +83,6 @@ function Sidebar() {
       {isOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
       
       <div className={`sidebar ${isOpen ? 'open' : ''}`} ref={sidebarRef}>
-        {/* Mobile Close Button */}
-        <button 
-          className="sidebar-close-button"
-          onClick={closeSidebar}
-          aria-label="Close sidebar"
-        >
-          <X size={20} />
-        </button>
-        
         {/* Logo */}
         <div className="sidebar-logo">
         <div className="sidebar-logo-icon">
