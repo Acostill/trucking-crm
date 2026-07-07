@@ -220,8 +220,9 @@ export function initQuoteForm() {
   });
 
   let crmQuote = null; // CRM record backing the currently displayed rate
+  let submitSeq = 0;   // ignore stale async results from older submissions
 
-  form.addEventListener("submit", async (e) => {
+  form.addEventListener("submit", (e) => {
     e.preventDefault();
     const weight = Math.max(1, Number(document.getElementById("weight").value) || 1);
 
@@ -238,26 +239,35 @@ export function initQuoteForm() {
       service,
     };
 
+    // instant: render the local estimate immediately, no network wait
     const q = computeQuote(params);
-
-    // real carrier-network rate when the backend answers in time;
-    // the breakdown is rescaled so the rows still sum to the total
-    const networkTotal = await fetchNetworkRate(params);
-    if (networkTotal) {
-      const scale = networkTotal / q.total;
-      q.total = Math.round(networkTotal * 100) / 100;
-      q.breakdown = q.breakdown.map(([label, v]) => [label, v * scale]);
-    }
-
     renderResult(q, { idle, live });
 
-    // persist into the CRM pipeline (fire-and-forget; UI never waits)
+    // on stacked layouts the result sits below the form — bring it into view
+    const resultPanel = document.getElementById("quote-result");
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      if (window.lenis) window.lenis.scrollTo(resultPanel, { offset: -156, duration: 1.1 });
+      else resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    // background: carrier-network rate ticks the total in place when it
+    // lands, then the final quote is persisted to the CRM pipeline
+    const token = ++submitSeq;
     crmQuote = null;
-    saveQuoteToCrm(q, params).then((saved) => {
-      if (!saved) return;
-      crmQuote = saved;
-      const idEl = document.getElementById("result-id");
-      if (idEl) idEl.textContent = saved.id;
+    fetchNetworkRate(params).then((networkTotal) => {
+      if (token !== submitSeq) return;
+      if (networkTotal) {
+        const scale = networkTotal / q.total;
+        q.total = Math.round(networkTotal * 100) / 100;
+        q.breakdown = q.breakdown.map(([label, v]) => [label, v * scale]);
+        retickTotals(q);
+      }
+      saveQuoteToCrm(q, params).then((saved) => {
+        if (!saved || token !== submitSeq) return;
+        crmQuote = saved;
+        const idEl = document.getElementById("result-id");
+        if (idEl) idEl.textContent = saved.id;
+      });
     });
   });
 
@@ -272,6 +282,36 @@ export function initQuoteForm() {
   });
 }
 
+function breakdownHtml(q) {
+  return (
+    q.breakdown
+      .filter(([, v]) => Math.abs(v) > 0.005)
+      .map(([label, v]) => `<div class="row"><span>${label}</span><b>$${fmt(v)}</b></div>`)
+      .join("") +
+    `<div class="row row--total"><span>GUARANTEED TOTAL</span><b>$${fmt(q.total)}</b></div>`
+  );
+}
+
+/* the carrier network answered after first paint — glide the displayed
+   total to the real rate and refresh the breakdown to match */
+function retickTotals(q) {
+  const amount = document.getElementById("result-amount");
+  const from = parseFloat(amount.textContent.replace(/,/g, "")) || 0;
+  if (Math.abs(from - q.total) < 0.005) return;
+
+  const counter = { v: from };
+  gsap.to(counter, {
+    v: q.total,
+    duration: 0.7,
+    ease: "power2.inOut",
+    onUpdate: () => (amount.textContent = fmt(counter.v)),
+  });
+
+  const bd = document.getElementById("result-breakdown");
+  bd.innerHTML = breakdownHtml(q);
+  gsap.fromTo(bd.children, { opacity: 0.35 }, { opacity: 1, duration: 0.5, stagger: 0.05, ease: "power2.out" });
+}
+
 function renderResult(q, { idle, live }) {
   idle.hidden = true;
   live.hidden = false;
@@ -280,12 +320,7 @@ function renderResult(q, { idle, live }) {
   document.getElementById("result-eta").textContent = "ETA // " + q.eta;
 
   const bd = document.getElementById("result-breakdown");
-  bd.innerHTML =
-    q.breakdown
-      .filter(([, v]) => Math.abs(v) > 0.005)
-      .map(([label, v]) => `<div class="row"><span>${label}</span><b>$${fmt(v)}</b></div>`)
-      .join("") +
-    `<div class="row row--total"><span>GUARANTEED TOTAL</span><b>$${fmt(q.total)}</b></div>`;
+  bd.innerHTML = breakdownHtml(q);
 
   const book = document.getElementById("result-book");
   book.disabled = false;
@@ -301,7 +336,11 @@ function renderResult(q, { idle, live }) {
     onUpdate: () => (amount.textContent = fmt(counter.v)),
   });
   // rAF can be throttled in background tabs — make sure the price lands
-  setTimeout(() => { if (counter.v < q.total) amount.textContent = fmt(q.total); }, 1300);
+  // (skip if a network retick has since changed the target)
+  const target = q.total;
+  setTimeout(() => {
+    if (q.total === target && counter.v < target) amount.textContent = fmt(target);
+  }, 1300);
 
   gsap.fromTo(
     live,
