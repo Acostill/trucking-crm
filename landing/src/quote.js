@@ -172,7 +172,8 @@ async function saveQuoteToCrm(q, params) {
           linehaul: q.breakdown[0]?.[1] ?? null,
           ratePerMile: q.miles ? Math.round((q.total / q.miles) * 100) / 100 : null,
           truckType: "Dry Van",
-          transitTime: q.eta,
+          // quotes.quote_transit_time is INTEGER (days)
+          transitTime: { economy: 7, standard: 4, firstclass: 1 }[params.service] ?? null,
         },
         shipment: shipmentPayload(params),
       }),

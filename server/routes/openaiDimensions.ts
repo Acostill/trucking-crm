@@ -8,7 +8,13 @@ const upload = multer({
   limits: { fileSize: 8 * 1024 * 1024 }
 });
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazy-init so the server can boot without OPENAI_API_KEY;
+// the route itself 500s cleanly when the key is missing.
+let client: OpenAI | null = null;
+function getClient(): OpenAI {
+  if (!client) client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  return client;
+}
 
 function getOutputText(response: any): string | null {
   if (!response) return null;
@@ -46,7 +52,7 @@ router.post(
       const base64 = req.file.buffer.toString('base64');
       const dataUrl = `data:${mime};base64,${base64}`;
 
-      const response = await client.responses.create({
+      const response = await getClient().responses.create({
         model: 'gpt-4.1-mini',
         input: [
           {

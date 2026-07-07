@@ -11,9 +11,15 @@ if (!connectionString) {
   console.warn('DATABASE_URL not found in environment. Place it in server/.env');
 }
 
+// SSL for hosted Postgres; disabled for local dev (localhost or
+// PGSSLMODE=disable), where the server has no SSL support.
+const isLocal =
+  process.env.PGSSLMODE === 'disable' ||
+  /localhost|127\.0\.0\.1/.test(connectionString || '');
+
 const pool = new Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false }
+  ssl: isLocal ? false : { rejectUnauthorized: false }
 });
 
 pool.on('error', function(err: Error) {

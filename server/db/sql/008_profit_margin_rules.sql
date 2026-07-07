@@ -15,9 +15,14 @@ CREATE TABLE IF NOT EXISTS public.profit_margin_rules (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE public.profit_margin_rules
-  ADD CONSTRAINT IF NOT EXISTS profit_margin_rules_margin_pct_check
-  CHECK (margin_pct IS NULL OR (margin_pct >= 0 AND margin_pct <= 100));
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'profit_margin_rules_margin_pct_check') THEN
+    ALTER TABLE public.profit_margin_rules
+      ADD CONSTRAINT profit_margin_rules_margin_pct_check
+      CHECK (margin_pct IS NULL OR (margin_pct >= 0 AND margin_pct <= 100));
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS profit_margin_rules_active_idx
   ON public.profit_margin_rules (is_active);
