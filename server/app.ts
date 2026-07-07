@@ -17,7 +17,12 @@ import openaiDimensionsRouter from './routes/openaiDimensions';
 import openrouterDimensionsRouter from './routes/openrouterDimensions';
 
 const app = express();
-const ROOT_DIR = __dirname;
+// In dev (ts-node-dev) this file runs in place, so __dirname is server/.
+// Compiled, it runs from server/dist/app.js, so __dirname is server/dist —
+// one level deeper. Resolve the actual server/ package directory in both
+// cases so on-disk paths (views/, public/, and the sibling ../landing,
+// ../client builds) are correct whether run from source or dist.
+const ROOT_DIR = path.basename(__dirname) === 'dist' ? path.join(__dirname, '..') : __dirname;
 
 function parseCorsOrigins(value: string | undefined): string[] {
   if (!value || typeof value !== 'string') {
