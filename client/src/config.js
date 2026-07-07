@@ -1,4 +1,8 @@
-const DEFAULT_API_BASE = 'http://localhost:3001';
+// Empty string = same-origin relative requests (/api/...). Correct default
+// for the self-hosted single-port setup, where server/ serves this build
+// itself. Standalone dev (client on its own port hitting a separate API)
+// should set REACT_APP_API_BASE_URL explicitly — see client/.env.
+const DEFAULT_API_BASE = '';
 
 function normalizeBaseUrl(raw) {
   if (!raw || typeof raw !== 'string') return DEFAULT_API_BASE;

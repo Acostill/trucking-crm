@@ -1,6 +1,7 @@
 import createError from 'http-errors';
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
+import fs from 'fs';
 import cookieParser from 'cookie-parser';
 import logger from 'morgan';
 import cors from 'cors';
@@ -53,6 +54,17 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(ROOT_DIR, 'public')));
 
+// Self-hosted single-port mode: the public landing page (landing/dist) owns
+// "/" and its own asset paths, the Lanely CRM (client/build) owns everything
+// else non-API (/loads, /pipeline, /dashboard, ...). Both are optional here —
+// if a build hasn't been generated yet, express.static simply serves
+// nothing from that directory and falls through, so this is a no-op in
+// pure-API dev setups.
+const LANDING_DIST = path.join(ROOT_DIR, '..', 'landing', 'dist');
+const CLIENT_BUILD = path.join(ROOT_DIR, '..', 'client', 'build');
+app.use(express.static(LANDING_DIST));
+app.use(express.static(CLIENT_BUILD));
+
 app.use('/', indexRouter);
 app.use('/api/admin/users', usersRouter);
 app.use('/api/admin', adminRouter);
@@ -62,6 +74,24 @@ app.use('/api/quotes', quotesRouter);
 app.use('/api/ocr', ocrRouter);
 app.use('/api/extract-dimensions', openaiDimensionsRouter);
 app.use('/api/extract-dimensions-openrouter', openrouterDimensionsRouter);
+
+// SPA fallback for the CRM: any GET request that isn't an API call and
+// doesn't match a static file above (e.g. /loads, /login, /pipeline) is
+// handled client-side by client/build's React Router, so serve its
+// index.html rather than 404ing.
+const CLIENT_INDEX = path.join(CLIENT_BUILD, 'index.html');
+app.get('*', function(req: Request, res: Response, next: NextFunction) {
+  const isApiPath =
+    req.path.startsWith('/api/') ||
+    req.path === '/calculate-rate' ||
+    req.path === '/forwardair-quote';
+  const looksLikeFile = path.extname(req.path) !== '';
+  if (isApiPath || looksLikeFile || !fs.existsSync(CLIENT_INDEX)) {
+    next();
+    return;
+  }
+  res.sendFile(CLIENT_INDEX);
+});
 
 // catch 404 and forward to error handler
 app.use(function(_req: Request, _res: Response, next: NextFunction) {
