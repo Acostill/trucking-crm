@@ -366,7 +366,16 @@ main { position: relative; z-index: 2; }
   flex-direction: column;
   margin-bottom: 32px;
 }
-.hero__word { display: block; overflow: hidden; }
+.hero__word {
+  display: block;
+  overflow: hidden;
+  /* line-height is intentionally <1 for the tight headline look, but that
+     clips descenders (g/y/p/q) against this reveal-mask's overflow:hidden —
+     pad the box open and pull it back with a matching negative margin so
+     line spacing is unaffected. */
+  padding-bottom: 0.15em;
+  margin-bottom: -0.15em;
+}
 .hero__word--accent { color: var(--ink-45); }
 
 .hero__sub {
