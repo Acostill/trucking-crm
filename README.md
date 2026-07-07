@@ -12,10 +12,6 @@ Lanely CRM, and an AI voice agent.
 | `setter-agent/` | Grok Voice relay + appointment-setter agent (browser ⇄ relay ⇄ `wss://api.x.ai/v1/realtime`), CRM tool calls, mock mode | Node + ws | 3100 |
 | `client/` | Lanely CRM dashboard | CRA + React | 3000 |
 | `calculate-rate/` | Standalone quote calculator (legacy; superseded by `landing/`) | CRA + React | 3000 |
-| `lanely-landing/` | Previous landing page (superseded by `landing/`) | Vite + React | 3000 |
-
-`lanely/`, `lanely---modern-logistics-crm/` and the root `.zip`s are older
-duplicates kept for reference.
 
 ## Quick start (dev)
 
