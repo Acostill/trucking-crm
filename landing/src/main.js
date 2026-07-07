@@ -166,3 +166,18 @@ initQuoteForm();
 
 /* ---------------- voice assistant (xAI Grok Voice) ---------------- */
 initVoiceAssistant();
+
+/* On mobile the quote form is tall enough that the fixed voice fab would
+   rest on top of form content (blocking taps) as the user scrolls through —
+   dock it under the nav for the duration of #quote instead. */
+const voiceWidget = document.querySelector(".voice");
+const isMobileWidth = () => window.matchMedia("(max-width: 900px)").matches;
+if (voiceWidget) {
+  ScrollTrigger.create({
+    trigger: "#quote",
+    start: "top bottom",
+    end: "bottom top",
+    onToggle: (self) =>
+      voiceWidget.classList.toggle("voice--docked", self.isActive && isMobileWidth()),
+  });
+}

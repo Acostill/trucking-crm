@@ -244,6 +244,8 @@ main { position: relative; z-index: 2; }
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
+  transition: left 0.35s var(--ease-out), right 0.35s var(--ease-out),
+    top 0.35s var(--ease-out), bottom 0.35s var(--ease-out);
 }
 
 .voice__fab {
@@ -808,4 +810,16 @@ main { position: relative; z-index: 2; }
   .voice { left: 16px; bottom: 16px; }
   .voice__panel { width: min(300px, calc(100vw - 32px)); }
   .footer__meta { gap: 14px; flex-direction: column; align-items: center; }
+}
+
+/* On mobile, the quote form is tall enough that the fixed voice fab would
+   otherwise rest on top of form content (and block taps on it) as the user
+   scrolls through — dock it under the nav for the duration of that section
+   instead. Placed after the breakpoint blocks above so it wins regardless
+   of viewport width; main.js only toggles this class on mobile widths. */
+.voice--docked {
+  top: 78px;
+  bottom: auto;
+  left: auto;
+  right: clamp(16px, 4vw, 24px);
 }
