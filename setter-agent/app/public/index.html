@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Setter Console</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b23; --panel2: #1d242f; --line: #2a3342;
+    --text: #e8edf4; --dim: #8b97a8; --accent: #4f8cff; --green: #34c98e; --amber: #e8b34b;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; font-weight: 650; }
+  .badge { font-size: 11px; font-weight: 700; letter-spacing: .06em; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; }
+  .badge.mock { background: #3a2f14; color: var(--amber); }
+  .badge.live { background: #123527; color: var(--green); }
+  header .meta { color: var(--dim); font-size: 13px; margin-left: auto; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 320px; min-height: 0; }
+  #chatCol { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--line); }
+  #transcript { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .bubble { max-width: 72%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
+  .agent { background: var(--panel2); border-bottom-left-radius: 4px; align-self: flex-start; }
+  .user { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; align-self: flex-end; }
+  .tool { align-self: center; font-size: 12px; color: var(--dim); background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 4px 12px; }
+  .tool b { color: var(--green); font-weight: 600; }
+  .sys { align-self: center; font-size: 12px; color: var(--amber); }
+  #composer { display: flex; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); }
+  #composer input { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; color: var(--text); padding: 11px 14px; font-size: 15px; outline: none; }
+  #composer input:focus { border-color: var(--accent); }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 0 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button.secondary { background: var(--panel2); border: 1px solid var(--line); }
+  button.rec { background: #c94f4f; }
+  aside { padding: 16px; overflow-y: auto; background: var(--panel); }
+  aside h2 { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 14px 0 8px; }
+  aside h2:first-child { margin-top: 0; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 8px; }
+  .card .dim { color: var(--dim); font-size: 12px; }
+  .empty { color: var(--dim); font-size: 13px; font-style: italic; }
+  .disp { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 12px; background: #123527; color: var(--green); }
+  .disp.do_not_contact, .disp.escalate { background: #3a1a1a; color: #ef8383; }
+  .disp.not_qualified, .disp.follow_up, .disp.info_sent { background: #3a2f14; color: var(--amber); }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Setter Console</h1>
+  <span id="mode" class="badge mock">…</span>
+  <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--dim)">
+    Voice
+    <select id="voice" style="background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px"></select>
+  </label>
+  <span class="meta" id="meta"></span>
+</header>
+<main>
+  <div id="chatCol">
+    <div id="transcript"></div>
+    <div id="composer">
+      <input id="input" placeholder="Speak as the lead… (type and hit Enter)" autocomplete="off" />
+      <button id="send">Send</button>
+      <button id="mic" class="secondary" title="Talk with your microphone (live mode)">🎙 Mic</button>
+    </div>
+  </div>
+  <aside>
+    <h2>Bookings</h2><div id="bookings"><div class="empty">None yet</div></div>
+    <h2>CRM Outcomes</h2><div id="crm"><div class="empty">None yet</div></div>
+    <h2>SMS Queue</h2><div id="sms"><div class="empty">None yet</div></div>
+    <h2>Do Not Contact</h2><div id="dnc"><div class="empty">None yet</div></div>
+  </aside>
+</main>
+<script>
+const transcript = document.getElementById('transcript')
+const input = document.getElementById('input')
+let agentBubble = null
+
+function add(cls, text) {
+  const el = document.createElement('div')
+  el.className = cls
+  el.textContent = text
+  transcript.appendChild(el)
+  transcript.scrollTop = transcript.scrollHeight
+  return el
+}
+function addTool(name, detail) {
+  const el = document.createElement('div')
+  el.className = 'tool'
+  el.innerHTML = '⚙️ <b></b> ' + detail
+  el.querySelector('b').textContent = name
+  transcript.appendChild(el)
+  transcript.scrollTop = transcript.scrollHeight
+}
+
+const voiceSel = document.getElementById('voice')
+fetch('/api/meta').then(r => r.json()).then(m => {
+  const badge = document.getElementById('mode')
+  badge.textContent = m.mode
+  badge.className = 'badge ' + m.mode
+  document.getElementById('meta').textContent =
+    `${m.agent} · ${m.coach} · lead: ${m.lead.firstName} ${m.lead.lastName}`
+  for (const v of m.voices) {
+    const opt = document.createElement('option')
+    opt.value = v.id
+    opt.textContent = `${v.id} (${v.gender === 'female' ? 'F' : 'M'})`
+    if (v.id === m.voice) opt.selected = true
+    voiceSel.appendChild(opt)
+  }
+  connect(m.voice)
+})
+
+// ---- WebSocket to relay (one connection per call; new voice = new call) ----
+let ws = null
+function connect(voice) {
+  if (ws) { ws.onclose = null; ws.close() }
+  agentBubble = null
+  transcript.innerHTML = ''
+  add('sys', `— new call, voice: ${voice} —`)
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?voice=' + encodeURIComponent(voice))
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'start' }))
+  ws.onclose = () => add('sys', 'Call ended (connection closed)')
+  ws.onmessage = onMessage
+}
+voiceSel.onchange = () => connect(voiceSel.value)
+
+function onMessage(e) {
+  const msg = JSON.parse(e.data)
+  if (msg.type === 'agent_text_delta') {
+    if (!agentBubble) agentBubble = add('bubble agent', '')
+    agentBubble.textContent += msg.delta
+    transcript.scrollTop = transcript.scrollHeight
+  } else if (msg.type === 'agent_text') {
+    if (agentBubble) { agentBubble.textContent = msg.text; agentBubble = null }
+    else add('bubble agent', msg.text)
+  } else if (msg.type === 'user_transcript') {
+    add('bubble user', msg.text)
+  } else if (msg.type === 'tool_call') {
+    addTool(msg.name, JSON.stringify(msg.args).slice(0, 120))
+    refreshState()
+  } else if (msg.type === 'tool_result') {
+    refreshState()
+  } else if (msg.type === 'audio') {
+    playPcm(msg.data)
+  } else if (msg.type === 'error') {
+    add('sys', '⚠️ ' + msg.message)
+  } else if (msg.type === 'turn_done') {
+    agentBubble = null
+  }
+}
+
+
+function sendText() {
+  const text = input.value.trim()
+  if (!text || ws.readyState !== 1) return
+  add('bubble user', text)
+  ws.send(JSON.stringify({ type: 'user_text', text }))
+  input.value = ''
+}
+document.getElementById('send').onclick = sendText
+input.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText() })
+
+// ---- Side panel: live CRM/calendar state ----
+async function refreshState() {
+  const s = await fetch('/api/state').then(r => r.json())
+  const fill = (id, items, render) => {
+    const el = document.getElementById(id)
+    el.innerHTML = items.length ? '' : '<div class="empty">None yet</div>'
+    items.slice(-5).reverse().forEach(i => {
+      const c = document.createElement('div')
+      c.className = 'card'
+      c.innerHTML = render(i)
+      el.appendChild(c)
+    })
+  }
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))
+  fill('bookings', s.bookings, b =>
+    `<b>${esc(b.lead_name)}</b> — ${esc(b.slot_start)}<div class="dim">${esc(b.notes || '')}</div>`)
+  fill('crm', s.crm, c =>
+    `<span class="disp ${esc(c.disposition)}">${esc(c.disposition)}</span><div class="dim">${esc(c.summary)}</div>`)
+  fill('sms', s.sms, m => `<b>${esc(m.message_type)}</b> → ${esc(m.to)}<div class="dim">${esc(m.body)}</div>`)
+  fill('dnc', s.dnc, d => `<b>${esc(d.name)}</b> — ${esc(d.phone)}`)
+}
+refreshState()
+setInterval(refreshState, 4000)
+
+// ---- Audio: playback of agent PCM16 @ 24 kHz ----
+let audioCtx, playHead = 0
+function playPcm(b64) {
+  audioCtx ??= new AudioContext({ sampleRate: 24000 })
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
+  const pcm = new Int16Array(bytes.buffer)
+  const buf = audioCtx.createBuffer(1, pcm.length, 24000)
+  const ch = buf.getChannelData(0)
+  for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768
+  const src = audioCtx.createBufferSource()
+  src.buffer = buf
+  src.connect(audioCtx.destination)
+  playHead = Math.max(playHead, audioCtx.currentTime)
+  src.start(playHead)
+  playHead += buf.duration
+}
+
+// ---- Audio: mic capture → PCM16 @ 24 kHz → relay (live mode) ----
+let micStream = null, micCtx = null
+document.getElementById('mic').onclick = async function () {
+  if (micStream) {
+    micStream.getTracks().forEach(t => t.stop())
+    micCtx?.close(); micStream = null
+    this.className = 'secondary'; this.textContent = '🎙 Mic'
+    return
+  }
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  } catch { add('sys', 'Microphone permission denied'); return }
+  micCtx = new AudioContext({ sampleRate: 24000 })
+  const src = micCtx.createMediaStreamSource(micStream)
+  const proc = micCtx.createScriptProcessor(4096, 1, 1)
+  src.connect(proc); proc.connect(micCtx.destination)
+  proc.onaudioprocess = (e) => {
+    const f32 = e.inputBuffer.getChannelData(0)
+    const pcm = new Int16Array(f32.length)
+    for (let i = 0; i < f32.length; i++) pcm[i] = Math.max(-1, Math.min(1, f32[i])) * 32767
+    const b64 = btoa(String.fromCharCode(...new Uint8Array(pcm.buffer)))
+    if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'audio_chunk', data: b64 }))
+  }
+  this.className = 'rec'; this.textContent = '⏹ Stop'
+}
+</script>
+</body>
+</html>

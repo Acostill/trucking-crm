@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FIRST CLASS — Instant Freight Quotes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <!-- One continuous story shot, exploded into frames and scrubbed by scroll:
+       highway → yard scan → digital twin → network earth -->
+  <div class="bg" id="bg">
+    <canvas class="bg__canvas" id="bg-canvas"></canvas>
+    <div class="bg__vignette"></div>
+    <div class="bg__dim" id="bg-dim"></div>
+  </div>
+  <div class="grain"></div>
+
+  <!-- Top bar nav -->
+  <nav class="nav">
+    <div class="nav__brand">
+      <img class="nav__logo-img" src="/brand/logo.png" alt="First Class Trucking logo" />
+      FIRST CLASS<span class="nav__tld">&nbsp;TRUCKING</span>
+    </div>
+    <div class="nav__links">
+      <a href="#network">Network</a>
+      <a href="#intelligence">Intelligence</a>
+      <a href="#quote" class="nav__cta">Get a quote</a>
+    </div>
+  </nav>
+
+  <main>
+    <!-- ============ HERO ============ -->
+    <section class="section hero" id="hero">
+      <div class="hero__content">
+        <p class="hero__eyebrow reveal-line"><span>THE LOGISTICS OPERATING SYSTEM</span></p>
+        <h1 class="hero__title">
+          <span class="hero__word">Freight,</span>
+          <span class="hero__word">quoted</span>
+          <span class="hero__word hero__word--accent">instantly.</span>
+        </h1>
+        <p class="hero__sub reveal-line"><span>Real-time pricing across the entire network. No calls. No waiting.
+        Your rate in under three seconds.</span></p>
+        <div class="hero__actions">
+          <a href="#quote" class="btn btn--primary">Generate quote <span class="btn__arrow">→</span></a>
+          <a href="#network" class="btn btn--ghost">Explore the network</a>
+        </div>
+      </div>
+      <div class="hero__scroll-hint">
+        <span>SCROLL</span>
+        <div class="hero__scroll-line"></div>
+      </div>
+    </section>
+
+    <!-- ============ NETWORK ============ -->
+    <section class="section story" id="network">
+      <div class="hud-tags hud-tags--right" aria-hidden="true">
+        <span class="hud-tag hud-tag--green">· LANE LAX → NYC</span>
+        <span class="hud-tag">· 312 LANES LIVE</span>
+        <span class="hud-tag hud-tag--amber">· RATE CONFIDENCE 99.2%</span>
+      </div>
+      <div class="story__panel story__panel--left">
+        <p class="story__index">01 — NETWORK</p>
+        <h2 class="story__title">Every lane.<br />Every mile.<br /><em>Priced live.</em></h2>
+        <p class="story__body">Our pricing engine ingests fuel indexes, lane density and live capacity
+        signals across 312 active lanes — so the number you see is the number you pay.</p>
+        <ul class="story__stats">
+          <li><b data-count="312">0</b><span>ACTIVE LANES</span></li>
+          <li><b data-count="98.4" data-decimals="1">0</b><span>% ON-TIME</span></li>
+          <li><b data-count="2.6" data-decimals="1">0</b><span>SEC AVG QUOTE</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============ INTELLIGENCE ============ -->
+    <section class="section story" id="intelligence">
+      <div class="hud-tags hud-tags--left" aria-hidden="true">
+        <span class="hud-tag hud-tag--green">· SCANNING LOAD ✓</span>
+        <span class="hud-tag">· CLASS 70 VERIFIED</span>
+        <span class="hud-tag hud-tag--amber">· CHECK-IN 2:34 PM</span>
+      </div>
+      <div class="story__panel story__panel--right">
+        <p class="story__index">02 — INTELLIGENCE</p>
+        <h2 class="story__title">A pricing brain<br />that never<br /><em>sleeps.</em></h2>
+        <p class="story__body">Machine-tuned rate curves recalibrate continuously. Distance, class, weight,
+        service level — resolved into a guaranteed rate the moment you ask.</p>
+        <div class="ticker glass-inset">
+          <div class="ticker__row"><span>FUEL INDEX</span><b id="tick-fuel">—</b></div>
+          <div class="ticker__row"><span>NETWORK LOAD</span><b id="tick-load">—</b></div>
+          <div class="ticker__row"><span>RATE CONFIDENCE</span><b class="tick-good">99.2%</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ QUOTE SYSTEM ============ -->
+    <section class="section quote" id="quote">
+      <div class="quote__header">
+        <p class="story__index">03 — INSTANT QUOTE</p>
+        <h2 class="quote__title">Name the load.<br />We name the price.</h2>
+      </div>
+
+      <div class="quote__grid">
+        <!-- Form panel -->
+        <form class="quote__form panel" id="quote-form" autocomplete="off">
+          <div class="field-row">
+            <div class="field">
+              <label for="origin">ORIGIN</label>
+              <select id="origin" required></select>
+            </div>
+            <div class="field__connector" aria-hidden="true">
+              <svg viewBox="0 0 40 12" fill="none"><path d="M0 6 H34 M30 1 L38 6 L30 11" stroke="currentColor" stroke-width="1.5"/></svg>
+            </div>
+            <div class="field">
+              <label for="destination">DESTINATION</label>
+              <select id="destination" required></select>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label for="weight">WEIGHT (LBS)</label>
+              <input type="number" id="weight" min="1" max="45000" value="1200" required />
+            </div>
+            <div class="field">
+              <label for="freight-class">FREIGHT CLASS</label>
+              <select id="freight-class">
+                <option value="standard">Standard (Class 70)</option>
+                <option value="fragile">Fragile / High-Care</option>
+                <option value="hazmat">Hazmat Certified</option>
+                <option value="reefer">Temp-Controlled</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>SERVICE LEVEL</label>
+            <div class="service-picker" id="service-picker">
+              <button type="button" class="service" data-service="economy">
+                <b>ECONOMY</b><span>5–7 days</span>
+              </button>
+              <button type="button" class="service is-active" data-service="standard">
+                <b>STANDARD</b><span>3–4 days</span>
+              </button>
+              <button type="button" class="service" data-service="firstclass">
+                <b>FIRST CLASS</b><span>Next day</span>
+              </button>
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn--primary btn--full" id="quote-submit">
+            <span class="btn__label">Calculate Rate</span>
+            <span class="btn__arrow">→</span>
+          </button>
+        </form>
+
+        <!-- Result panel -->
+        <div class="quote__result panel" id="quote-result" aria-live="polite">
+          <div class="result__idle" id="result-idle">
+            <div class="result__radar"><div class="result__radar-sweep"></div></div>
+            <p>AWAITING PARAMETERS</p>
+          </div>
+
+          <div class="result__live" id="result-live" hidden>
+            <p class="result__eyebrow">GUARANTEED RATE // <span id="result-id">FC-000000</span></p>
+            <div class="result__price">
+              <span class="result__currency">$</span><span id="result-amount">0</span>
+            </div>
+            <p class="result__eta" id="result-eta">—</p>
+            <div class="result__breakdown glass-inset" id="result-breakdown"></div>
+            <button class="btn btn--primary btn--full" id="result-book">Book This Rate <span class="btn__arrow">→</span></button>
+            <p class="result__lock">⚿ Rate locked for 15:00 minutes</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FOOTER CTA ============ -->
+    <footer class="section footer">
+      <h2 class="footer__title">Move something.</h2>
+      <p class="footer__sub">First Class Trucking — instant quotes, guaranteed rates, zero friction.</p>
+      <a href="#quote" class="btn btn--primary">Get your rate <span class="btn__arrow">→</span></a>
+      <div class="footer__meta">
+        <span>© 2026 FIRST CLASS TRUCKING</span>
+        <span>QUOTE ENGINE V2.0</span>
+        <span>ALL SYSTEMS NOMINAL</span>
+      </div>
+    </footer>
+  </main>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
