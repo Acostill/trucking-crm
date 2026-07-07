@@ -4,8 +4,13 @@ import Lenis from "lenis";
 import { createSequence } from "./sequence.js";
 import { initQuoteForm } from "./quote.js";
 import { initVoiceAssistant } from "./voice.js";
+import { CRM_LOGIN_URL } from "./config.js";
 
 gsap.registerPlugin(ScrollTrigger);
+
+document.querySelectorAll("[data-crm-login]").forEach((a) => {
+  a.href = CRM_LOGIN_URL;
+});
 
 /* ---------------- smooth scroll ---------------- */
 const lenis = new Lenis({ lerp: 0.09, wheelMultiplier: 1.0 });

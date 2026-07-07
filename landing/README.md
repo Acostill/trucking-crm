@@ -24,6 +24,7 @@ Copy `.env.example` → `.env.local` to point at your environments:
 |---|---|---|
 | `VITE_API_BASE_URL` | `http://localhost:3001` | `server/` Express CRM API |
 | `VITE_VOICE_WS_URL` | `ws://localhost:3100/ws` | `setter-agent/app` Grok voice relay |
+| `VITE_CRM_BASE_URL` | `http://localhost:3000` in local landing dev, otherwise same origin | `client/` Lanely CRM app |
 
 > The server's `CORS_ORIGINS` env must include this app's origin
 > (e.g. `http://localhost:5173`).

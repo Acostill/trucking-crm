@@ -1,9 +1,19 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 
-// When compiled, __dirname points to dist/; load .env from project root/server/.env
-dotenv.config({ path: path.join(process.cwd(), 'server', '.env') });
+const envPathCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), 'server', '.env'),
+  path.resolve(__dirname, '.env'),
+  path.resolve(__dirname, '..', '.env')
+];
+const envPath = envPathCandidates.find(function(candidate) {
+  return fs.existsSync(candidate);
+});
+
+dotenv.config(envPath ? { path: envPath } : undefined);
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -86,4 +96,3 @@ export default {
   },
   pool
 };
-
