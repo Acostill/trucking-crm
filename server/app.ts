@@ -20,7 +20,7 @@ const ROOT_DIR = __dirname;
 
 function parseCorsOrigins(value: string | undefined): string[] {
   if (!value || typeof value !== 'string') {
-    return ['http://localhost:3000'];
+    return ['http://localhost:3000', 'http://localhost:5173'];
   }
   return value
     .split(',')
@@ -88,4 +88,3 @@ app.use(function(err: any, req: Request, res: Response, _next: NextFunction) {
 });
 
 export default app;
-

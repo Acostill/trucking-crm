@@ -42,80 +42,96 @@ export default function AuthForm(props) {
 
   return (
     <div className="auth-wrapper">
-      <div className="card auth-card">
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div style={{ 
-            width: '48px', 
-            height: '48px', 
-            margin: '0 auto 16px', 
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, #4f46e5 0%, #818cf8 100%)',
-            boxShadow: '0 4px 12px -2px rgba(99, 102, 241, 0.4)'
-          }}></div>
-          <h2 className="title" style={{ fontSize: '24px', marginBottom: '8px' }}>
-            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
-          </h2>
-          <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
-            {mode === 'signup' ? 'Enter your details to get started' : 'Sign in to continue to First Class Trucking'}
-          </p>
+      <div className="auth-shell">
+        <section className="auth-brand-panel" aria-label="First Class Trucking">
+          <img
+            className="auth-brand-logo"
+            src="/brand/logo.png"
+            alt="First Class Trucking"
+          />
+          <div>
+            <p className="auth-eyebrow">Operations CRM</p>
+            <h1 className="auth-brand-title">First Class Trucking</h1>
+          </div>
+          <p className="auth-brand-footnote">Secure workspace access</p>
+        </section>
+
+        <div className="auth-card">
+          <div className="auth-header">
+            <img
+              className="auth-logo"
+              src="/brand/logo.png"
+              alt="First Class Trucking"
+            />
+            <h2 className="auth-title">
+              {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+            </h2>
+            <p className="auth-subtitle">
+              {mode === 'signup' ? 'Set up access to the CRM.' : 'Sign in to continue to the CRM.'}
+            </p>
         </div>
         
-        <form style={{ display: 'grid', gap: '16px' }} onSubmit={handleSubmit}>
+          <form className="auth-form" onSubmit={handleSubmit}>
             {mode === 'signup' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="auth-name-grid">
                 <label>
                   First name
-                  <input value={firstName} onChange={function(e){ setFirstName(e.target.value); }} />
+                  <input
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={function(e){ setFirstName(e.target.value); }}
+                  />
                 </label>
                 <label>
                   Last name
-                  <input value={lastName} onChange={function(e){ setLastName(e.target.value); }} />
+                  <input
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={function(e){ setLastName(e.target.value); }}
+                  />
                 </label>
               </div>
             )}
             <label>
               Email
-              <input type="email" value={email} onChange={function(e){ setEmail(e.target.value); }} />
+              <input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={function(e){ setEmail(e.target.value); }}
+              />
             </label>
             <label>
               Password
-              <input type="password" value={password} onChange={function(e){ setPassword(e.target.value); }} />
+              <input
+                type="password"
+                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                value={password}
+                onChange={function(e){ setPassword(e.target.value); }}
+              />
             </label>
           
-          {error && (
-            <div style={{ 
-              padding: '12px 16px', 
-              background: '#fef2f2', 
-              border: '1px solid #fecaca', 
-              borderRadius: '10px',
-              color: '#dc2626',
-              fontSize: '14px'
-            }}>
-              {error}
-            </div>
-          )}
+            {error && (
+              <div className="auth-error">
+                {error}
+              </div>
+            )}
           
-          <button className="btn" type="submit" disabled={loading} style={{ width: '100%', marginTop: '8px' }}>
-                {loading ? 'Please wait…' : (mode === 'signup' ? 'Create account' : 'Sign in')}
-              </button>
-        </form>
+            <button className="btn auth-submit" type="submit" disabled={loading}>
+              {loading ? 'Please wait…' : (mode === 'signup' ? 'Create account' : 'Sign in')}
+            </button>
+          </form>
         
-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <button
-                type="button"
-                onClick={function(){ setMode(mode === 'signup' ? 'signin' : 'signup'); }}
-                disabled={loading}
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              color: '#4f46e5', 
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer'
-            }}
-              >
-            {mode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-              </button>
+          <div className="auth-switch">
+            <button
+              type="button"
+              className="auth-switch-button"
+              onClick={function(){ setMode(mode === 'signup' ? 'signin' : 'signup'); }}
+              disabled={loading}
+            >
+              {mode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

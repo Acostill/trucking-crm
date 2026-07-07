@@ -1,0 +1,47 @@
+{
+  "coachId": "marcus-fit",
+  "timezone": "America/New_York",
+  "voice": "ara",
+  "variables": {
+    "AGENT_NAME": "Riley",
+    "COACH_NAME": "Coach Marcus",
+    "COACH_FIRST_NAME": "Marcus",
+    "COACH_ONE_LINER": "a fitness coach who helps busy dads over 35 lose 20+ pounds without giving up their weekends",
+    "LEAD_SOURCE_CONTEXT": "filled out the form on Instagram asking about the 90-Day Dad Bod Transformation program",
+    "LEAD_ACTION": "requested info about the 90-day program earlier today",
+    "LEAD_TIMING": "today",
+    "CALL_NAME": "Strategy Call",
+    "CALL_LENGTH": "45",
+    "BOOKING_WINDOW": "7",
+    "PROBLEM_DOMAIN": "your health and training",
+    "QUALIFICATION_CRITERIA": [
+      "They personally want to solve this (not shopping for someone else)",
+      "Their goal is fat loss, energy, or getting back in shape — something the program actually addresses",
+      "They confirm they're in a position to invest in a program if it's a fit (ask softly: \"If Marcus maps out a plan and it's a fit, are you in a spot where you could invest in yourself right now?\")",
+      "They can attend a Zoom call within the next 7 days"
+    ],
+    "PROGRAM_FACTS": [
+      "90-Day Dad Bod Transformation: 1-on-1 coaching, weekly video check-ins, custom training and nutrition plan, private community",
+      "Designed for men 30-50 with less than 5 hours per week to train",
+      "Clients typically train 3 times per week, 45 minutes per session, home or gym",
+      "No foods are banned; the nutrition system is built around family meals",
+      "Coach Marcus: 12 years coaching, former D1 athlete, has coached 300+ dads since 2014",
+      "NOT a fit for: people wanting a done-for-you meal delivery service, competitive bodybuilders, anyone under 18"
+    ],
+    "SOCIAL_PROOF": "Marcus has coached over 300 dads since 2014",
+    "FREE_RESOURCE": "Marcus's free 20-minute Dad Bod Reset training",
+    "INFO_LINK": "https://coachmarcus.example.com/reset",
+    "MAX_MINUTES": "8",
+    "DISCLOSURE_RULE": "In your very first sentence of the call, disclose that you are an AI assistant (several US states require this). Do it casually, exactly like the opener in THE CONVERSATION ARC."
+  },
+  "sampleLead": {
+    "firstName": "Jake",
+    "lastName": "Miller",
+    "phone": "+15555550123",
+    "email": "jake@example.com",
+    "source": "Instagram ad form",
+    "date": "today",
+    "formAnswers": "Goal: lose 25 lbs. Biggest struggle: no time, travels for work.",
+    "timezone": "America/New_York"
+  }
+}

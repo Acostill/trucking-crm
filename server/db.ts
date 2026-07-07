@@ -1,9 +1,19 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 
-// When compiled, __dirname points to dist/; load .env from project root/server/.env
-dotenv.config({ path: path.join(process.cwd(), 'server', '.env') });
+const envPathCandidates = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(process.cwd(), 'server', '.env'),
+  path.resolve(__dirname, '.env'),
+  path.resolve(__dirname, '..', '.env')
+];
+const envPath = envPathCandidates.find(function(candidate) {
+  return fs.existsSync(candidate);
+});
+
+dotenv.config(envPath ? { path: envPath } : undefined);
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -11,9 +21,15 @@ if (!connectionString) {
   console.warn('DATABASE_URL not found in environment. Place it in server/.env');
 }
 
+// SSL for hosted Postgres; disabled for local dev (localhost or
+// PGSSLMODE=disable), where the server has no SSL support.
+const isLocal =
+  process.env.PGSSLMODE === 'disable' ||
+  /localhost|127\.0\.0\.1/.test(connectionString || '');
+
 const pool = new Pool({
   connectionString,
-  ssl: { rejectUnauthorized: false }
+  ssl: isLocal ? false : { rejectUnauthorized: false }
 });
 
 pool.on('error', function(err: Error) {
@@ -80,4 +96,3 @@ export default {
   },
   pool
 };
-

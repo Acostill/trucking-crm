@@ -10,13 +10,11 @@ import CalculateRatePage from './pages/CalculateRatePage';
 import AdminPortalPage from './pages/AdminPortalPage';
 import AdminFinancePage from './pages/AdminFinancePage';
 import AdminProfitMarginPage from './pages/AdminProfitMarginPage';
-import LanelyLandingPage from './pages/LanelyLandingPage';
 import DashboardPage from './pages/DashboardPage';
 import PipelinePage from './pages/PipelinePage';
 import QuoteViewPage from './pages/QuoteViewPage';
 import MapPage from './pages/MapPage';
 import { buildApiUrl } from './config';
-import GlobalTopbar from './components/GlobalTopbar';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider } from './context/SidebarContext';
 
@@ -120,7 +118,7 @@ function DashboardApp() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<LanelyLandingPage />} />
+      <Route path="/" element={<Navigate to="/loads" replace />} />
       <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<EmailPastePage />} />
@@ -131,7 +129,7 @@ function AppRoutes() {
       <Route path="/loads" element={<DashboardApp />} />
       <Route path="/map" element={<MapPage />} />
       <Route path="/quotes/:quoteId" element={<QuoteViewPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/loads" replace />} />
     </Routes>
   );
 }

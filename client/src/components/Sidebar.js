@@ -10,10 +10,8 @@ import {
   Kanban,
   DollarSign,
   Percent,
-  MapPin,
-  X
+  MapPin
 } from 'lucide-react';
-import paperPlaneIcon from '../assets/paper_plane_icon.svg';
 
 function Sidebar() {
   const location = useLocation();
@@ -87,8 +85,8 @@ function Sidebar() {
         <div className="sidebar-logo">
         <div className="sidebar-logo-icon">
           <img 
-            src={paperPlaneIcon} 
-            alt="QuotePilot" 
+            src="/brand/logo.png" 
+            alt="First Class Trucking" 
             className="sidebar-logo-img"
           />
         </div>
@@ -165,4 +163,3 @@ function Sidebar() {
 }
 
 export default Sidebar;
-

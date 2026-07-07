@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS public.zip_codes (
   zip TEXT NOT NULL,
   city TEXT,
-  county NULL,
+  county TEXT NULL,
   state TEXT NULL,
   state_code TEXT NOT NULL,
   country TEXT NOT NULL DEFAULT 'US',

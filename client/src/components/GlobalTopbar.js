@@ -2,8 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
-import { Truck, LogOut, User, LayoutDashboard, Sparkles, ShieldCheck, Menu } from 'lucide-react';
-import paperPlaneIcon from '../assets/paper_plane_icon.svg';
+import { Truck, LogOut, User, Sparkles, ShieldCheck, Menu } from 'lucide-react';
 
 function GlobalTopbar() {
   const auth = useAuth();
@@ -17,9 +16,6 @@ function GlobalTopbar() {
       auth.signOut();
     }
   }
-
-  // Helper to determine active state
-  const isActive = (path) => location.pathname === path ? 'active' : '';
 
   // Custom styles for topbar links to match First Class Trucking aesthetic
   const linkStyle = {
@@ -74,8 +70,8 @@ function GlobalTopbar() {
           overflow: 'hidden'
         }}>
           <img 
-            src={paperPlaneIcon} 
-            alt="QuotePilot" 
+            src="/brand/logo.png" 
+            alt="First Class Trucking" 
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
         </div>
