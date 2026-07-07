@@ -191,7 +191,8 @@ main { position: relative; z-index: 2; }
   gap: 10px;
   white-space: nowrap;
 }
-.nav__tld { color: var(--ink-45); font-weight: 400; }
+/* part of the actual company name, not a muted tagline — match FIRST CLASS */
+.nav__tld { color: var(--ink-100); font-weight: 600; }
 .nav__logo-img {
   height: 34px;
   width: auto;
