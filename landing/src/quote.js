@@ -243,11 +243,19 @@ export function initQuoteForm() {
     const q = computeQuote(params);
     renderResult(q, { idle, live });
 
-    // on stacked layouts the result sits below the form — bring it into view
+    // on stacked layouts the result sits below the form — scroll so the
+    // price panel lands vertically centered in the viewport
     const resultPanel = document.getElementById("quote-result");
     if (window.matchMedia("(max-width: 900px)").matches) {
-      if (window.lenis) window.lenis.scrollTo(resultPanel, { offset: -156, duration: 1.1 });
-      else resultPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+      // offsetTop chain = layout position, immune to the panel's
+      // in-flight reveal transform (translateY) that skews rect.top
+      let absTop = 0;
+      for (let el = resultPanel; el; el = el.offsetParent) absTop += el.offsetTop;
+      const h = resultPanel.offsetHeight;
+      const desiredTop = Math.max(76, Math.round((window.innerHeight - h) / 2));
+      const dest = absTop - desiredTop;
+      if (window.lenis) window.lenis.scrollTo(dest, { duration: 1.1 });
+      else window.scrollTo({ top: dest, behavior: "smooth" });
     }
 
     // background: carrier-network rate ticks the total in place when it
