@@ -192,7 +192,7 @@ main { position: relative; z-index: 2; }
   white-space: nowrap;
 }
 /* part of the actual company name, not a muted tagline — match FIRST CLASS */
-.nav__tld { color: var(--ink-100); font-weight: 600; }
+.nav__tld { color: var(--ink-100); font-weight: 600; margin-left: 5px; }
 .nav__logo-img {
   height: 34px;
   width: auto;
