@@ -364,8 +364,26 @@ main { position: relative; z-index: 2; }
   padding: 140px clamp(20px, 3vw, 48px);
 }
 
+/* The CRM imports a modal stylesheet with a generic `.section` rule.
+   Scope the landing sections so that app-shell styles cannot paint over
+   the full-bleed frame canvas when this page is mounted inside React. */
+.first-class-landing .section {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 140px clamp(20px, 3vw, 48px);
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 /* ---------- hero ---------- */
 .hero { align-items: flex-start; justify-content: flex-end; padding-bottom: 12vh; }
+.first-class-landing .hero { align-items: flex-start; justify-content: flex-end; padding-bottom: 12vh; }
 
 .hero__eyebrow, .story__index {
   font-size: 12px;
@@ -792,6 +810,7 @@ main { position: relative; z-index: 2; }
   .field__connector { display: none; }
   .story__panel { padding: 32px 28px; }
   .section { padding: 110px 20px; }
+  .first-class-landing .section { padding: 110px 20px; }
   .hero__title { font-size: 13.5vw; }
   .footer__meta { justify-content: center; }
 }

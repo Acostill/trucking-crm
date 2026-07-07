@@ -14,6 +14,7 @@ import DashboardPage from './pages/DashboardPage';
 import PipelinePage from './pages/PipelinePage';
 import QuoteViewPage from './pages/QuoteViewPage';
 import MapPage from './pages/MapPage';
+import FirstClassLandingPage from './pages/FirstClassLandingPage';
 import { buildApiUrl } from './config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider } from './context/SidebarContext';
@@ -118,7 +119,7 @@ function DashboardApp() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/loads" replace />} />
+      <Route path="/" element={<FirstClassLandingPage />} />
       <Route path="/dashboard" element={<DashboardPage />} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<EmailPastePage />} />
