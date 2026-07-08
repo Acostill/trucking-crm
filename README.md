@@ -47,3 +47,29 @@ landing (5173)
   ├─ POST /api/quotes/:id/approve    → "Book This Rate" → load record
   └─ WS   setter-agent /ws           → Grok Voice assistant (key server-side)
 ```
+
+## Self-hosting: everything on one port
+
+For a single self-hosted deployment (e.g. `http://yourhost:3000`), `server/`
+serves the public landing page at `/` and the Lanely CRM at everything else
+non-API (`/loads`, `/pipeline`, `/dashboard`, ...) from the same origin —
+no separate `landing`/`client` dev servers needed in production, and no CORS
+between them since they share an origin.
+
+```bash
+cd landing && npm i && npm run build   # → landing/dist
+cd client && npm i && npm run build    # → client/build
+cd server && npm i && npm run build && PORT=3000 npm start
+```
+
+Visiting `http://yourhost:3000/` shows the landing page; its "Log in" link
+points at `/loads` on the same origin, landing in the CRM without a port
+change. The CRM's own API calls are relative (`/api/...`) by default so they
+resolve to whichever origin is serving it — set `client/.env`'s
+`REACT_APP_API_BASE_URL` only if you run `client/` standalone against a
+different host during development (see `client/.env`).
+
+This is additive: `server/app.ts` serves each build with `express.static`
+and falls through when a build hasn't been generated (e.g. a pure-API dev
+setup), so the three-separate-dev-servers workflow above still works
+unchanged.

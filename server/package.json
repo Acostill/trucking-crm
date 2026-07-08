@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only ./bin/www.ts",
-    "build": "tsc",
+    "build": "tsc && npm run build:landing && npm run build:client",
+    "build:landing": "cd ../landing && npm install && npm run build",
+    "build:client": "cd ../client && npm install && CI=false npm run build",
     "start": "node dist/bin/www.js"
   },
   "dependencies": {

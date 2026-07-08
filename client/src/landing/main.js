@@ -8,6 +8,10 @@ import { CRM_LOGIN_URL } from "./config.js";
 
 gsap.registerPlugin(ScrollTrigger);
 
+export function initFirstClassLanding() {
+if (window.__firstClassLandingInitialized) return;
+window.__firstClassLandingInitialized = true;
+
 document.querySelectorAll("[data-crm-login]").forEach((a) => {
   a.href = CRM_LOGIN_URL;
 });
@@ -44,7 +48,7 @@ const sequence = createSequence({
 /* if the device flips across the portrait/landscape boundary, swap cuts */
 window.addEventListener("resize", () => {
   const nowPortrait = window.innerHeight > window.innerWidth;
-  if (nowPortrait !== isPortrait) location.reload();
+  if (nowPortrait !== isPortrait) window.location.reload();
 });
 
 ScrollTrigger.create({
@@ -180,4 +184,5 @@ if (voiceWidget) {
     onToggle: (self) =>
       voiceWidget.classList.toggle("voice--docked", self.isActive && isMobileWidth()),
   });
+}
 }

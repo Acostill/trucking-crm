@@ -66,7 +66,7 @@ router.post(
                   "Prefer values explicitly labeled in the image (e.g., 'Length = 12 in.'). " +
                   'If only "L x W x H" is shown, use that. If uncertain, set a confidence < 0.7.'
               },
-              { type: 'input_image', image_url: dataUrl }
+              { type: 'input_image', image_url: dataUrl, detail: 'auto' }
             ]
           }
         ],

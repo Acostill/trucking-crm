@@ -1,5 +1,5 @@
 import https from 'https';
-import { UnifiedQuoteRequest, APIResponse } from '../types/quote';
+import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
 
 /**
  * DAT Forecast API request structure (internal format sent to DAT API)
@@ -253,7 +253,10 @@ export function callDATForecastAPI(body: UnifiedQuoteRequest): Promise<APIRespon
               resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Failed to parse JSON response', raw: data } });
             }
           } else {
-            resolve({ statusCode: apiRes.statusCode || 500, data: { raw: data } });
+            resolve({
+              statusCode: apiRes.statusCode || 500,
+              data: { error: `DAT forecast API returned ${apiRes.statusCode}`, raw: data }
+            });
           }
         });
       });
