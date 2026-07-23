@@ -10,14 +10,21 @@ import {
   Kanban,
   DollarSign,
   Percent,
-  MapPin
+  MapPin,
+  CircleDollarSign,
+  House
 } from 'lucide-react';
 
-function Sidebar() {
+function Sidebar(props) {
   const location = useLocation();
   const auth = useAuth();
-  const user = auth && auth.user;
+  const user = props && props.userOverride ? props.userOverride : (auth && auth.user);
+  const linkSuffix = props && props.linkSuffix ? props.linkSuffix : '';
   const isAdmin = user && Array.isArray(user.roles) && user.roles.indexOf('admin') > -1;
+  const userRoles = user && Array.isArray(user.roles) ? user.roles : [];
+  const operationsRoles = ['admin', 'manager', 'agent', 'viewer'];
+  const hasOperationsRole = userRoles.some(function(role) { return operationsRoles.indexOf(role) > -1; });
+  const isCustomer = Boolean(user) && !hasOperationsRole && (userRoles.length === 0 || userRoles.indexOf('customer') > -1);
   const { isOpen, closeSidebar } = useSidebar();
   const sidebarRef = useRef(null);
 
@@ -60,12 +67,19 @@ function Sidebar() {
     }
   }, [location.pathname, closeSidebar]);
 
-  const navItems = [
+  const operationsNavItems = [
     { id: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { id: '/loads', label: 'Shipments', icon: Package, path: '/loads' },
     { id: '/pipeline', label: 'Pipeline', icon: Kanban, path: '/pipeline' },
     { id: '/map', label: 'Map', icon: MapPin, path: '/map' },
   ];
+
+  const customerNavItems = [
+    { id: '/portal', label: 'My Portal', icon: House, path: '/portal' },
+    { id: '/portal/quote', label: 'New Quote', icon: CircleDollarSign, path: '/portal/quote' }
+  ];
+
+  const navItems = isCustomer ? customerNavItems : operationsNavItems;
 
   const adminItems = isAdmin ? [
     { id: '/admin-portal', label: 'Admin', icon: ShieldCheck, path: '/admin-portal' },
@@ -95,14 +109,14 @@ function Sidebar() {
 
       {/* Main Navigation */}
       <div className="sidebar-nav">
-        <div className="sidebar-section-label">Operations</div>
+        <div className="sidebar-section-label">{isCustomer ? 'Customer Account' : 'Operations'}</div>
         {navItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.path);
           return (
             <Link
               key={item.id}
-              to={item.path}
+              to={isCustomer ? item.path + linkSuffix : item.path}
               className={`sidebar-nav-item ${active ? 'active' : ''}`}
             >
               <Icon size={18} className="sidebar-nav-icon" />
@@ -152,7 +166,9 @@ function Sidebar() {
               <span className="sidebar-user-name">
                 {user.firstName || user.email?.split('@')[0] || 'User'}
               </span>
-              <span className="sidebar-user-role">Freight Broker</span>
+              <span className="sidebar-user-role">
+                {isCustomer ? 'Customer' : isAdmin ? 'Administrator' : 'Freight Operations'}
+              </span>
             </div>
           </div>
         )}

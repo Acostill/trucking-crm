@@ -15,6 +15,7 @@ import adminRouter from './routes/admin';
 import ocrRouter from './routes/ocr';
 import openaiDimensionsRouter from './routes/openaiDimensions';
 import openrouterDimensionsRouter from './routes/openrouterDimensions';
+import customerRouter from './routes/customer';
 
 const app = express();
 // In dev (ts-node-dev) this file runs in place, so __dirname is server/.
@@ -76,6 +77,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/loads', loadsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/quotes', quotesRouter);
+app.use('/api/customer', customerRouter);
 app.use('/api/ocr', ocrRouter);
 app.use('/api/extract-dimensions', openaiDimensionsRouter);
 app.use('/api/extract-dimensions-openrouter', openrouterDimensionsRouter);

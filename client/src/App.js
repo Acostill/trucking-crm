@@ -15,6 +15,7 @@ import PipelinePage from './pages/PipelinePage';
 import QuoteViewPage from './pages/QuoteViewPage';
 import MapPage from './pages/MapPage';
 import FirstClassLandingPage from './pages/FirstClassLandingPage';
+import CustomerPortalPage from './pages/CustomerPortalPage';
 import { buildApiUrl } from './config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider } from './context/SidebarContext';
@@ -116,21 +117,51 @@ function DashboardApp() {
   );
 }
 
+function isCustomerAccount(user) {
+  if (!user) return false;
+  const roles = Array.isArray(user.roles) ? user.roles : [];
+  const operationsRoles = ['admin', 'manager', 'agent', 'viewer'];
+  const hasOperationsRole = roles.some(function(role) { return operationsRoles.indexOf(role) > -1; });
+  return !hasOperationsRole && (roles.length === 0 || roles.indexOf('customer') > -1);
+}
+
+function OperationsRoute({ children }) {
+  const { user, checking, setUser } = useAuth();
+  if (checking) {
+    return <div className="customer-portal-loading"><img src="/brand/logo.png" alt="First Class Trucking" /><span>Opening workspace...</span></div>;
+  }
+  if (!user) {
+    return <AuthForm onAuthed={function(authedUser) { setUser(authedUser); }} />;
+  }
+  if (isCustomerAccount(user)) {
+    return <Navigate to="/portal" replace />;
+  }
+  return children;
+}
+
+function DefaultRoute() {
+  const { user, checking } = useAuth();
+  if (checking) return null;
+  return <Navigate to={isCustomerAccount(user) ? '/portal' : '/loads'} replace />;
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<FirstClassLandingPage />} />
-      <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/portal" element={<CustomerPortalPage />} />
+      <Route path="/portal/quote" element={<CustomerPortalPage />} />
+      <Route path="/dashboard" element={<OperationsRoute><DashboardPage /></OperationsRoute>} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
-      <Route path="/email-paste" element={<EmailPastePage />} />
-      <Route path="/admin-portal" element={<AdminPortalPage />} />
-      <Route path="/admin-finance" element={<AdminFinancePage />} />
-      <Route path="/admin-profit-margin" element={<AdminProfitMarginPage />} />
-      <Route path="/pipeline" element={<PipelinePage />} />
-      <Route path="/loads" element={<DashboardApp />} />
-      <Route path="/map" element={<MapPage />} />
+      <Route path="/email-paste" element={<OperationsRoute><EmailPastePage /></OperationsRoute>} />
+      <Route path="/admin-portal" element={<OperationsRoute><AdminPortalPage /></OperationsRoute>} />
+      <Route path="/admin-finance" element={<OperationsRoute><AdminFinancePage /></OperationsRoute>} />
+      <Route path="/admin-profit-margin" element={<OperationsRoute><AdminProfitMarginPage /></OperationsRoute>} />
+      <Route path="/pipeline" element={<OperationsRoute><PipelinePage /></OperationsRoute>} />
+      <Route path="/loads" element={<OperationsRoute><DashboardApp /></OperationsRoute>} />
+      <Route path="/map" element={<OperationsRoute><MapPage /></OperationsRoute>} />
       <Route path="/quotes/:quoteId" element={<QuoteViewPage />} />
-      <Route path="*" element={<Navigate to="/loads" replace />} />
+      <Route path="*" element={<DefaultRoute />} />
     </Routes>
   );
 }
