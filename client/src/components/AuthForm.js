@@ -67,7 +67,7 @@ export default function AuthForm(props) {
               {mode === 'signup' ? 'Create your account' : 'Welcome back'}
             </h2>
             <p className="auth-subtitle">
-              {mode === 'signup' ? 'Set up access to the CRM.' : 'Sign in to continue to the CRM.'}
+              {mode === 'signup' ? 'Create your customer portal access.' : 'Sign in to your customer portal or operations workspace.'}
             </p>
         </div>
         

@@ -2069,8 +2069,10 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
                   Equipment
                   <select value={equipmentType} onChange={function(e){ setEquipmentType(e.target.value); }}>
                     <option value="">Select equipment</option>
-                    <option value="Cargo Van">Cargo Van</option>
-                    <option value="Van">Van</option>
+                    <option value="LTL">LTL Freight</option>
+                    <option value="Sprinter Van">Sprinter Van</option>
+                    <option value="Box Truck">Box Truck</option>
+                    <option value="53' Dry Van">53' Dry Van</option>
                     <option value="Flatbed">Flatbed</option>
                     <option value="Reefer">Reefer</option>
                   </select>
@@ -2079,7 +2081,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
 
               <div className="actions">
                 <button className="btn" type="submit" disabled={loading}>
-                  {loading ? 'Submitting…' : 'Submit'}
+                  {loading ? 'Checking rates…' : 'Get live rates'}
                 </button>
               </div>
             </form>

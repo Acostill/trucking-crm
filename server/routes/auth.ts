@@ -48,6 +48,26 @@ async function createSession(userId: string) {
   return { token, expiresAt };
 }
 
+async function assignCustomerRole(userId: string) {
+  const roleResult = await db.queryWithUser(
+    `INSERT INTO public.roles (name, description, is_system)
+     VALUES ('customer', 'Customer portal access for quotes and shipments', TRUE)
+     ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description
+     RETURNING id`,
+    [],
+    userId
+  );
+  const roleId = roleResult.rows[0] && roleResult.rows[0].id;
+  if (!roleId) return;
+  await db.queryWithUser(
+    `INSERT INTO public.user_roles (user_id, role_id)
+     VALUES ($1, $2)
+     ON CONFLICT DO NOTHING`,
+    [userId, roleId],
+    userId
+  );
+}
+
 async function getUserFromToken(token: string | undefined) {
   if (!token) return null;
   const result = await db.query(
@@ -101,9 +121,10 @@ router.post('/signup', async function(req: Request, res: Response, next: NextFun
       return res.status(409).json({ error: 'Email already in use' });
     }
     const user = await createUser(email, password, firstName, lastName);
+    await assignCustomerRole(user.id);
     const session = await createSession(user.id);
     res.cookie(SESSION_COOKIE, session.token, makeCookieOptions());
-    res.status(201).json({ user: { id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, roles: [] } });
+    res.status(201).json({ user: { id: user.id, email: user.email, firstName: user.first_name, lastName: user.last_name, roles: ['customer'] } });
   } catch (err) {
     next(err);
   }
@@ -150,4 +171,3 @@ router.post('/signout', async function(req: Request, res: Response, next: NextFu
 });
 
 export default router;
-
