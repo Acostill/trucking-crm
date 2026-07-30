@@ -249,6 +249,17 @@ export default function CustomerQuoteBuilder({ user, onQuoteRequested, onBack, p
     setRequestedQuote(null);
     const planningRates = buildPlanningOptions(form, recommendation, selectedEquipment.id);
 
+    if (previewMode) {
+      await new Promise(function(resolve) {
+        window.setTimeout(resolve, 900);
+      });
+      setRates(planningRates);
+      setRateNotice('Demo workspace: FCTL planning rates are shown without contacting live carrier systems.');
+      setLoading(false);
+      setStep(4);
+      return;
+    }
+
     const controller = new AbortController();
     const timeoutId = window.setTimeout(function() { controller.abort(); }, 12000);
     try {

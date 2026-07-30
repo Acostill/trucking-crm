@@ -4,6 +4,7 @@ import 'dotenv/config';
 import http from 'http';
 import debugFactory from 'debug';
 import app from '../app';
+import { startGmailQuotePoller } from '../services/emailQuotePoller';
 
 const debug = debugFactory('server:server');
 
@@ -56,5 +57,5 @@ function onListening() {
     ? 'pipe ' + addr
     : 'port ' + (addr && (addr as any).port);
   debug('Listening on ' + bind);
+  startGmailQuotePoller();
 }
-

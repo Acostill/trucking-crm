@@ -16,6 +16,7 @@ import QuoteViewPage from './pages/QuoteViewPage';
 import MapPage from './pages/MapPage';
 import FirstClassLandingPage from './pages/FirstClassLandingPage';
 import CustomerPortalPage from './pages/CustomerPortalPage';
+import EmailQuoteInboxPage from './pages/EmailQuoteInboxPage';
 import { buildApiUrl } from './config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider } from './context/SidebarContext';
@@ -125,8 +126,15 @@ function isCustomerAccount(user) {
   return !hasOperationsRole && (roles.length === 0 || roles.indexOf('customer') > -1);
 }
 
-function OperationsRoute({ children }) {
+function OperationsRoute({ children, allowPreview = false }) {
   const { user, checking, setUser } = useAuth();
+  const previewMode =
+    allowPreview &&
+    process.env.NODE_ENV === 'development' &&
+    new URLSearchParams(window.location.search).get('preview') === '1';
+  if (previewMode) {
+    return children;
+  }
   if (checking) {
     return <div className="customer-portal-loading"><img src="/brand/logo.png" alt="First Class Trucking" /><span>Opening workspace...</span></div>;
   }
@@ -154,6 +162,7 @@ function AppRoutes() {
       <Route path="/dashboard" element={<OperationsRoute><DashboardPage /></OperationsRoute>} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<OperationsRoute><EmailPastePage /></OperationsRoute>} />
+      <Route path="/email-quotes" element={<OperationsRoute allowPreview><EmailQuoteInboxPage /></OperationsRoute>} />
       <Route path="/admin-portal" element={<OperationsRoute><AdminPortalPage /></OperationsRoute>} />
       <Route path="/admin-finance" element={<OperationsRoute><AdminFinancePage /></OperationsRoute>} />
       <Route path="/admin-profit-margin" element={<OperationsRoute><AdminProfitMarginPage /></OperationsRoute>} />

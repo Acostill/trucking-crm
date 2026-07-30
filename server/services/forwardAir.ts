@@ -68,6 +68,10 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     const parts = Array.isArray(pieces.parts) ? pieces.parts : [];
     const firstPart = parts[0] || {};
     const weight = body.weight || {};
+    const hazmatUnNumbers =
+      body.hazardousMaterial && Array.isArray(body.hazardousMaterial.unNumbers)
+        ? body.hazardousMaterial.unNumbers.filter(Boolean)
+        : [];
 
     const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
 <QuoteRequest>
@@ -105,7 +109,7 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
             <Height>${Number(firstPart.height)}</Height>
         </Dimension>
     </Dimensions>
-    <Hazmat>N</Hazmat>
+    <Hazmat>${hazmatUnNumbers.length ? 'Y' : 'N'}</Hazmat>
     <InBondShipment>N</InBondShipment>
     <DeclaredValue>0.00</DeclaredValue>
     <ShippingDate>${toYMD(pickup.date)}</ShippingDate>
@@ -169,4 +173,3 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     apiReq.end();
   });
 }
-

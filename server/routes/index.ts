@@ -96,11 +96,19 @@ function generateLoadNumber() {
   return 'EMAIL-' + Date.now() + '-' + random;
 }
 
-function stripJsonFence(value: string): string {
-  return value.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+function extractJsonPayload(value: string): string {
+  const trimmed = String(value || '').trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced && fenced[1]) return fenced[1].trim();
+  const objectStart = trimmed.indexOf('{');
+  const objectEnd = trimmed.lastIndexOf('}');
+  if (objectStart > -1 && objectEnd > objectStart) {
+    return trimmed.slice(objectStart, objectEnd + 1).trim();
+  }
+  return trimmed;
 }
 
-async function parseEmailWithOpenRouter(emailContent: string): Promise<N8nEmailPasteResponse> {
+export async function parseEmailWithOpenRouter(emailContent: string): Promise<N8nEmailPasteResponse> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     const err: any = new Error('OPENROUTER_API_KEY is not configured');
@@ -224,7 +232,7 @@ async function parseEmailWithOpenRouter(emailContent: string): Promise<N8nEmailP
     throw err;
   }
 
-  const jsonStr = stripJsonFence(String(content));
+  const jsonStr = extractJsonPayload(String(content));
   try {
     const parsed = JSON.parse(jsonStr);
     if (!parsed || typeof parsed !== 'object') {
@@ -366,7 +374,7 @@ async function parseCalculateRateWithOpenRouter(inputText: string): Promise<any>
     throw err;
   }
 
-  const jsonStr = stripJsonFence(String(content));
+  const jsonStr = extractJsonPayload(String(content));
   try {
     const parsed = JSON.parse(jsonStr);
     if (!parsed || typeof parsed !== 'object') {
@@ -985,4 +993,3 @@ router.post('/api/generate-pdf', async function(req: Request, res: Response, nex
 });
 
 export default router;
-

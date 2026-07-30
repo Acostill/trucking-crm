@@ -1,8 +1,6 @@
 import https from 'https';
 import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
 
-const DEFAULT_HAZARDOUS_UN_NUMBERS = ['UN3508', 'UN3530', 'UN3536', 'UN3548'];
-const DEFAULT_ACCESSORIAL_CODES = ['CALLDEL', 'DEBRISREM', 'UPK'];
 const DEFAULT_SHIPMENT_ID = '1';
 const DEFAULT_REFERENCE_NUMBER = 'Reference12345';
 
@@ -15,11 +13,13 @@ function applyExpediteAllDefaults(body: UnifiedQuoteRequest): UnifiedQuoteReques
           return typeof s === 'string' && s.trim().length > 0;
         })
       : [];
-  if (!existingHaz.length) {
+  if (existingHaz.length) {
     cloned.hazardousMaterial = {
       ...(body.hazardousMaterial || {}),
-      unNumbers: DEFAULT_HAZARDOUS_UN_NUMBERS.slice()
+      unNumbers: existingHaz
     };
+  } else {
+    delete cloned.hazardousMaterial;
   }
 
   const existingAccessorials = Array.isArray(body.accessorialCodes)
@@ -27,8 +27,10 @@ function applyExpediteAllDefaults(body: UnifiedQuoteRequest): UnifiedQuoteReques
         return typeof s === 'string' && s.trim().length > 0;
       })
     : [];
-  if (!existingAccessorials.length) {
-    cloned.accessorialCodes = DEFAULT_ACCESSORIAL_CODES.slice();
+  if (existingAccessorials.length) {
+    cloned.accessorialCodes = existingAccessorials;
+  } else {
+    delete cloned.accessorialCodes;
   }
 
   if (!cloned.shipmentId) {
@@ -92,7 +94,19 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
             const parsed = JSON.parse(data) as ExpediteAllResponse;
             // Log raw ExpediteAll response for debugging (full JSON, no [Object])
             console.log('[ExpediteAll] Raw response:', JSON.stringify({ statusCode: apiRes.statusCode, data: parsed }, null, 2));
-            resolve({ statusCode: apiRes.statusCode || 500, data: parsed });
+            const statusCode = apiRes.statusCode || 500;
+            if (statusCode < 200 || statusCode >= 300) {
+              const providerMessage = (parsed as any).message || (parsed as any).error;
+              resolve({
+                statusCode,
+                data: {
+                  error: providerMessage || `ExpediteAll returned HTTP ${statusCode}`,
+                  raw: data
+                } as ErrorResponse
+              });
+              return;
+            }
+            resolve({ statusCode, data: parsed });
           } catch (e) {
             resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Failed to parse JSON response', raw: data } as ErrorResponse });
           }
@@ -110,4 +124,3 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
     apiReq.end();
   });
 }
-

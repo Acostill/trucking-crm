@@ -34,6 +34,48 @@ PORT=3001
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
 ```
 
+## Email quote inbox
+
+The CRM route `/email-quotes` turns incoming quote requests into a staff
+pricing queue:
+
+1. Gmail is checked for messages addressed to `emailbot@optimation.io`.
+2. The email is parsed into pickup, delivery, dimensions, weight, commodity,
+   and accessorials.
+3. Forward Air and ExpediteAll are rated in parallel. DAT is intentionally
+   excluded until the virtual-employee phase.
+4. The lowest available carrier cost is suggested. Staff can choose either
+   carrier, set a margin or client price, and create a pending client quote.
+
+Run the additive database migration once:
+
+```bash
+cd server
+npm run db:migrate:email-quotes
+```
+
+Then copy the Gmail and OpenRouter settings from `server/.env.example` into
+`server/.env`. Create a Google OAuth **Desktop app** client and download its
+JSON file to:
+
+```text
+server/credentials.json
+```
+
+The local callback is `http://127.0.0.1:53682/oauth2callback`. Authorize the
+inbox:
+
+```bash
+cd server
+npm run gmail:authorize
+```
+
+Sign in as `emailbot@optimation.io`. The helper saves the refresh token into
+`server/.env` without printing it; restart the API afterward. The poller uses
+Gmail read-only access and deduplicates messages in Postgres; it does not mark,
+move, or delete email. If `emailbot@optimation.io` is an alias, authorize its
+owning mailbox and set `GMAIL_ALLOW_MAILBOX_ALIAS=true`.
+
 `setter-agent/app/.env` (see `.env.example` there): `XAI_API_KEY` to go
 live, `CLOSE_API_KEY` for Close CRM sync; leave empty for full-pipeline
 mock mode.

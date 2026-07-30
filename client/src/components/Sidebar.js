@@ -12,6 +12,7 @@ import {
   Percent,
   MapPin,
   CircleDollarSign,
+  MailSearch,
   House
 } from 'lucide-react';
 
@@ -71,6 +72,7 @@ function Sidebar(props) {
     { id: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { id: '/loads', label: 'Shipments', icon: Package, path: '/loads' },
     { id: '/pipeline', label: 'Pipeline', icon: Kanban, path: '/pipeline' },
+    { id: '/email-quotes', label: 'Quote Inbox', icon: MailSearch, path: '/email-quotes' },
     { id: '/map', label: 'Map', icon: MapPin, path: '/map' },
   ];
 

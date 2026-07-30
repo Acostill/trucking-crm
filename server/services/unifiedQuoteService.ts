@@ -45,7 +45,7 @@ function findNumberByKeys(obj: any, keyCandidates: string[]): number | undefined
   return undefined;
 }
 
-async function getDefaultProfitMarginPct(): Promise<number> {
+export async function getDefaultProfitMarginPct(): Promise<number> {
   try {
     const result = await db.query(
       `SELECT margin_pct
@@ -164,7 +164,12 @@ function normalizeDATForecast(data: DATForecastResponse): StandardizedQuote {
 export interface UnifiedQuoteResponse {
   expediteAll: StandardizedQuote;
   forwardAir: StandardizedQuote;
-  datForecast: StandardizedQuote;
+  datForecast?: StandardizedQuote;
+}
+
+export interface UnifiedQuoteOptions {
+  includeDat?: boolean;
+  applyDefaultMargin?: boolean;
 }
 
 /**
@@ -236,16 +241,25 @@ async function ensureZipsAndStateInQuoteRequest(body: UnifiedQuoteRequest): Prom
  * @param body - The request body containing pickup, delivery, and shipment details
  * @returns Promise resolving to a unified response with all three API results
  */
-export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<UnifiedQuoteResponse> {
-  const marginPct = await getDefaultProfitMarginPct();
+export async function getUnifiedQuotes(
+  body: UnifiedQuoteRequest,
+  options: UnifiedQuoteOptions = {}
+): Promise<UnifiedQuoteResponse> {
+  const includeDat = options.includeDat !== false;
+  const shouldApplyDefaultMargin = options.applyDefaultMargin !== false;
+  const marginPct = shouldApplyDefaultMargin ? await getDefaultProfitMarginPct() : 0;
   const normalizedBody = await ensureZipsAndStateInQuoteRequest(body || {});
 
-  // Call all three APIs in parallel
-  const [expediteAllResult, forwardAirResult, datForecastResult] = await Promise.allSettled([
+  // Forward Air and ExpediteAll are the phase-one operational connections.
+  const [expediteAllResult, forwardAirResult] = await Promise.allSettled([
     callExpediteAllAPI(normalizedBody),
-    callForwardAirAPI(normalizedBody),
-    callDATForecastAPI(normalizedBody)
+    callForwardAirAPI(normalizedBody)
   ]);
+  const datForecastResult = includeDat
+    ? await Promise.resolve(callDATForecastAPI(normalizedBody))
+        .then(function(value) { return { status: 'fulfilled', value } as const; })
+        .catch(function(reason) { return { status: 'rejected', reason } as const; })
+    : null;
 
   // Extract and normalize results, handling both success and failure cases
   const expediteAll: StandardizedQuote = expediteAllResult.status === 'fulfilled' 
@@ -264,16 +278,18 @@ export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<Unifi
         return { source: 'ForwardAir', error };
       })();
 
-  const datForecast: StandardizedQuote = datForecastResult.status === 'fulfilled' 
-    ? normalizeDATForecast(datForecastResult.value.data as DATForecastResponse)
-    : (() => {
-        const error = datForecastResult.reason?.message || 'Failed to fetch DAT forecast';
-        console.error('[DAT] Error:', error, datForecastResult.reason);
-        return { source: 'DAT', error };
-      })();
+  const datForecast: StandardizedQuote | undefined = datForecastResult
+    ? datForecastResult.status === 'fulfilled'
+      ? normalizeDATForecast(datForecastResult.value.data as DATForecastResponse)
+      : (() => {
+          const error = datForecastResult.reason?.message || 'Failed to fetch DAT forecast';
+          console.error('[DAT] Error:', error, datForecastResult.reason);
+          return { source: 'DAT', error };
+        })()
+    : undefined;
 
   const withMargin = (quote: StandardizedQuote): StandardizedQuote => {
-    if (quote.error) return quote;
+    if (quote.error || !shouldApplyDefaultMargin) return quote;
     const baseTotal = typeof quote.total === 'number' ? quote.total : quote.lineHaul;
     const totalWithMargin = applyProfitMargin(baseTotal, marginPct);
     return {
@@ -289,20 +305,19 @@ export async function getUnifiedQuotes(body: UnifiedQuoteRequest): Promise<Unifi
   // Apply margin and log unified results for debugging
   const expediteAllWithMargin = withMargin(expediteAll);
   const forwardAirWithMargin = withMargin(forwardAir);
-  const datForecastWithMargin = withMargin(datForecast);
+  const datForecastWithMargin = datForecast ? withMargin(datForecast) : undefined;
 
   // Log all three standardized quotes (with margin applied)
   console.log('[Quotes] Unified results with margin applied:', {
     expediteAll: expediteAllWithMargin,
     forwardAir: forwardAirWithMargin,
-    datForecast: datForecastWithMargin
+    ...(datForecastWithMargin ? { datForecast: datForecastWithMargin } : {})
   });
 
   // Return combined response with standardized format
   return {
     expediteAll: expediteAllWithMargin,
     forwardAir: forwardAirWithMargin,
-    datForecast: datForecastWithMargin
+    ...(datForecastWithMargin ? { datForecast: datForecastWithMargin } : {})
   };
 }
-

@@ -95,6 +95,13 @@ function rowToQuote(row: any): any {
         : (row.quote_accessorials || []),
       accessorialsTotal: row.quote_accessorials_total ? Number(row.quote_accessorials_total) : null
     },
+    sourceEmailQuoteId: row.source_email_quote_id || null,
+    pricing: {
+      carrierSource: row.carrier_source || null,
+      carrierCost: row.carrier_cost != null ? Number(row.carrier_cost) : null,
+      marginPct: row.margin_pct != null ? Number(row.margin_pct) : null,
+      marginAmount: row.margin_amount != null ? Number(row.margin_amount) : null
+    },
     shipment: typeof row.shipment_data === 'string'
       ? JSON.parse(row.shipment_data)
       : (row.shipment_data || {}),
@@ -434,4 +441,3 @@ router.get('/', async function(req: Request, res: Response, next: NextFunction) 
 });
 
 export default router;
-

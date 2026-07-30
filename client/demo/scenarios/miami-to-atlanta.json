@@ -1,0 +1,32 @@
+{
+  "customer": "Acme Hospitality Supply",
+  "source": "Inbound customer email",
+  "request": "Please quote 2 stackable pallets from Miami, FL 33166 to Atlanta, GA 30303. Pickup in two days. Each pallet is 48 × 40 × 48 inches, total weight 1,800 lb, general merchandise. Standard service with liftgate and a delivery appointment.",
+  "origin": {
+    "city": "Miami",
+    "state": "FL",
+    "zip": "33166"
+  },
+  "destination": {
+    "city": "Atlanta",
+    "state": "GA",
+    "zip": "30303"
+  },
+  "pickupDaysFromNow": 2,
+  "serviceSpeed": "standard",
+  "freight": {
+    "pallets": "2",
+    "length": "48",
+    "width": "40",
+    "height": "48",
+    "totalWeight": "1800",
+    "commodity": "General merchandise",
+    "stackable": true,
+    "hazmat": false
+  },
+  "accessorials": [
+    "Liftgate",
+    "Delivery appointment"
+  ],
+  "equipment": "LTL Freight"
+}

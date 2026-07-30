@@ -1,6 +1,8 @@
 node_modules
 dist
 .env
+server/credentials.json
+server/client_secret*.json
 .DS_Store
 *.swp
 *.swo
