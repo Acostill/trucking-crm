@@ -10,10 +10,14 @@ const SESSION_COOKIE = 'session_token';
 const SESSION_TTL_DAYS = 30;
 
 function makeCookieOptions() {
+  const productionHttps =
+    process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
   return {
     httpOnly: true,
-    sameSite: 'lax' as const,
-    secure: false, // set true behind https in prod
+    // The production UI and API currently use different domains. Cross-site
+    // credentialed requests require SameSite=None and a Secure cookie.
+    sameSite: productionHttps ? ('none' as const) : ('lax' as const),
+    secure: productionHttps,
     path: '/',
     maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
   };
