@@ -131,7 +131,7 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
         pickup.date_time ||
         pickup.date ||
         shipmentInfo.ready_for_loading_date
-      )
+      ) || new Date().toISOString()
     },
     delivery: {
       location: {
