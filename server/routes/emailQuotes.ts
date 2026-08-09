@@ -12,7 +12,7 @@ import {
 } from '../services/emailQuotePoller';
 
 const router = express.Router();
-const OPERATIONS_ROLES = ['admin', 'manager', 'agent', 'viewer'];
+const QUOTE_APPROVER_ROLES = ['quote_approver'];
 
 function jsonValue(value: any, fallback: any) {
   if (value == null) return fallback;
@@ -84,10 +84,10 @@ async function requireOperationsUser(req: Request, res: Response): Promise<strin
     [userId]
   );
   const allowed = roles.rows.some(function(row) {
-    return OPERATIONS_ROLES.indexOf(row.name) > -1;
+    return QUOTE_APPROVER_ROLES.indexOf(row.name) > -1;
   });
   if (!allowed) {
-    res.status(403).json({ error: 'Operations access is required to manage email quotes' });
+    res.status(403).json({ error: 'Quote approver access is required to manage email quotes' });
     return null;
   }
   return userId;

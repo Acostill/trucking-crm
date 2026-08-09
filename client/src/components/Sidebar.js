@@ -26,6 +26,7 @@ function Sidebar(props) {
   const operationsRoles = ['admin', 'manager', 'agent', 'viewer'];
   const hasOperationsRole = userRoles.some(function(role) { return operationsRoles.indexOf(role) > -1; });
   const isCustomer = Boolean(user) && !hasOperationsRole && (userRoles.length === 0 || userRoles.indexOf('customer') > -1);
+  const isQuoteApprover = userRoles.indexOf('quote_approver') > -1;
   const { isOpen, closeSidebar } = useSidebar();
   const sidebarRef = useRef(null);
 
@@ -72,7 +73,7 @@ function Sidebar(props) {
     { id: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
     { id: '/loads', label: 'Shipments', icon: Package, path: '/loads' },
     { id: '/pipeline', label: 'Pipeline', icon: Kanban, path: '/pipeline' },
-    { id: '/email-quotes', label: 'Quote Inbox', icon: MailSearch, path: '/email-quotes' },
+    ...(isQuoteApprover ? [{ id: '/email-quotes', label: 'Quote Inbox', icon: MailSearch, path: '/email-quotes' }] : []),
     { id: '/map', label: 'Map', icon: MapPin, path: '/map' },
   ];
 

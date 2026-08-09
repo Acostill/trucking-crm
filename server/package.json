@@ -8,6 +8,9 @@
     "build:landing": "cd ../landing && npm install && npm run build",
     "build:client": "cd ../client && npm install && CI=false npm run build",
     "db:migrate:email-quotes": "ts-node ./scripts/run-email-quote-migration.ts",
+    "db:migrate:quotes-audit-columns": "ts-node ./scripts/run-quotes-audit-columns-migration.ts",
+    "db:migrate:email-quote-thread-index": "ts-node ./scripts/run-email-quote-thread-index-migration.ts",
+    "db:migrate:quote-approver-role": "ts-node ./scripts/run-quote-approver-role-migration.ts",
     "gmail:authorize": "ts-node ./scripts/authorize-gmail.ts",
     "start": "node dist/bin/www.js"
   },

@@ -456,6 +456,22 @@
   background: linear-gradient(180deg, #fbfdfe, #f4f8fa);
 }
 
+.eq-raw-email {
+  max-height: 220px;
+  margin: 0;
+  padding: 12px 13px;
+  overflow-y: auto;
+  border: 1px solid #e5ebf0;
+  border-radius: 9px;
+  color: #3a4b5c;
+  background: #fbfcfd;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .eq-section-heading {
   display: flex;
   align-items: flex-start;
