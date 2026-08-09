@@ -68,6 +68,12 @@ const PREVIEW_QUOTES = [
     sender: { name: 'Maria Ortiz', email: 'maria@northstar-medical.com' },
     subject: 'Rate request: Miami, FL to Atlanta, GA — 1 pallet',
     receivedAt: '2026-07-30T20:42:00.000Z',
+    rawText: 'Subject: Rate request: Miami, FL to Atlanta, GA — 1 pallet\n'
+      + 'From: Maria Ortiz <maria@northstar-medical.com>\n'
+      + 'To: quotes@firstclasstrucking.net\n\n'
+      + 'Hi team,\n\nCan you get me a rate for 1 pallet of medical equipment, '
+      + '48x40x48, about 500 lbs, from Miami, FL 33166 to Atlanta, GA 30336? '
+      + 'Ready for pickup 8/3.\n\nThanks,\nMaria',
     status: 'ready',
     shipment: {
       pickup: {
@@ -129,6 +135,11 @@ const PREVIEW_QUOTES = [
     sender: { name: 'Daniel Ross', email: 'daniel@apex-aero.com' },
     subject: 'Need a quote from DFW to ORD',
     receivedAt: '2026-07-30T19:16:00.000Z',
+    rawText: 'Subject: Need a quote from DFW to ORD\n'
+      + 'From: Daniel Ross <daniel@apex-aero.com>\n'
+      + 'To: quotes@firstclasstrucking.net\n\n'
+      + 'Hey, need a quote for 2 pieces of aircraft parts from DFW to ORD. '
+      + 'Pickup around 8/4. Can you send dimensions/weight questions if you need them?\n\nDaniel',
     status: 'needs_review',
     processingError: 'Missing required details: freight dimensions, total weight',
     shipment: {
@@ -712,6 +723,13 @@ export default function EmailQuoteInboxPage() {
                       <div><strong>Staff review needed</strong><p>{selected.processingError}</p></div>
                     </div>
                   )}
+
+                  <section className="eq-section">
+                    <div className="eq-section-heading">
+                      <div><Mail size={18} /><span><strong>Original email</strong><small>The message as received, before parsing.</small></span></div>
+                    </div>
+                    <pre className="eq-raw-email">{selected.rawText || 'Original email text is not available for this request.'}</pre>
+                  </section>
 
                   <section className="eq-section">
                     <div className="eq-section-heading">
