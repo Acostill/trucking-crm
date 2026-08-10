@@ -11,6 +11,8 @@
     "db:migrate:quotes-audit-columns": "ts-node ./scripts/run-quotes-audit-columns-migration.ts",
     "db:migrate:email-quote-thread-index": "ts-node ./scripts/run-email-quote-thread-index-migration.ts",
     "db:migrate:quote-approver-role": "ts-node ./scripts/run-quote-approver-role-migration.ts",
+    "db:migrate:email-quote-send-tracking": "ts-node ./scripts/run-email-quote-send-tracking-migration.ts",
+    "db:migrate:email-quote-send-cc": "ts-node ./scripts/run-email-quote-send-cc-migration.ts",
     "gmail:authorize": "ts-node ./scripts/authorize-gmail.ts",
     "start": "node dist/bin/www.js"
   },

@@ -167,11 +167,48 @@ async function gmailGet(path: string, params?: Record<string, string>): Promise<
   return payload;
 }
 
+async function gmailPost(path: string, body: any): Promise<any> {
+  const token = await getAccessToken();
+  const response = await fetch(GMAIL_API_BASE + path, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  const payload: any = await response.json().catch(function() { return {}; });
+  if (!response.ok) {
+    if (response.status === 401) tokenCache = null;
+    const err: any = new Error(`Gmail API request failed (${response.status})`);
+    err.status = 502;
+    err.details = {
+      providerStatus: response.status,
+      providerMessage: payload?.error?.message
+    };
+    throw err;
+  }
+  return payload;
+}
+
 function decodeBase64Url(value: string | undefined): string {
   if (!value) return '';
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
   const padding = normalized.length % 4 ? '='.repeat(4 - normalized.length % 4) : '';
   return Buffer.from(normalized + padding, 'base64').toString('utf8');
+}
+
+function encodeBase64Url(value: string): string {
+  return Buffer.from(value, 'utf8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function encodeMimeHeaderWord(value: string): string {
+  return /^[\x20-\x7e]*$/.test(value) ? value : `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -305,4 +342,29 @@ export async function listGmailQuoteMessages(maxResults = 25): Promise<GmailQuot
   return allowedSenders.sort(function(a, b) {
     return String(a.receivedAt || '').localeCompare(String(b.receivedAt || ''));
   });
+}
+
+export async function sendGmailMessage(params: {
+  to: string;
+  cc?: string;
+  subject: string;
+  body: string;
+  threadId?: string;
+}): Promise<{ id: string; threadId?: string }> {
+  const config = getGmailMailboxConfiguration();
+  const mime = [
+    `From: ${config.mailboxAddress}`,
+    `To: ${params.to}`,
+    ...(params.cc ? [`Cc: ${params.cc}`] : []),
+    `Subject: ${encodeMimeHeaderWord(params.subject)}`,
+    'MIME-Version: 1.0',
+    'Content-Type: text/plain; charset="UTF-8"',
+    '',
+    params.body
+  ].join('\r\n');
+  const payload = await gmailPost('/users/me/messages/send', {
+    raw: encodeBase64Url(mime),
+    ...(params.threadId ? { threadId: params.threadId } : {})
+  });
+  return { id: payload.id, threadId: payload.threadId };
 }

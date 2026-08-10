@@ -46,7 +46,10 @@ const authorizeUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
 authorizeUrl.searchParams.set('client_id', clientId);
 authorizeUrl.searchParams.set('redirect_uri', redirectUri);
 authorizeUrl.searchParams.set('response_type', 'code');
-authorizeUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/gmail.readonly');
+authorizeUrl.searchParams.set(
+  'scope',
+  'https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send'
+);
 authorizeUrl.searchParams.set('access_type', 'offline');
 authorizeUrl.searchParams.set('prompt', 'consent');
 authorizeUrl.searchParams.set('login_hint', mailbox);
