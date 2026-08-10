@@ -10,6 +10,7 @@ import {
   getEmailQuotePollState,
   pollGmailQuoteInbox
 } from '../services/emailQuotePoller';
+import { sendGmailMessage } from '../services/gmailQuoteInbox';
 
 const router = express.Router();
 const QUOTE_APPROVER_ROLES = ['quote_approver'];
@@ -65,6 +66,9 @@ function rowToEmailQuote(row: any, includeRaw = false) {
     quoteId: row.quote_id,
     lastRatedAt: row.last_rated_at,
     pricedAt: row.priced_at,
+    quoteSentAt: row.quote_sent_at,
+    quoteSentTo: row.quote_sent_to,
+    quoteSentCc: row.quote_sent_cc,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -342,6 +346,64 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
     }, userId);
 
     res.json(rowToEmailQuote(updated, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/send', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!await requireOperationsUser(req, res)) return;
+    const current = await db.query(
+      'SELECT * FROM public.email_quote_requests WHERE id = $1',
+      [req.params.id]
+    );
+    if (!current.rows.length) {
+      res.status(404).json({ error: 'Email quote request not found' });
+      return;
+    }
+    const row = current.rows[0];
+    const to = String(req.body && req.body.to || '').trim();
+    const cc = String(req.body && req.body.cc || '').trim();
+    const body = String(req.body && req.body.body || '').trim();
+    const subject = String(
+      req.body && req.body.subject || `Your First Class Trucking quote${row.subject ? ' — ' + row.subject : ''}`
+    ).trim();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(to)) {
+      res.status(400).json({ error: 'A valid recipient email is required' });
+      return;
+    }
+    if (cc && !emailPattern.test(cc)) {
+      res.status(400).json({ error: 'The CC address is not a valid email' });
+      return;
+    }
+    if (!body) {
+      res.status(400).json({ error: 'Email body is required' });
+      return;
+    }
+    if (row.client_price == null) {
+      res.status(400).json({ error: 'Create the client quote before sending it' });
+      return;
+    }
+    await sendGmailMessage({
+      to,
+      cc: cc || undefined,
+      subject,
+      body,
+      threadId: row.external_thread_id || undefined
+    });
+    const updated = await db.query(
+      `UPDATE public.email_quote_requests
+       SET status = 'sent',
+           quote_sent_at = NOW(),
+           quote_sent_to = $2,
+           quote_sent_cc = $3
+       WHERE id = $1
+       RETURNING *`,
+      [row.id, to, cc || null]
+    );
+    res.json(rowToEmailQuote(updated.rows[0], true));
   } catch (err) {
     next(err);
   }
