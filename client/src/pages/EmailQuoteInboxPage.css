@@ -145,10 +145,10 @@
   font-weight: 700;
 }
 
-.eq-mailbox-meta .eq-dat-disabled {
-  color: #8c692e;
-  background: #fff8e9;
-  border-color: #ead8ac;
+.eq-mailbox-meta .eq-dat-enabled {
+  color: #176b5a;
+  background: #e6f4f0;
+  border-color: #b7dace;
 }
 
 .eq-message {
@@ -534,7 +534,7 @@
 }
 
 .eq-field-grid.freight {
-  grid-template-columns: repeat(5, minmax(80px, .7fr)) minmax(160px, 1.5fr);
+  grid-template-columns: repeat(5, minmax(80px, .7fr)) minmax(150px, 1.3fr) minmax(125px, 1fr);
 }
 
 .eq-field-grid label,
@@ -553,6 +553,7 @@
 }
 
 .eq-field-grid input,
+.eq-field-grid select,
 .eq-money-field input,
 .eq-notes-field textarea {
   width: 100%;
@@ -566,12 +567,14 @@
   outline: none;
 }
 
-.eq-field-grid input {
+.eq-field-grid input,
+.eq-field-grid select {
   height: 36px;
   padding: 0 9px;
 }
 
 .eq-field-grid input:focus,
+.eq-field-grid select:focus,
 .eq-money-field input:focus,
 .eq-notes-field textarea:focus {
   border-color: #62a9bf;
@@ -614,6 +617,31 @@
 .eq-carrier-card.unavailable {
   cursor: not-allowed;
   opacity: .68;
+}
+
+.eq-carrier-card.benchmark {
+  cursor: default;
+  border-color: #b9d7c9;
+  background: linear-gradient(180deg, #fbfefd, #f1f8f5);
+  opacity: 1;
+}
+
+.eq-carrier-top em.market {
+  color: #1d6655;
+  background: #def1ea;
+}
+
+.eq-market-range {
+  display: flex;
+  gap: 12px;
+  margin: -2px 0 10px;
+  color: #3c6670;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.eq-dat-button {
+  flex: 0 0 auto;
 }
 
 .eq-carrier-top {

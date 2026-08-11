@@ -10,6 +10,7 @@ import {
   getEmailQuotePollState,
   pollGmailQuoteInbox
 } from '../services/emailQuotePoller';
+import { requestDatRateViewLookup } from '../services/datRateViewJobs';
 
 const router = express.Router();
 const OPERATIONS_ROLES = ['admin', 'manager', 'agent', 'viewer'];
@@ -212,6 +213,17 @@ router.put('/:id/shipment', async function(req: Request, res: Response, next: Ne
   }
 });
 
+router.post('/:id/dat-rateview', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = await requireOperationsUser(req, res);
+    if (!userId) return;
+    const record = await requestDatRateViewLookup(req.params.id, userId);
+    res.json(rowToEmailQuote(record, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.put('/:id/pricing', async function(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = await requireOperationsUser(req, res);
@@ -228,7 +240,10 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
     const carrierQuotes: any[] = jsonValue(row.carrier_quotes, []);
     const carrierKey = String(req.body && req.body.carrierKey || '');
     const selected = carrierQuotes.find(function(option) {
-      return option.key === carrierKey && option.available;
+      return option.key === carrierKey &&
+        option.available &&
+        option.selectable !== false &&
+        option.benchmark !== true;
     });
     if (!selected || !numericValue(selected.cost)) {
       res.status(400).json({ error: 'Choose an available carrier rate' });

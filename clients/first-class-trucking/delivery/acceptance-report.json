@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "status": "pending",
+  "delivered_version": "TBD",
+  "accepted_scope": [],
+  "excluded_scope": [],
+  "known_limitations": [],
+  "accepted_exceptions": [],
+  "operating_owner": "TBD",
+  "support_route": "TBD",
+  "client_approver": "TBD",
+  "signed_off_at": null
+}

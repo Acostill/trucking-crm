@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "workflow_id": "fct-dat-rateview-lane-pricing",
+  "name": "First Class Trucking DAT RateView lane pricing",
+  "version": "0.3-approved-no-daily-cap",
+  "status": "approved",
+  "trigger": "An operator starts an on-demand lookup for one fictional or approved shipment lane.",
+  "preconditions": [
+    "The run is authorized for the client-provided shared DAT production account.",
+    "A human is available to enter credentials and complete SSO, MFA, CAPTCHA, or reauthentication.",
+    "The request contains origin, destination, equipment type, and values for any additional required RateView fields discovered in the approved UI.",
+    "The request does not ask for booking, posting, messaging, purchasing, payment, deletion, or an account change."
+  ],
+  "inputs": [
+    {
+      "name": "request_id",
+      "required": true,
+      "description": "Caller-provided unique quote identifier used for duplicate protection."
+    },
+    {
+      "name": "origin",
+      "required": true,
+      "description": "Origin city/state or postal-code value accepted by the observed RateView field."
+    },
+    {
+      "name": "destination",
+      "required": true,
+      "description": "Destination city/state or postal-code value accepted by the observed RateView field."
+    },
+    {
+      "name": "equipment_type",
+      "required": true,
+      "description": "DAT equipment type selected from the observed RateView options."
+    },
+    {
+      "name": "additional_required_fields",
+      "required": false,
+      "description": "Key/value values for any additional UI fields confirmed as required during discovery; unknown fields stop for human review."
+    }
+  ],
+  "outputs": [
+    "request_id",
+    "origin and destination as accepted/displayed by DAT",
+    "equipment type as accepted/displayed by DAT",
+    "lowest displayed market-range value, not an absolute cheapest-carrier quote",
+    "displayed average and high market-range values when available",
+    "displayed rate type and timeframe",
+    "displayed per-mile and fuel values when available",
+    "lookup timestamp in ISO 8601 format",
+    "source label identifying DAT RateView",
+    "explicit null plus reason for each approved optional output that is unavailable"
+  ],
+  "steps": [
+    {
+      "id": "RV-010",
+      "intent": "Normalize and validate one approved lane request.",
+      "action": "Validate the request schema, normalize whitespace and casing for duplicate comparison, and reject prohibited-action requests.",
+      "target": "The on-demand request payload before browser use.",
+      "preconditions": ["A request payload was supplied."],
+      "postconditions": ["A normalized request and deterministic idempotency key exist."],
+      "validation": "Required business fields are non-empty and the request contains no prohibited action.",
+      "evidence": "A redacted validation log containing the request_id and validation result only.",
+      "on_failure": "Stop without opening DAT and return a validation error.",
+      "consequential": false,
+      "approval_required": "No additional approval beyond the operator starting the on-demand run."
+    },
+    {
+      "id": "RV-020",
+      "intent": "Prevent duplicate searches and preserve a safe submission audit trail.",
+      "action": "Read the local lookup ledger, check the idempotency key, and record the current day's submitted-search count for audit only.",
+      "target": "The non-secret local RateView lookup ledger.",
+      "preconditions": ["RV-010 completed."],
+      "postconditions": ["The request is eligible for one search or is safely rejected."],
+      "validation": "No completed, submitted, or uncertain ledger entry exists for the key. The audit count never blocks an otherwise authorized unique lookup.",
+      "evidence": "A redacted preflight log with date, request_id, duplicate status, and audit-only submitted-today count; no shipment values.",
+      "on_failure": "Return the prior completed result when available; otherwise stop for human review. Never submit an uncertain duplicate lookup.",
+      "consequential": false,
+      "approval_required": "An authorized on-demand invocation permits one validated read-only lookup. There is no application-level daily cap."
+    },
+    {
+      "id": "RV-030",
+      "intent": "Reach the authorized DAT application without storing authentication material.",
+      "action": "Open the approved DAT login entry point or the observed RateView URL and inspect whether the shared session is authenticated.",
+      "target": "DAT login or RateView page on the approved DAT domains observed during discovery.",
+      "preconditions": ["RV-020 passed."],
+      "postconditions": ["The browser is either authenticated or waiting at the human-login boundary."],
+      "validation": "The URL and visible page identity match an approved DAT login or RateView page.",
+      "evidence": "A redacted page screenshot and URL pattern with query tokens removed.",
+      "on_failure": "Stop on unknown domains, access-denied pages, or UI identity mismatch.",
+      "consequential": false,
+      "approval_required": "No credential entry by automation is permitted."
+    },
+    {
+      "id": "RV-040",
+      "intent": "Allow an authorized human to restore the shared DAT session.",
+      "action": "Pause automation and prompt the human to enter credentials and complete SSO, MFA, CAPTCHA, or other DAT challenges manually.",
+      "target": "DAT's visible authentication controls.",
+      "preconditions": ["DAT indicates the session is unauthenticated or expired."],
+      "postconditions": ["DAT shows an authenticated application page, or the run ends without a search."],
+      "validation": "An authenticated DAT application landmark is visible and login fields/challenges are no longer active.",
+      "evidence": "A redacted post-login screenshot only; never capture credential fields, cookies, tokens, or recovery codes.",
+      "on_failure": "After the configured human-takeover timeout or denial, stop and report AUTH_REQUIRED. Do not bypass or retry challenges automatically.",
+      "consequential": false,
+      "approval_required": "The authorized human performs and approves authentication."
+    },
+    {
+      "id": "RV-050",
+      "intent": "Confirm the account can access RateView before entering a paid search.",
+      "action": "Navigate to RateView through an observed stable semantic control and verify that lane-search controls are available for the subscription.",
+      "target": "The DAT RateView navigation item and lane-search page.",
+      "preconditions": ["An authenticated DAT session exists."],
+      "postconditions": ["The RateView search page is ready or a subscription/permission failure is classified."],
+      "validation": "The RateView page title/landmark and semantic lane fields are visible without any booking or posting UI action.",
+      "evidence": "A redacted screenshot and observed locator candidates recorded by browser discovery.",
+      "on_failure": "Stop with SUBSCRIPTION_REQUIRED, PERMISSION_DENIED, or UI_DRIFT; do not navigate into purchase or account-upgrade flows.",
+      "consequential": false,
+      "approval_required": "No additional approval required."
+    },
+    {
+      "id": "RV-060",
+      "intent": "Populate the lane accurately without submitting it.",
+      "action": "Fill origin, destination, equipment type, and each additional field visibly marked required; select only observed suggestions matching the request.",
+      "target": "Semantically labeled required RateView lane-search controls confirmed during discovery.",
+      "preconditions": ["RV-050 passed and the session remains authenticated."],
+      "postconditions": ["All required fields display the intended accepted values and no search has been submitted."],
+      "validation": "Read back every accepted/displayed field value and compare it with the normalized request.",
+      "evidence": "A commercially redacted pre-submit screenshot and field-validation log.",
+      "on_failure": "Clear only the affected field and retry once using the documented suggestion behavior; then stop for human review. Unknown required fields block submission.",
+      "consequential": false,
+      "approval_required": "No additional approval required before field entry."
+    },
+    {
+      "id": "RV-070",
+      "intent": "Establish the final approval and recovery checkpoint immediately before a lane-credit lookup.",
+      "action": "Recheck authentication, the idempotency key, and all displayed lane fields; record audit-only usage and, during discovery and QA, request explicit human confirmation for this search.",
+      "target": "The validated pre-search state and local ledger.",
+      "preconditions": ["RV-060 passed and the search control has not been activated."],
+      "postconditions": ["A single-use search authorization exists for the validated state."],
+      "validation": "Session authenticated; duplicate absent; lane values match; operator approval recorded for discovery/QA.",
+      "evidence": "A redacted checkpoint record with request_id, audit-only submitted-today count, and approval timestamp.",
+      "on_failure": "Return to RV-040 for authentication loss, otherwise stop without submitting.",
+      "consequential": true,
+      "approval_required": "Discovery and QA require per-search human confirmation; an operational run is approved by its authorized on-demand invocation. There is no application daily cap."
+    },
+    {
+      "id": "RV-080",
+      "intent": "Execute exactly one authorized RateView lane lookup.",
+      "action": "Atomically mark the ledger entry submitted, activate the observed semantic RateView search control once, and disable automated resubmission for this key.",
+      "target": "The validated RateView search action confirmed during discovery.",
+      "preconditions": ["RV-070 produced a current single-use authorization."],
+      "postconditions": ["One search was submitted and the ledger is submitted/uncertain until results are validated."],
+      "validation": "A loading or results transition occurs after one activation; this idempotency key transitions to submitted exactly once.",
+      "evidence": "A redacted transition screenshot, timestamp, and ledger state; no raw commercially confidential payload in logs.",
+      "on_failure": "If submission may have occurred, mark UNCERTAIN and require human review; never click search again automatically. If no activation occurred, return safely to RV-070.",
+      "consequential": true,
+      "approval_required": "The single-use authorization from RV-070."
+    },
+    {
+      "id": "RV-090",
+      "intent": "Classify the outcome without creating a duplicate lookup.",
+      "action": "Wait for an observed results signal, no-rate state, authentication redirect, permission error, or bounded timeout.",
+      "target": "The RateView results region or documented failure state.",
+      "preconditions": ["RV-080 submitted one search."],
+      "postconditions": ["The run has a classified completed, no-rate, auth-loss, denied, drift, or uncertain outcome."],
+      "validation": "Exactly one recognized state is visible and tied to the submitted request.",
+      "evidence": "A redacted outcome screenshot and state classification.",
+      "on_failure": "On post-submit auth loss or timeout, keep UNCERTAIN and require human review; do not resume by resubmitting. On no-rate, record a completed no-rate result.",
+      "consequential": false,
+      "approval_required": "No additional approval required."
+    },
+    {
+      "id": "RV-100",
+      "intent": "Capture DAT's displayed market evidence accurately.",
+      "action": "Read the displayed low, average, high, rate type, timeframe, per-mile, fuel, accepted lane/equipment, and timestamp; assign null plus a reason when an approved optional field is unavailable.",
+      "target": "The observed RateView result cards and labels documented during discovery.",
+      "preconditions": ["RV-090 classified a valid results or no-rate state."],
+      "postconditions": ["A typed result object accurately reflects the visible DAT result."],
+      "validation": "Parsed values match the visible labeled values; low is labeled as DAT's displayed range low, not an absolute cheapest-carrier quote; rate type and timeframe are preserved.",
+      "evidence": "A redacted results screenshot linked to a redacted structured extraction log.",
+      "on_failure": "Stop with EXTRACTION_UNVERIFIED and retain the submitted ledger state for human review; do not guess or resubmit.",
+      "consequential": false,
+      "approval_required": "No additional approval required."
+    },
+    {
+      "id": "RV-110",
+      "intent": "Finalize the lookup safely and make reruns idempotent.",
+      "action": "Write the completed/no-rate result and timestamp to the ledger, return the structured result to the caller, redact permitted diagnostics, and stop on the results page.",
+      "target": "The local result/ledger boundary and caller response.",
+      "preconditions": ["RV-100 produced a validated result or an approved no-rate outcome."],
+      "postconditions": ["The same idempotency key can return the stored result without another DAT lookup."],
+      "validation": "Ledger state is completed, result schema validates, source is DAT RateView, and no prohibited action occurred.",
+      "evidence": "A completion log with request_id, lookup timestamp, outcome, audit-only submitted-today count, and artifact paths only.",
+      "on_failure": "Keep the ledger entry submitted/uncertain and require human reconciliation before any rerun.",
+      "consequential": false,
+      "approval_required": "No additional approval required."
+    }
+  ],
+  "branches": [
+    {
+      "from": "RV-030",
+      "condition": "Session is unauthenticated or expired before submission",
+      "to": "RV-040"
+    },
+    {
+      "from": "RV-040",
+      "condition": "Human authentication succeeds",
+      "to": "RV-050"
+    },
+    {
+      "from": "RV-070",
+      "condition": "Shared session was invalidated before submission",
+      "to": "RV-040",
+      "resume": "After login, repeat RV-050 through RV-070; do not reuse stale field or approval state."
+    },
+    {
+      "from": "RV-080",
+      "condition": "Activation outcome is uncertain or session is lost after possible submission",
+      "to": "HUMAN_RECONCILIATION",
+      "resume": "Never resubmit automatically for the same idempotency key."
+    },
+    {
+      "from": "RV-090",
+      "condition": "DAT displays no rate for the lane",
+      "to": "RV-100",
+      "resume": "Produce a completed no-rate result with visible reason and optional values null."
+    },
+    {
+      "from": "RV-050",
+      "condition": "RateView subscription or permission is unavailable",
+      "to": "STOP_SUBSCRIPTION_OR_PERMISSION"
+    },
+    {
+      "from": "RV-020",
+      "condition": "The idempotency key already has a completed result",
+      "to": "RETURN_PRIOR_RESULT"
+    },
+    {
+      "from": "RV-050",
+      "condition": "Required semantic targets cannot be matched to approved browser evidence",
+      "to": "STOP_UI_DRIFT"
+    }
+  ],
+  "global_failure_policy": {
+    "retry_limit": 1,
+    "resume_strategy": "Retries are allowed only before RV-080 and only after revalidating authentication, lane fields, and duplicate state. Any failure after possible submission is uncertain and requires human reconciliation without automatic resubmission.",
+    "human_takeover": "A human exclusively handles credentials, SSO, MFA, CAPTCHA, access denial, uncertain post-submit state, and unobserved required fields."
+  },
+  "idempotency": {
+    "strategy": "Hash the normalized request_id, origin, destination, equipment type, and all additional required field values. Use a local lookup ledger with reserved, submitted, uncertain, completed, and no-rate states plus audit-only submission dates.",
+    "duplicate_check": "Before field entry and again immediately before search, reject submitted/uncertain duplicates and return completed results without a new lookup.",
+    "partial_run_recovery": "Pre-submit runs restart from the last safe checkpoint after full revalidation. Submitted or uncertain runs never resubmit automatically and require human reconciliation."
+  },
+  "completion_validation": [
+    "The result is visibly tied to the accepted origin, destination, and equipment type.",
+    "Displayed low, average, high, rate type, timeframe, per-mile, and fuel values are captured or explicitly null with a reason when optional/unavailable.",
+    "The lookup timestamp and DAT RateView source label are present.",
+    "The lookup ledger records at most one submitted transition for the idempotency key; daily usage is audit-only and uncapped by the application.",
+    "A rerun of the same completed idempotency key returns the stored result without a DAT search.",
+    "No credential/authentication artifact or unredacted commercially confidential evidence is stored.",
+    "No booking, posting, messaging, purchasing/payment, deletion, or account change occurred."
+  ],
+  "approved_by": "Jack, First Class Trucking client approver (original scope; surname/title not provided); daily-cap correction confirmed by David Castillo / Optimation AI",
+  "approved_at": "2026-08-11T15:09:56Z"
+}

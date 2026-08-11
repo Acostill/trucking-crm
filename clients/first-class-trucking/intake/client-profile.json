@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "client": {
+    "name": "First Class Trucking",
+    "slug": "first-class-trucking",
+    "client_owner": "Jack (surname and title TBD)",
+    "service_owner": "David Castillo / Optimation AI",
+    "technical_contact": "David Castillo / Optimation AI"
+  },
+  "authorization": {
+    "authorized": true,
+    "authorization_scope": "Use the client-authorized shared production DAT login for read-only RateView discovery, testing, and on-demand operation with non-consequential or fictional shipment data. No application-level daily lookup cap applies. No other consequential DAT action is authorized.",
+    "approved_by": "Jack (client approver and DAT account owner; surname and title TBD)",
+    "approved_environments": [
+      "DAT production, limited to read-only RateView discovery and searches"
+    ],
+    "approved_domains": [
+      "login.dat.com"
+    ],
+    "production_use_allowed": true,
+    "production_use_constraints": "Read-only RateView use with duplicate and uncertain-submission protection. Always respect DAT's own subscription, credit, usage, and rate controls and stop before booking, posting, messaging, purchasing/payment, deletion, or account changes."
+  },
+  "workflow": {
+    "name": "DAT RateView lane pricing",
+    "business_purpose": "Create a Playwright virtual employee that uses DAT RateView lane pricing as part of First Class Trucking's freight quote process.",
+    "trigger": "On demand for the initial script",
+    "inputs": [
+      "Origin, destination, and equipment type are documented by DAT as RateView search inputs",
+      "Any additional inputs DAT RateView requires; the exact UI field list remains TBD pending authorized observation and confirmation"
+    ],
+    "outputs": [
+      "Lowest displayed rate",
+      "Displayed market-rate range: low, average, and high",
+      "Displayed rate type, timeframe, per-mile value, and fuel information when available",
+      "Lookup timestamp"
+    ],
+    "existing_process_context": "The existing CRM ingests quote emails. DAT is intended to provide carrier-side quote/rate data later in the freight quote process; the precise handoff is TBD.",
+    "expected_volume": "Approximately 10 RateView lookups per day was provided as an expected volume, not a maximum",
+    "schedule_or_sla": "On demand; latency target and support hours are TBD",
+    "success_metrics": [
+      "Five consecutive successful read-only searches using fictional data",
+      "No duplicate or uncertain request is submitted again automatically",
+      "No booking, posting, messaging, purchasing/payment, deletion, or account changes",
+      "On authentication loss, pause for human reauthentication and resume from a safe pre-search checkpoint without duplicating a lookup or consuming an unintended extra lane credit"
+    ]
+  },
+  "applications": [
+    {
+      "name": "DAT",
+      "login_url": "https://login.dat.com/u/login/identifier",
+      "purpose": "Obtain RateView lane pricing, including the lowest displayed rate and displayed market-rate information, for the freight quote process",
+      "environment": "Production, authorized for read-only RateView discovery and searches",
+      "account_role": "Client-authorized shared production login owned by Jack; exact DAT permission tier and RateView subscription are TBD. Shared use is a client-accepted operational/licensing exception pending the client's confirmation of DAT contractual compliance."
+    }
+  ],
+  "access": {
+    "test_accounts": [],
+    "test_account_plan": "Use the shared production login for read-only RateView searches with fictional data. Each live discovery or QA search requires its documented approval; the automation records usage without imposing a daily cap.",
+    "authentication_method": "A human manually enters the client-authorized shared-login credentials. The automation does not store credentials or authentication artifacts.",
+    "sso_behavior": "TBD; any SSO interaction remains human-controlled",
+    "mfa_behavior": "Human-controlled only. The automation pauses and prompts for manual completion; it must not bypass or automatically handle MFA.",
+    "captcha_behavior": "Human-controlled only. The automation pauses and prompts for manual completion; it must not bypass or automatically handle CAPTCHA.",
+    "session_constraints": "Concurrent shared-login use is expected to invalidate sessions or cause logouts. On authentication loss, pause and prompt for human reauthentication, then resume from a safe pre-search checkpoint with duplicate and lane-credit protection.",
+    "secret_storage_method": "Manual human entry only; no credential values or authentication artifacts may be stored in this project.",
+    "accepted_exception": "The client has chosen a shared production login despite the documented individual-user constraint. Jack accepts the session invalidation/logout and licensing/contractual risk pending client confirmation of DAT contractual compliance."
+  },
+  "data_handling": {
+    "data_classification": "Commercially confidential",
+    "sensitive_fields": [
+      "Shipment and lane inputs",
+      "DAT market-rate and pricing outputs",
+      "Customer or quote context if displayed"
+    ],
+    "screenshot_redactions": [
+      "Redact commercially confidential data and all authentication information before storage or sharing"
+    ],
+    "log_redactions": [
+      "Redact commercially confidential data and all authentication information before storage or sharing"
+    ],
+    "retention_policy": "Retain redacted screenshots and logs for 30 days, then delete them. Retention for any other evidence type and the exact deletion procedure are TBD.",
+    "prohibited_storage": [
+      "passwords",
+      "tokens",
+      "cookies",
+      "MFA recovery codes",
+      "Playwright storage state",
+      "raw sensitive exports"
+    ]
+  },
+  "consequential_actions": [
+    {
+      "action": "Execute a RateView lane lookup that may consume a lane credit",
+      "status": "Authorized per on-demand invocation",
+      "approval_method": "An authorized on-demand invocation approves one validated read-only lookup; discovery and QA continue to require explicit per-search confirmation",
+      "automation_boundary": "Before each search, verify the idempotency key and ledger state. Never automatically resubmit a completed, submitted, or uncertain request. Usage counts are audit-only and do not impose a cap."
+    },
+    {
+      "action": "Booking, posting, messaging, purchasing/payment, deletion, or account changes in DAT",
+      "status": "Not authorized",
+      "approval_method": "None; these actions are outside the approved read-only scope",
+      "automation_boundary": "Always stop before the action"
+    }
+  ],
+  "acceptance_criteria": [
+    "Complete five consecutive successful read-only RateView searches using fictional data",
+    "For each search, capture the displayed low, average, and high market range plus rate type, timeframe, per-mile value, and fuel information when available, together with the lookup timestamp",
+    "Record lookup usage for audit without imposing an application-level daily cap",
+    "Never perform booking, posting, messaging, purchasing/payment, deletion, or account changes",
+    "On authentication loss, pause for human reauthentication and resume from a safe pre-search checkpoint without duplicating a lookup or consuming an unintended extra lane credit",
+    "Keep credentials, authentication artifacts, and unredacted commercially confidential evidence out of the project"
+  ],
+  "support": {
+    "operating_owner": "David Castillo / Optimation AI",
+    "support_window": "TBD",
+    "escalation_route": "David Castillo / Optimation AI; contact channel TBD",
+    "support_boundaries": "TBD"
+  }
+}

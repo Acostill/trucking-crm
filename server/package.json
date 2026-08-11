@@ -8,6 +8,8 @@
     "build:landing": "cd ../landing && npm install && npm run build",
     "build:client": "cd ../client && npm install && CI=false npm run build",
     "db:migrate:email-quotes": "ts-node ./scripts/run-email-quote-migration.ts",
+    "db:migrate:dat-rateview": "ts-node ./scripts/run-dat-rateview-migration.ts",
+    "test:dat-rateview": "ts-node ./scripts/test-dat-rateview-integration.ts",
     "gmail:authorize": "ts-node ./scripts/authorize-gmail.ts",
     "start": "node dist/bin/www.js"
   },

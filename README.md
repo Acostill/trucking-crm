@@ -42,16 +42,19 @@ pricing queue:
 1. Gmail is checked for messages addressed to `emailbot@optimation.io`.
 2. The email is parsed into pickup, delivery, dimensions, weight, commodity,
    and accessorials.
-3. Forward Air and ExpediteAll are rated in parallel. DAT is intentionally
-   excluded until the virtual-employee phase.
-4. The lowest available carrier cost is suggested. Staff can choose either
-   carrier, set a margin or client price, and create a pending client quote.
+3. Forward Air and ExpediteAll are rated in parallel. Staff can then approve
+   one DAT RateView lookup for the parsed lane and selected equipment.
+4. A local Playwright worker uses the remembered DAT browser session and writes
+   Spot and Contract market benchmarks back to the inbox automatically.
+5. The lowest bookable carrier cost is suggested. DAT remains a market
+   benchmark—not a carrier quote—while staff sets the final margin/client price.
 
 Run the additive database migration once:
 
 ```bash
 cd server
 npm run db:migrate:email-quotes
+npm run db:migrate:dat-rateview
 ```
 
 Then copy the Gmail and OpenRouter settings from `server/.env.example` into
@@ -75,6 +78,36 @@ Sign in as `emailbot@optimation.io`. The helper saves the refresh token into
 Gmail read-only access and deduplicates messages in Postgres; it does not mark,
 move, or delete email. If `emailbot@optimation.io` is an alias, authorize its
 owning mailbox and set `GMAIL_ALLOW_MAILBOX_ALIAS=true`.
+
+### DAT RateView worker
+
+The hosted API stores approved jobs and results. The Playwright browser runs as
+a separate worker with a persistent browser profile; the current First Class
+deployment uses a Railway volume at `/data`, with the Mac worker retained as a
+documented fallback. Set these server-side variables in Render:
+
+```text
+DAT_WORKER_ENABLED=true
+DAT_WORKER_SECRET=<one long random value>
+```
+
+Use that same secret only in the Railway worker variables or in
+`clients/first-class-trucking/automation/.env` for a local fallback, along with
+the public Render backend URL. Railway deployment and human reauthentication
+instructions are in `clients/first-class-trucking/automation/README.md`.
+
+For the local fallback:
+
+```bash
+cd clients/first-class-trucking/automation
+npm run auth
+npm run worker
+```
+
+The CRM never receives DAT credentials, cookies, MFA codes, or browser storage.
+Each search requires a staff click on **Approve & run DAT lookup**. Completed
+duplicates reuse the local ledger result, and an uncertain submission is never
+automatically retried.
 
 `setter-agent/app/.env` (see `.env.example` there): `XAI_API_KEY` to go
 live, `CLOSE_API_KEY` for Close CRM sync; leave empty for full-pipeline

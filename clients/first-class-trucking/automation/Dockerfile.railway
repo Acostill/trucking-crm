@@ -1,0 +1,40 @@
+FROM mcr.microsoft.com/playwright:v1.62.0-noble
+
+ENV NODE_ENV=production \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    DISPLAY=:99 \
+    DAT_USER_DATA_DIR=/data/dat-profile \
+    DAT_RUNTIME_DIR=/data/runtime \
+    DAT_HEADLESS=0 \
+    DAT_BROWSER_CHANNEL=chromium
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      fluxbox \
+      gosu \
+      novnc \
+      websockify \
+      x11-utils \
+      x11vnc \
+      xvfb \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev
+
+COPY src ./src
+COPY tsconfig.json ./
+COPY cloud/novnc-index.html /usr/share/novnc/index.html
+COPY cloud/health /usr/share/novnc/health
+COPY scripts/railway-entrypoint.sh /usr/local/bin/railway-entrypoint
+COPY scripts/railway-runtime.sh /usr/local/bin/railway-runtime
+
+RUN chmod 0755 /usr/local/bin/railway-entrypoint /usr/local/bin/railway-runtime \
+    && mkdir -p /data \
+    && chown -R pwuser:pwuser /app /data
+
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/local/bin/railway-entrypoint"]

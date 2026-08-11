@@ -1,0 +1,41 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { parseRateCard } from "../src/parser.ts";
+
+test("parses the observed Spot result contract", () => {
+  const result = parseRateCard({
+    rateType: "SPOT",
+    acceptedMarketLane: "Portland Mkt - Chicago Mkt",
+    averageTotal: "$3,729",
+    averagePerMile: "($1.75/mi)",
+    milesAndTimeframe: "2,131 mi | 7d average",
+    range: "$3,197 - $4,092 ($1.50 - $1.92/mi)",
+  });
+  assert.deepEqual(
+    {
+      average: result.averageTotalUsd,
+      low: result.lowTotalUsd,
+      high: result.highTotalUsd,
+      miles: result.miles,
+      timeframe: result.timeframe,
+    },
+    { average: 3729, low: 3197, high: 4092, miles: 2131, timeframe: "7d average" },
+  );
+  assert.equal(result.fuel.value, null);
+  assert.match(result.fuel.reason || "", /did not display/);
+});
+
+test("rejects an ambiguous range instead of guessing", () => {
+  assert.throws(
+    () =>
+      parseRateCard({
+        rateType: "CONTRACT",
+        acceptedMarketLane: "A - B",
+        averageTotal: "$1,000",
+        averagePerMile: "($1.00/mi)",
+        milesAndTimeframe: "1,000 mi | 90d average",
+        range: "not available",
+      }),
+    /range could not be verified/,
+  );
+});

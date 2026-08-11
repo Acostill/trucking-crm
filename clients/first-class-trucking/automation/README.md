@@ -1,0 +1,135 @@
+# First Class Trucking DAT RateView virtual employee
+
+This CLI performs one authorized, read-only DAT Quick Rate Lookup and returns the displayed Spot and Contract market ranges. It does not book, post, message, purchase, delete, or change the DAT account.
+
+## 1. Install
+
+```bash
+cd /Users/davidcastillo/trucking-crm/clients/first-class-trucking/automation
+npm install
+npx playwright install chrome
+```
+
+The CLI defaults to a dedicated profile at `/Users/davidcastillo/Library/Application Support/Optimation AI/First Class DAT Profile`. This preserves DAT's “remember this device for 30 days” recognition without exposing authentication state to source control. To override any setting, copy `configuration.example.env` to `.env`; the CLI loads it automatically.
+
+## 2. Initialize or repair authentication
+
+```bash
+npm run auth
+```
+
+Playwright opens the dedicated visible Chrome profile. The human completes username, password, MFA, or CAPTCHA. The automation never reads or types those values. If DAT reports that the approved shared login is active elsewhere, `DAT_SHARED_SESSION_LOGIN_ANYWAY=1` applies the client's approved “Login Anyway” behavior, which logs out the other DAT device.
+
+## 3. Run one quote
+
+```bash
+npm run quote -- \
+  --request-id demo-001 \
+  --origin "Portland, OR" \
+  --destination "Chicago, IL" \
+  --equipment Van \
+  --approve-search
+```
+
+`--approve-search` is the single-use search authorization. Without it, the CLI stops before opening DAT. Equipment must be `Van`, `Flatbed`, or `Reefer`, matching the live UI observed during discovery.
+
+The JSON response includes Spot and Contract low/average/high totals, per-mile values, mileage, timeframes, the displayed market lanes, timestamp, and an explicit null reason when fuel is not displayed.
+
+To demonstrate the completed discovery result without opening DAT or spending another lookup, run:
+
+```bash
+npm run demo:stored
+```
+
+The ledger recognizes the request and returns the stored result with `"reused": true`.
+
+## 4. Connect the CRM worker
+
+Run the CRM migrations and configure the hosted server first. In Render, set:
+
+```text
+DAT_WORKER_ENABLED=true
+DAT_WORKER_SECRET=<one long random value>
+```
+
+In this directory, copy `configuration.example.env` to `.env` and set:
+
+```text
+DAT_CRM_BASE_URL=https://your-render-backend.example.com
+DAT_WORKER_SECRET=<the same long random value>
+DAT_WORKER_ID=first-class-dat-mac
+```
+
+Never put `DAT_WORKER_SECRET` in `client/.env` or any `REACT_APP_*` variable.
+Start the long-running worker on the Mac that owns the dedicated DAT Chrome
+profile:
+
+```bash
+npm run auth
+npm run worker
+```
+
+For a connectivity check that claims at most one already-approved CRM job:
+
+```bash
+npm run worker:once
+```
+
+An operations user authorizes a specific lane by clicking **Approve & run DAT
+lookup** in the Quote Inbox. The server releases only that approved job to the
+worker. If the session expired, the job becomes `needs_auth`; run
+`npm run auth`, then have the operator approve that lane again. If DAT may have
+accepted a search but the result could not be verified, the job becomes
+`uncertain` and cannot be automatically resubmitted.
+
+## 5. Run the worker on Railway
+
+The Railway deployment uses a dedicated Linux browser profile on a persistent
+volume mounted at `/data`. It does not copy or depend on the Mac's Chrome
+profile. The service has two explicit modes:
+
+- `DAT_SERVICE_MODE=auth` starts a temporary password-protected noVNC page so a
+  human can complete the DAT login, MFA, CAPTCHA, and “remember this device”
+  flow. The VNC password must be exactly eight characters.
+- `DAT_SERVICE_MODE=worker` closes the remote desktop and runs the unattended
+  CRM queue worker. If DAT later requires authentication, the job becomes
+  `needs_auth`; temporarily switch back to `auth`, sign in, then return to
+  `worker`.
+
+Required Railway settings are:
+
+```text
+DAT_SERVICE_MODE=worker
+DAT_BROWSER_CHANNEL=chromium
+DAT_HEADLESS=0
+DAT_USER_DATA_DIR=/data/dat-profile
+DAT_RUNTIME_DIR=/data/runtime
+DAT_CRM_BASE_URL=https://your-render-backend.example.com
+DAT_WORKER_SECRET=<same long random value configured on Render>
+DAT_WORKER_ID=first-class-railway-dat
+DAT_WORKER_POLL_INTERVAL_MS=5000
+```
+
+Attach one persistent volume at `/data`. Use the public Railway domain only
+during the human sign-in window, with a temporary VNC password, then switch the
+service to `worker` and remove or rotate that password. Never enter DAT
+credentials into Railway variables or commit them to the repository.
+
+The cloud host may present a different device or datacenter IP to DAT. If DAT
+blocks it or requires repeated verification, stop and use an approved hosting
+or access arrangement; do not attempt to bypass the control.
+
+## Safety and recovery
+
+- The local ledger at `runtime/ledger.json` prevents duplicate or uncertain resubmissions, stores completed results for reuse, and records daily usage for audit. It does not impose a daily lookup cap.
+- A completed duplicate returns its stored result without opening DAT.
+- A submitted or uncertain request never resubmits automatically; a human must reconcile it.
+- Logs contain IDs, workflow steps, status, duration, and safe categories only—not lanes, rates, or authentication data.
+- Screenshots mask lane fields and complete rate cards. They are automatically pruned after 30 days.
+- Traces are off by default because they may contain confidential data. Enable them only under an approved data-handling exception.
+
+## Verification
+
+```bash
+npm run check
+```

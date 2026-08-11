@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "status": "in_progress",
+  "tested_version": "0.1.0",
+  "environment": "Local TypeScript static/unit QA plus the approved DAT production discovery observation; no additional browser or DAT command was run by QA.",
+  "dataset_class": "Synthetic local validation/parser/ledger data and one fictional production discovery lane.",
+  "consecutive_pass_target": 5,
+  "consecutive_passes_achieved": 0,
+  "critical_paths_passed": false,
+  "failure_paths_passed": false,
+  "rerun_safety_passed": false,
+  "session_expiry_passed": false,
+  "human_takeover_passed": false,
+  "blocking_defects": [],
+  "accepted_exceptions": [
+    "Client-approved shared DAT login may displace another active device; automated LOGIN ANYWAY behavior is configuration-gated.",
+    "Authentication, MFA, CAPTCHA, and reauthentication remain human-controlled in a dedicated persistent Chrome profile.",
+    "Traces are disabled by default because they may expose commercially confidential lane/rate data."
+  ],
+  "evidence_paths": [
+    "automation/tests/validation.test.ts",
+    "automation/tests/parser.test.ts",
+    "automation/tests/ledger.test.ts",
+    "discovery/evidence-manifest.json",
+    "discovery/result-structure-redacted.json"
+  ],
+  "zero_credit_checks": {
+    "typecheck": "passed",
+    "unit_tests": {
+      "passed": 7,
+      "failed": 0
+    },
+    "validated_controls": [
+      "required input validation",
+      "observed equipment allowlist",
+      "normalization and deterministic duplicate identity",
+      "Spot result parsing",
+      "ambiguous-range fail-closed behavior",
+      "completed-result reuse without another submission",
+      "usage above ten remains auditable without an application cap"
+    ]
+  },
+  "production_usage_accounting": {
+    "date": "2026-08-11",
+    "timezone": "America/New_York",
+    "submitted_by_discovery": 1,
+    "submitted_by_qa": 0,
+    "application_daily_cap": null,
+    "note": "Counts are audit-only; DAT's own subscription, credit, rate, and usage controls remain authoritative."
+  },
+  "remaining_release_requirements": [
+    "Five consecutive live, fictional, read-only DAT runs with distinct request IDs and explicit per-search approval.",
+    "Live session-expiry and human-takeover verification without automated credential/MFA/CAPTCHA entry.",
+    "Independent review of masked run artifacts and proof of exactly one SEARCH activation per live run.",
+    "Zero unresolved release-blocking defects after the live sequence."
+  ],
+  "completed_at": null
+}

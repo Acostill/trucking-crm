@@ -17,6 +17,7 @@ import openaiDimensionsRouter from './routes/openaiDimensions';
 import openrouterDimensionsRouter from './routes/openrouterDimensions';
 import customerRouter from './routes/customer';
 import emailQuotesRouter from './routes/emailQuotes';
+import datWorkerRouter from './routes/datWorker';
 
 const app = express();
 // In dev (ts-node-dev) this file runs in place, so __dirname is server/.
@@ -80,6 +81,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/quotes', quotesRouter);
 app.use('/api/customer', customerRouter);
 app.use('/api/email-quotes', emailQuotesRouter);
+app.use('/api/dat-worker', datWorkerRouter);
 app.use('/api/ocr', ocrRouter);
 app.use('/api/extract-dimensions', openaiDimensionsRouter);
 app.use('/api/extract-dimensions-openrouter', openrouterDimensionsRouter);
