@@ -126,7 +126,7 @@ function isCustomerAccount(user) {
   return !hasOperationsRole && (roles.length === 0 || roles.indexOf('customer') > -1);
 }
 
-function OperationsRoute({ children, allowPreview = false }) {
+function OperationsRoute({ children, allowPreview = false, requiredRole }) {
   const { user, checking, setUser } = useAuth();
   const previewMode =
     allowPreview &&
@@ -143,6 +143,9 @@ function OperationsRoute({ children, allowPreview = false }) {
   }
   if (isCustomerAccount(user)) {
     return <Navigate to="/portal" replace />;
+  }
+  if (requiredRole && !(Array.isArray(user.roles) && user.roles.indexOf(requiredRole) > -1)) {
+    return <Navigate to="/loads" replace />;
   }
   return children;
 }
@@ -162,7 +165,7 @@ function AppRoutes() {
       <Route path="/dashboard" element={<OperationsRoute><DashboardPage /></OperationsRoute>} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<OperationsRoute><EmailPastePage /></OperationsRoute>} />
-      <Route path="/email-quotes" element={<OperationsRoute allowPreview><EmailQuoteInboxPage /></OperationsRoute>} />
+      <Route path="/email-quotes" element={<OperationsRoute allowPreview requiredRole="quote_approver"><EmailQuoteInboxPage /></OperationsRoute>} />
       <Route path="/admin-portal" element={<OperationsRoute><AdminPortalPage /></OperationsRoute>} />
       <Route path="/admin-finance" element={<OperationsRoute><AdminFinancePage /></OperationsRoute>} />
       <Route path="/admin-profit-margin" element={<OperationsRoute><AdminProfitMarginPage /></OperationsRoute>} />

@@ -14,6 +14,7 @@ import {
   Percent,
   RefreshCw,
   Save,
+  Send,
   Sparkles,
   Truck,
   User,
@@ -66,9 +67,20 @@ const PREVIEW_MAILBOX = {
 const PREVIEW_QUOTES = [
   {
     id: 'email-quote-preview-1',
-    sender: { name: 'Maria Ortiz', email: 'maria@northstar-medical.com' },
-    subject: 'Rate request: Miami, FL to Atlanta, GA — 1 pallet',
+    sender: { name: 'Dispatch Team', email: 'dispatch@truckfirstclass.com' },
+    subject: 'Fwd: Rate request: Miami, FL to Atlanta, GA — 1 pallet',
     receivedAt: '2026-07-30T20:42:00.000Z',
+    rawText: 'Subject: Fwd: Rate request: Miami, FL to Atlanta, GA — 1 pallet\n'
+      + 'From: Dispatch Team <dispatch@truckfirstclass.com>\n'
+      + 'To: quotes@firstclasstrucking.net\n\n'
+      + '---------- Forwarded message ---------\n'
+      + 'From: Maria Ortiz <maria@northstar-medical.com>\n'
+      + 'Date: Thu, Jul 30, 2026 at 3:40 PM\n'
+      + 'Subject: Rate request: Miami, FL to Atlanta, GA — 1 pallet\n'
+      + 'To: <dispatch@truckfirstclass.com>\n\n'
+      + 'Hi team,\n\nCan you get me a rate for 1 pallet of medical equipment, '
+      + '48x40x48, about 500 lbs, from Miami, FL 33166 to Atlanta, GA 30336? '
+      + 'Ready for pickup 8/3.\n\nThanks,\nMaria',
     status: 'ready',
     shipment: {
       pickup: {
@@ -164,9 +176,19 @@ const PREVIEW_QUOTES = [
   },
   {
     id: 'email-quote-preview-2',
-    sender: { name: 'Daniel Ross', email: 'daniel@apex-aero.com' },
-    subject: 'Need a quote from DFW to ORD',
+    sender: { name: 'Jack Reyes', email: 'jack@truckfirstclass.com' },
+    subject: 'Fwd: Need a quote from DFW to ORD',
     receivedAt: '2026-07-30T19:16:00.000Z',
+    rawText: 'Subject: Fwd: Need a quote from DFW to ORD\n'
+      + 'From: Jack Reyes <jack@truckfirstclass.com>\n'
+      + 'To: quotes@firstclasstrucking.net\n\n'
+      + '---------- Forwarded message ---------\n'
+      + 'From: Daniel Ross <daniel@apex-aero.com>\n'
+      + 'Date: Thu, Jul 30, 2026 at 2:10 PM\n'
+      + 'Subject: Need a quote from DFW to ORD\n'
+      + 'To: <jack@truckfirstclass.com>\n\n'
+      + 'Hey, need a quote for 2 pieces of aircraft parts from DFW to ORD. '
+      + 'Pickup around 8/4. Can you send dimensions/weight questions if you need them?\n\nDaniel',
     status: 'needs_review',
     processingError: 'Missing required details: freight dimensions, total weight',
     shipment: {
@@ -222,6 +244,23 @@ function locationLine(location) {
   return [location.city, location.state, location.zip].filter(Boolean).join(', ') || 'Location pending';
 }
 
+function extractEmailAddress(value) {
+  const match = String(value || '').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0] : '';
+}
+
+function extractForwardedContacts(rawText) {
+  const text = String(rawText || '');
+  const forwardedIndex = text.search(/-{2,}\s*forwarded message\s*-{2,}/i);
+  if (forwardedIndex === -1) return { to: '', cc: '' };
+  const headerBlock = text.slice(forwardedIndex, forwardedIndex + 600);
+  const fromMatch = headerBlock.match(/^From:\s*(.+)$/im);
+  const toMatch = headerBlock.match(/^To:\s*(.+)$/im);
+  const to = fromMatch ? extractEmailAddress(fromMatch[1]) : '';
+  const cc = toMatch ? extractEmailAddress(toMatch[1]) : '';
+  return { to, cc: cc && cc.toLowerCase() !== to.toLowerCase() ? cc : '' };
+}
+
 function statusLabel(status) {
   const labels = {
     received: 'Received',
@@ -230,16 +269,50 @@ function statusLabel(status) {
     ready: 'Ready to price',
     needs_review: 'Needs review',
     failed: 'Action required',
-    priced: 'Client quote ready'
+    priced: 'Client quote ready',
+    sent: 'Quote sent'
   };
   return labels[status] || status || 'Received';
 }
 
 function statusTone(status) {
   if (status === 'ready') return 'ready';
-  if (status === 'priced') return 'priced';
+  if (status === 'priced' || status === 'sent') return 'priced';
   if (status === 'failed' || status === 'needs_review') return 'attention';
   return 'working';
+}
+
+function buildQuoteEmailBody(quote) {
+  if (!quote) return '';
+  const shipment = quote.shipment || {};
+  const pickup = shipment.pickup || {};
+  const pickupLocation = pickup.location || {};
+  const delivery = shipment.delivery || {};
+  const deliveryLocation = delivery.location || {};
+  const selection = quote.selection || {};
+  const carrierOptions = Array.isArray(quote.carrierQuotes) ? quote.carrierQuotes : [];
+  const carrierOption = carrierOptions.find(function(option) { return option.key === selection.carrierKey; });
+  const transitTime = carrierOption && carrierOption.transitTime;
+
+  const detailLines = [
+    `Pickup: ${locationLine(pickupLocation)}${pickup.date ? ' on ' + formatDateTime(pickup.date) : ''}`,
+    `Delivery: ${locationLine(deliveryLocation)}`,
+    selection.carrierSource ? `Carrier: ${selection.carrierSource}` : null,
+    transitTime ? `Estimated transit: ${transitTime} day${transitTime === 1 ? '' : 's'}` : null,
+    `Total price: ${formatMoney(selection.clientPrice)}`
+  ].filter(Boolean);
+
+  return [
+    'Thank you for choosing First Class Trucking!',
+    '',
+    'Here are your quote details:',
+    ...detailLines,
+    '',
+    'Reply to this email to confirm and we will get your shipment scheduled.',
+    '',
+    'Thank you,',
+    'First Class Trucking'
+  ].join('\n');
 }
 
 function shipmentToEditor(shipment) {
@@ -362,6 +435,10 @@ export default function EmailQuoteInboxPage() {
   const [marginPct, setMarginPct] = useState('');
   const [clientPrice, setClientPrice] = useState('');
   const [staffNotes, setStaffNotes] = useState('');
+  const [emailTo, setEmailTo] = useState('');
+  const [emailCc, setEmailCc] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [sendingQuoteEmail, setSendingQuoteEmail] = useState(false);
 
   async function requestJson(path, options) {
     const response = await fetch(buildApiUrl(path), {
@@ -411,6 +488,15 @@ export default function EmailQuoteInboxPage() {
             ? String(Number(calculatedPrice.toFixed(2)))
             : ''
     );
+    const forwarded = extractForwardedContacts(detail && detail.rawText);
+    setEmailTo(
+      (detail && detail.quoteSentTo) ||
+      forwarded.to ||
+      (detail && detail.sender && detail.sender.email) ||
+      ''
+    );
+    setEmailCc((detail && detail.quoteSentCc) || forwarded.cc || '');
+    setEmailBody(buildQuoteEmailBody(detail));
   }
 
   async function loadDetail(id, silent) {
@@ -680,6 +766,48 @@ export default function EmailQuoteInboxPage() {
     }
   }
 
+  async function sendQuoteEmail() {
+    if (!selected || !emailTo.trim() || !emailBody.trim()) return;
+    if (previewMode) {
+      const updated = {
+        ...selected,
+        status: 'sent',
+        quoteSentAt: new Date().toISOString(),
+        quoteSentTo: emailTo.trim(),
+        quoteSentCc: emailCc.trim()
+      };
+      setQuotes(function(current) {
+        return current.map(function(quote) { return quote.id === updated.id ? updated : quote; });
+      });
+      applyDetail(updated);
+      setNotice(
+        'Demo quote email sent to ' + emailTo.trim() +
+        (emailCc.trim() ? ' (cc ' + emailCc.trim() + ')' : '') + '.'
+      );
+      return;
+    }
+    setSendingQuoteEmail(true);
+    setError('');
+    setNotice('');
+    try {
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: emailTo.trim(), cc: emailCc.trim(), body: emailBody })
+      });
+      applyDetail(detail);
+      setNotice(
+        'Quote email sent to ' + emailTo.trim() +
+        (emailCc.trim() ? ' (cc ' + emailCc.trim() + ')' : '') + '.'
+      );
+      await loadWorkspace(detail.id);
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to send the quote email');
+    } finally {
+      setSendingQuoteEmail(false);
+    }
+  }
+
   if (checking && !previewMode) {
     return <div className="customer-portal-loading"><span>Opening quote inbox...</span></div>;
   }
@@ -798,6 +926,13 @@ export default function EmailQuoteInboxPage() {
                       <div><strong>Staff review needed</strong><p>{selected.processingError}</p></div>
                     </div>
                   )}
+
+                  <section className="eq-section">
+                    <div className="eq-section-heading">
+                      <div><Mail size={18} /><span><strong>Original email</strong><small>The message as received, before parsing.</small></span></div>
+                    </div>
+                    <pre className="eq-raw-email">{selected.rawText || 'Original email text is not available for this request.'}</pre>
+                  </section>
 
                   <section className="eq-section">
                     <div className="eq-section-heading">
@@ -945,6 +1080,53 @@ export default function EmailQuoteInboxPage() {
                       </button>
                     </div>
                   </section>
+
+                  {(selected.status === 'priced' || selected.status === 'sent') && (
+                    <section className="eq-section">
+                      <div className="eq-section-heading">
+                        <div><Mail size={18} /><span><strong>Email response</strong><small>Review the draft, then send it to the customer.</small></span></div>
+                        {selected.status === 'sent' && selected.quoteSentAt && (
+                          <span className="eq-route-summary">Sent {formatDateTime(selected.quoteSentAt)}</span>
+                        )}
+                      </div>
+                      <label className="eq-notes-field">
+                        Message
+                        <textarea
+                          className="eq-email-body"
+                          value={emailBody}
+                          onChange={function(e) { setEmailBody(e.target.value); }}
+                        />
+                      </label>
+                      <div className="eq-send-row">
+                        <label className="eq-send-field">
+                          <span>To <em>(receiver)</em></span>
+                          <input
+                            type="email"
+                            placeholder="customer@example.com"
+                            value={emailTo}
+                            onChange={function(e) { setEmailTo(e.target.value); }}
+                          />
+                        </label>
+                        <label className="eq-send-field">
+                          <span>Cc <em>(copied)</em></span>
+                          <input
+                            type="email"
+                            placeholder="Cc (optional)"
+                            value={emailCc}
+                            onChange={function(e) { setEmailCc(e.target.value); }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="eq-secondary-button strong"
+                          onClick={sendQuoteEmail}
+                          disabled={!emailTo.trim() || !emailBody.trim() || sendingQuoteEmail}
+                        >
+                          <Send size={15} /> {sendingQuoteEmail ? 'Sending...' : selected.status === 'sent' ? 'Resend Quote' : 'Send Quote'}
+                        </button>
+                      </div>
+                    </section>
+                  )}
                 </>
               )}
             </section>

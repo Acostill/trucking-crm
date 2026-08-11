@@ -10,6 +10,11 @@
     "db:migrate:email-quotes": "ts-node ./scripts/run-email-quote-migration.ts",
     "db:migrate:dat-rateview": "ts-node ./scripts/run-dat-rateview-migration.ts",
     "test:dat-rateview": "ts-node ./scripts/test-dat-rateview-integration.ts",
+    "db:migrate:quotes-audit-columns": "ts-node ./scripts/run-quotes-audit-columns-migration.ts",
+    "db:migrate:email-quote-thread-index": "ts-node ./scripts/run-email-quote-thread-index-migration.ts",
+    "db:migrate:quote-approver-role": "ts-node ./scripts/run-quote-approver-role-migration.ts",
+    "db:migrate:email-quote-send-tracking": "ts-node ./scripts/run-email-quote-send-tracking-migration.ts",
+    "db:migrate:email-quote-send-cc": "ts-node ./scripts/run-email-quote-send-cc-migration.ts",
     "gmail:authorize": "ts-node ./scripts/authorize-gmail.ts",
     "start": "node dist/bin/www.js"
   },

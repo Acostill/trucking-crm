@@ -122,7 +122,7 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
         pickup.date_time ||
         pickup.date ||
         shipmentInfo.ready_for_loading_date
-      )
+      ) || new Date().toISOString()
     },
     delivery: {
       location: {
@@ -361,6 +361,18 @@ export async function ingestGmailQuoteMessage(message: GmailQuoteMessage): Promi
   created: boolean;
   record: any;
 }> {
+  if (message.externalThreadId) {
+    const existingThread = await db.query(
+      `SELECT * FROM public.email_quote_requests
+       WHERE external_thread_id = $1
+       ORDER BY received_at ASC
+       LIMIT 1`,
+      [message.externalThreadId]
+    );
+    if (existingThread.rows.length) {
+      return { created: false, record: existingThread.rows[0] };
+    }
+  }
   const id = generateEmailQuoteId();
   const inserted = await db.query(
     `INSERT INTO public.email_quote_requests (
