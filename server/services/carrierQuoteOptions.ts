@@ -3,7 +3,8 @@ export type CarrierQuoteKey =
   | 'forwardAir'
   | 'datRateView'
   | 'datSpot'
-  | 'datContract';
+  | 'datContract'
+  | 'datLoadOffers';
 
 export interface CarrierQuoteOption {
   key: CarrierQuoteKey;
@@ -29,6 +30,14 @@ export interface CarrierQuoteOption {
   timeframe?: string;
   lookupTimestamp?: string;
   acceptedMarketLane?: string;
+  searchFingerprint?: string;
+  acceptedCriteria?: any;
+  offers?: any[];
+  resultCount?: number;
+  eligibleCount?: number;
+  excludedCount?: number;
+  exclusionReasons?: Record<string, number>;
+  outcome?: string;
 }
 
 export interface CarrierRecommendation {
@@ -74,7 +83,18 @@ export function mergeDatCarrierOptions(
   options: CarrierQuoteOption[],
   datOptions: CarrierQuoteOption[]
 ): CarrierQuoteOption[] {
+  const replacementKeys = new Set<CarrierQuoteKey>();
+  if (datOptions.some(function(option) { return option.key === 'datLoadOffers'; })) {
+    replacementKeys.add('datLoadOffers');
+  }
+  if (datOptions.some(function(option) {
+    return option.key === 'datRateView' || option.key === 'datSpot' || option.key === 'datContract';
+  })) {
+    replacementKeys.add('datRateView');
+    replacementKeys.add('datSpot');
+    replacementKeys.add('datContract');
+  }
   return options
-    .filter(function(option) { return !String(option.key).startsWith('dat'); })
+    .filter(function(option) { return !replacementKeys.has(option.key); })
     .concat(datOptions);
 }

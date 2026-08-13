@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 export interface AppConfig {
   toolsUrl: "https://one.dat.com/tools";
+  searchLoadsUrl: "https://one.dat.com/search-loads";
   browserChannel: "chrome" | undefined;
   userDataDir: string;
   runtimeDir: string;
@@ -23,7 +24,16 @@ const automationRoot = path.resolve(
 );
 
 function loadLocalEnv(): void {
-  const envPath = path.join(automationRoot, ".env");
+  const configuredPath = process.env.DAT_ENV_FILE?.trim();
+  if (configuredPath && !path.isAbsolute(configuredPath)) {
+    throw new Error("DAT_ENV_FILE must be an absolute path.");
+  }
+  const envPath = configuredPath || path.resolve(
+    automationRoot,
+    "../../..",
+    ".local-secrets",
+    "first-class-dat-worker.env",
+  );
   if (!fs.existsSync(envPath)) return;
   for (const rawLine of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -80,6 +90,7 @@ export function loadConfig(): AppConfig {
 
   return {
     toolsUrl: "https://one.dat.com/tools",
+    searchLoadsUrl: "https://one.dat.com/search-loads",
     browserChannel:
       process.env.DAT_BROWSER_CHANNEL?.trim().toLowerCase() === "chromium"
         ? undefined

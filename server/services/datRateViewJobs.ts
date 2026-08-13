@@ -8,12 +8,83 @@ import {
 
 type DatEquipmentType = 'Van' | 'Flatbed' | 'Reefer';
 type DatJobFailureState = 'needs_auth' | 'failed' | 'uncertain';
+type DatSearchEquipmentType = 'Vans (Standard)' | 'Flatbeds (Standard)' | 'Reefers (Standard)';
+
+export const DAT_SEARCH_LOADS_WORKFLOW_ID = 'fct-dat-search-loads-offers-v1';
+export const DAT_SEARCH_LOADS_SCHEMA_VERSION = 1;
 
 export interface DatRateViewRequest {
   requestId: string;
   origin: string;
   destination: string;
   equipmentType: DatEquipmentType;
+}
+
+export interface DatSearchLoadsRequest {
+  workflowId: typeof DAT_SEARCH_LOADS_WORKFLOW_ID;
+  schemaVersion: typeof DAT_SEARCH_LOADS_SCHEMA_VERSION;
+  requestId: string;
+  shipmentRecordId: string;
+  searchFingerprint: string;
+  origin: string;
+  destination: string;
+  equipmentType: DatSearchEquipmentType;
+  pickupDate: string;
+  originDeadheadMiles: 150;
+  destinationDeadheadMiles: 150;
+  loadType: 'Full & Partial';
+  includeSimilarResults: false;
+}
+
+export interface DatLoadOffer {
+  rank: number;
+  datLoadId: string;
+  sourceOrder: number;
+  displayedTotal: string;
+  totalUsd: number;
+  rpm: string | null;
+  tripMiles: string | null;
+  origin: string | null;
+  destination: string | null;
+  originDeadhead: string | null;
+  destinationDeadhead: string | null;
+  pickup: string | null;
+  equipmentCode: string | null;
+  weight: string | null;
+  lengthLoadType: string | null;
+  company: string | null;
+  creditScore: string | null;
+  daysToPay: string | null;
+  comments: string | null;
+  commentsStatus: 'displayed' | 'not_displayed' | 'redacted';
+}
+
+export interface DatSearchLoadsResult {
+  workflowId: typeof DAT_SEARCH_LOADS_WORKFLOW_ID;
+  schemaVersion: typeof DAT_SEARCH_LOADS_SCHEMA_VERSION;
+  requestId: string;
+  shipmentRecordId: string;
+  searchFingerprint: string;
+  source: 'DAT Search Loads';
+  searchTimestamp: string;
+  acceptedCriteria: {
+    origin: string;
+    destination: string;
+    equipmentType: DatSearchEquipmentType;
+    pickupDate: string;
+    originDeadheadMiles: 150;
+    destinationDeadheadMiles: 150;
+    loadType: 'Full & Partial';
+    includeSimilarResults: false;
+    sort: 'Rate - Highest';
+  };
+  directResultCount: number;
+  eligibleCount: number;
+  excludedCount: number;
+  exclusionReasons: Record<string, number>;
+  duplicateCount: number;
+  outcome: 'completed' | 'empty' | 'no_qualifying_offers';
+  offers: DatLoadOffer[];
 }
 
 interface DatMarketRateCard {
@@ -110,6 +181,97 @@ export function buildDatRateViewRequest(
   };
 }
 
+function searchLoadsEquipment(equipment: DatEquipmentType | null): DatSearchEquipmentType | null {
+  if (equipment === 'Van') return 'Vans (Standard)';
+  if (equipment === 'Flatbed') return 'Flatbeds (Standard)';
+  if (equipment === 'Reefer') return 'Reefers (Standard)';
+  return null;
+}
+
+function pickupCalendarDate(shipment: UnifiedQuoteRequest): string {
+  const raw = cleanText(shipment.pickup && shipment.pickup.date);
+  const match = raw.match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/);
+  if (!match) return '';
+  const parsed = new Date(`${match[1]}T12:00:00Z`);
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== match[1]
+    ? ''
+    : match[1];
+}
+
+export function buildDatSearchLoadsRequest(
+  emailQuoteRequestId: string,
+  shipment: UnifiedQuoteRequest
+): { request: DatSearchLoadsRequest; fingerprint: string } | null {
+  const origin = locationLabel(shipment.pickup && shipment.pickup.location);
+  const destination = locationLabel(shipment.delivery && shipment.delivery.location);
+  const equipmentType = searchLoadsEquipment(normalizeDatEquipment(shipment));
+  const pickupDate = pickupCalendarDate(shipment);
+  if (!origin || !destination || !equipmentType || !pickupDate) return null;
+  const canonical = JSON.stringify({
+    workflowId: DAT_SEARCH_LOADS_WORKFLOW_ID,
+    schemaVersion: DAT_SEARCH_LOADS_SCHEMA_VERSION,
+    shipmentRecordId: emailQuoteRequestId,
+    origin: origin.toLowerCase(),
+    destination: destination.toLowerCase(),
+    equipmentType: equipmentType.toLowerCase(),
+    pickupDate,
+    originDeadheadMiles: 150,
+    destinationDeadheadMiles: 150,
+    loadType: 'full & partial',
+    includeSimilarResults: false
+  });
+  const fingerprint = crypto.createHash('sha256').update(canonical).digest('hex');
+  return {
+    fingerprint,
+    request: {
+      workflowId: DAT_SEARCH_LOADS_WORKFLOW_ID,
+      schemaVersion: DAT_SEARCH_LOADS_SCHEMA_VERSION,
+      requestId: `${emailQuoteRequestId}:search-loads:${fingerprint.slice(0, 16)}`,
+      shipmentRecordId: emailQuoteRequestId,
+      searchFingerprint: fingerprint,
+      origin,
+      destination,
+      equipmentType,
+      pickupDate,
+      originDeadheadMiles: 150,
+      destinationDeadheadMiles: 150,
+      loadType: 'Full & Partial',
+      includeSimilarResults: false
+    }
+  };
+}
+
+export async function cancelStalePendingDatJobs(
+  emailQuoteRequestId: string,
+  shipment: UnifiedQuoteRequest
+): Promise<void> {
+  const rateView = buildDatRateViewRequest(emailQuoteRequestId, shipment);
+  const searchLoads = buildDatSearchLoadsRequest(emailQuoteRequestId, shipment);
+  await db.query(
+    `UPDATE public.dat_rateview_jobs
+     SET status = 'cancelled'
+     WHERE email_quote_request_id = $1
+       AND status = 'pending'
+       AND (
+         (
+           input_payload->>'workflowId' = $2
+           AND ($3::text IS NULL OR request_fingerprint <> $3)
+         )
+         OR
+         (
+           COALESCE(input_payload->>'workflowId', '') <> $2
+           AND ($4::text IS NULL OR request_fingerprint <> $4)
+         )
+       )`,
+    [
+      emailQuoteRequestId,
+      DAT_SEARCH_LOADS_WORKFLOW_ID,
+      searchLoads ? searchLoads.fingerprint : null,
+      rateView ? rateView.fingerprint : null
+    ]
+  );
+}
+
 function datPlaceholder(status: string, error: string): CarrierQuoteOption {
   return {
     key: 'datRateView',
@@ -119,6 +281,19 @@ function datPlaceholder(status: string, error: string): CarrierQuoteOption {
     benchmark: true,
     status,
     error
+  };
+}
+
+function datSearchLoadsPlaceholder(status: string, error: string): CarrierQuoteOption {
+  return {
+    key: 'datLoadOffers',
+    source: 'DAT Search Loads',
+    available: false,
+    selectable: false,
+    benchmark: true,
+    status,
+    error,
+    offers: []
   };
 }
 
@@ -226,6 +401,216 @@ export function validateDatRateViewResult(value: any): DatRateViewResult {
   return result;
 }
 
+const CONTACT_EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const CONTACT_PHONE_PATTERN = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/;
+const CONTACT_LINK_PATTERN = /(?:mailto:|tel:|https?:\/\/\S*(?:contact|phone|call|email))/i;
+
+function safeOptionalText(value: any, field: string): string | null {
+  if (value == null || value === '') return null;
+  const cleaned = cleanText(value);
+  if (!cleaned) return null;
+  if (
+    CONTACT_EMAIL_PATTERN.test(cleaned) ||
+    CONTACT_PHONE_PATTERN.test(cleaned) ||
+    CONTACT_LINK_PATTERN.test(cleaned)
+  ) {
+    throw new Error(`DAT Search Loads ${field} contains prohibited contact data`);
+  }
+  return cleaned.slice(0, 1000);
+}
+
+function nonNegativeInteger(value: any, field: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`DAT Search Loads ${field} is invalid`);
+  }
+  return parsed;
+}
+
+function validateSearchCriteria(value: any): DatSearchLoadsResult['acceptedCriteria'] {
+  if (!value || value.originDeadheadMiles !== 150 || value.destinationDeadheadMiles !== 150 ||
+      value.loadType !== 'Full & Partial' || value.includeSimilarResults !== false ||
+      value.sort !== 'Rate - Highest') {
+    throw new Error('DAT Search Loads accepted criteria are invalid');
+  }
+  const equipmentType = cleanText(value.equipmentType) as DatSearchEquipmentType;
+  if (['Vans (Standard)', 'Flatbeds (Standard)', 'Reefers (Standard)'].indexOf(equipmentType) < 0) {
+    throw new Error('DAT Search Loads equipment is invalid');
+  }
+  const pickupDate = cleanText(value.pickupDate);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) {
+    throw new Error('DAT Search Loads pickup date is invalid');
+  }
+  const criteria: DatSearchLoadsResult['acceptedCriteria'] = {
+    origin: cleanText(value.origin),
+    destination: cleanText(value.destination),
+    equipmentType,
+    pickupDate,
+    originDeadheadMiles: 150,
+    destinationDeadheadMiles: 150,
+    loadType: 'Full & Partial',
+    includeSimilarResults: false,
+    sort: 'Rate - Highest'
+  };
+  if (!criteria.origin || !criteria.destination) {
+    throw new Error('DAT Search Loads accepted lane is incomplete');
+  }
+  return criteria;
+}
+
+function validateLoadOffer(value: any, expectedRank: number): DatLoadOffer {
+  const totalUsd = Number(value && value.totalUsd);
+  const sourceOrder = Number(value && value.sourceOrder);
+  const displayedTotal = cleanText(value && value.displayedTotal);
+  const parsedDisplayedTotal = /^\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?$|^\$\d+(?:\.\d{2})?$/.test(displayedTotal)
+    ? Number(displayedTotal.replace(/[$,]/g, ''))
+    : NaN;
+  if (
+    !value || Number(value.rank) !== expectedRank ||
+    !Number.isSafeInteger(sourceOrder) || sourceOrder < 0 ||
+    !Number.isFinite(totalUsd) || totalUsd <= 0 ||
+    !Number.isFinite(parsedDisplayedTotal) || parsedDisplayedTotal <= 0 ||
+    Math.abs(parsedDisplayedTotal - totalUsd) >= 0.005
+  ) {
+    throw new Error('DAT Search Loads ranked offer is invalid');
+  }
+  const commentsStatus = cleanText(value.commentsStatus) as DatLoadOffer['commentsStatus'];
+  if (['displayed', 'not_displayed', 'redacted'].indexOf(commentsStatus) < 0) {
+    throw new Error('DAT Search Loads comments status is invalid');
+  }
+  const comments = safeOptionalText(value.comments, 'comments');
+  if (commentsStatus === 'not_displayed' && comments !== null) {
+    throw new Error('DAT Search Loads comments must be null when not displayed');
+  }
+  const datLoadId = cleanText(value.datLoadId);
+  if (!/^table-row-(?!similar-matches-separator)[A-Za-z0-9_-]+$/.test(datLoadId)) {
+    throw new Error('DAT Search Loads stable row ID is invalid');
+  }
+  return {
+    rank: expectedRank,
+    datLoadId,
+    sourceOrder,
+    displayedTotal,
+    totalUsd,
+    rpm: safeOptionalText(value.rpm, 'RPM'),
+    tripMiles: safeOptionalText(value.tripMiles, 'trip miles'),
+    origin: safeOptionalText(value.origin, 'origin'),
+    destination: safeOptionalText(value.destination, 'destination'),
+    originDeadhead: safeOptionalText(value.originDeadhead, 'origin deadhead'),
+    destinationDeadhead: safeOptionalText(value.destinationDeadhead, 'destination deadhead'),
+    pickup: safeOptionalText(value.pickup, 'pickup'),
+    equipmentCode: safeOptionalText(value.equipmentCode, 'equipment'),
+    weight: safeOptionalText(value.weight, 'weight'),
+    lengthLoadType: safeOptionalText(value.lengthLoadType, 'length/load type'),
+    company: safeOptionalText(value.company, 'company'),
+    creditScore: safeOptionalText(value.creditScore, 'credit score'),
+    daysToPay: safeOptionalText(value.daysToPay, 'days to pay'),
+    comments,
+    commentsStatus
+  };
+}
+
+export function validateDatSearchLoadsResult(value: any): DatSearchLoadsResult {
+  if (!value || value.workflowId !== DAT_SEARCH_LOADS_WORKFLOW_ID ||
+      value.schemaVersion !== DAT_SEARCH_LOADS_SCHEMA_VERSION ||
+      value.source !== 'DAT Search Loads') {
+    throw new Error('DAT Search Loads result identity is invalid');
+  }
+  const offers = Array.isArray(value.offers)
+    ? value.offers.map(function(offer: any, index: number) {
+      return validateLoadOffer(offer, index + 1);
+    })
+    : [];
+  if (offers.length > 10) throw new Error('DAT Search Loads returned more than 10 offers');
+  const offerIds = new Set<string>();
+  for (let index = 1; index < offers.length; index += 1) {
+    if (offers[index - 1].totalUsd < offers[index].totalUsd) {
+      throw new Error('DAT Search Loads offers are not sorted by total rate descending');
+    }
+    if (
+      offers[index - 1].totalUsd === offers[index].totalUsd &&
+      offers[index - 1].sourceOrder > offers[index].sourceOrder
+    ) {
+      throw new Error('DAT Search Loads equal-rate offers do not preserve source order');
+    }
+  }
+  offers.forEach(function(offer) {
+    if (offerIds.has(offer.datLoadId)) {
+      throw new Error('DAT Search Loads ranked offers contain duplicate row IDs');
+    }
+    offerIds.add(offer.datLoadId);
+  });
+  const exclusionReasons: Record<string, number> = {};
+  if (!value.exclusionReasons || typeof value.exclusionReasons !== 'object' || Array.isArray(value.exclusionReasons)) {
+    throw new Error('DAT Search Loads exclusion reasons are invalid');
+  }
+  Object.keys(value.exclusionReasons).forEach(function(reason) {
+    if (!/^[A-Z][A-Z0-9_]*$/.test(reason)) {
+      throw new Error('DAT Search Loads exclusion reason is invalid');
+    }
+    exclusionReasons[reason] = nonNegativeInteger(value.exclusionReasons[reason], reason);
+  });
+  const directResultCount = nonNegativeInteger(value.directResultCount, 'direct result count');
+  const eligibleCount = nonNegativeInteger(value.eligibleCount, 'eligible count');
+  const excludedCount = nonNegativeInteger(value.excludedCount, 'excluded count');
+  const duplicateCount = nonNegativeInteger(value.duplicateCount, 'duplicate count');
+  const reasonTotal = Object.values(exclusionReasons).reduce(function(sum, count) { return sum + count; }, 0);
+  if (eligibleCount + excludedCount !== directResultCount || reasonTotal !== excludedCount ||
+      offers.length !== Math.min(10, eligibleCount) ||
+      duplicateCount !== Number(exclusionReasons.DUPLICATE_STABLE_DAT_LOAD_ID || 0)) {
+    throw new Error('DAT Search Loads row accounting is inconsistent');
+  }
+  const outcome = cleanText(value.outcome) as DatSearchLoadsResult['outcome'];
+  if (['completed', 'empty', 'no_qualifying_offers'].indexOf(outcome) < 0 ||
+      (outcome === 'empty' && directResultCount !== 0) ||
+      (outcome === 'no_qualifying_offers' && eligibleCount !== 0)) {
+    throw new Error('DAT Search Loads outcome is inconsistent');
+  }
+  const timestamp = new Date(value.searchTimestamp);
+  if (Number.isNaN(timestamp.getTime())) throw new Error('DAT Search Loads timestamp is invalid');
+  const result: DatSearchLoadsResult = {
+    workflowId: DAT_SEARCH_LOADS_WORKFLOW_ID,
+    schemaVersion: DAT_SEARCH_LOADS_SCHEMA_VERSION,
+    requestId: cleanText(value.requestId),
+    shipmentRecordId: cleanText(value.shipmentRecordId),
+    searchFingerprint: cleanText(value.searchFingerprint),
+    source: 'DAT Search Loads',
+    searchTimestamp: timestamp.toISOString(),
+    acceptedCriteria: validateSearchCriteria(value.acceptedCriteria),
+    directResultCount,
+    eligibleCount,
+    excludedCount,
+    exclusionReasons,
+    duplicateCount,
+    outcome,
+    offers
+  };
+  if (!result.requestId || !result.shipmentRecordId || !/^[a-f0-9]{64}$/.test(result.searchFingerprint)) {
+    throw new Error('DAT Search Loads request identity is incomplete');
+  }
+  return result;
+}
+
+export function mapDatSearchLoadsResult(result: DatSearchLoadsResult): CarrierQuoteOption {
+  return {
+    key: 'datLoadOffers',
+    source: 'DAT Search Loads',
+    available: true,
+    selectable: false,
+    benchmark: true,
+    status: 'completed',
+    searchFingerprint: result.searchFingerprint,
+    acceptedCriteria: result.acceptedCriteria,
+    lookupTimestamp: result.searchTimestamp,
+    offers: result.offers,
+    resultCount: result.directResultCount,
+    eligibleCount: result.eligibleCount,
+    excludedCount: result.excludedCount,
+    exclusionReasons: result.exclusionReasons,
+    outcome: result.outcome
+  };
+}
+
 function placeholderForJobStatus(status: string, message?: string | null): CarrierQuoteOption {
   if (status === 'pending') {
     return datPlaceholder('pending', 'Approved and waiting for the DAT worker.');
@@ -245,25 +630,58 @@ function placeholderForJobStatus(status: string, message?: string | null): Carri
   return datPlaceholder('awaiting_approval', 'Review this lane, then approve one DAT lookup.');
 }
 
+function searchLoadsPlaceholderForJobStatus(status: string): CarrierQuoteOption {
+  if (status === 'pending') {
+    return datSearchLoadsPlaceholder('pending', 'Approved and waiting for the DAT worker.');
+  }
+  if (status === 'claimed' || status === 'running') {
+    return datSearchLoadsPlaceholder('running', 'The DAT worker is reading direct Search Loads results.');
+  }
+  if (status === 'needs_auth') {
+    return datSearchLoadsPlaceholder('needs_auth', 'DAT sign-in is required on the worker, then approve this exact search again.');
+  }
+  if (status === 'uncertain') {
+    return datSearchLoadsPlaceholder('uncertain', 'The DAT search outcome is uncertain and cannot be submitted again automatically.');
+  }
+  if (status === 'failed') {
+    return datSearchLoadsPlaceholder('failed', 'DAT Search Loads did not return a verified direct-result set.');
+  }
+  return datSearchLoadsPlaceholder('awaiting_approval', 'Review the saved lane and pickup date, then approve one Search Loads query.');
+}
+
+async function prepareExistingSearchLoadsOption(
+  emailQuoteRequestId: string,
+  shipment: UnifiedQuoteRequest
+): Promise<CarrierQuoteOption[]> {
+  const candidate = buildDatSearchLoadsRequest(emailQuoteRequestId, shipment);
+  if (!candidate) return [];
+  const prior = await db.query(
+    `SELECT status, result_payload
+     FROM public.dat_rateview_jobs
+     WHERE email_quote_request_id = $1 AND request_fingerprint = $2`,
+    [emailQuoteRequestId, candidate.fingerprint]
+  );
+  if (!prior.rows.length) return [];
+  const job = prior.rows[0];
+  if (job.status === 'completed' && job.result_payload) {
+    return [mapDatSearchLoadsResult(validateDatSearchLoadsResult(jsonValue(job.result_payload, null)))];
+  }
+  return [searchLoadsPlaceholderForJobStatus(job.status)];
+}
+
 export async function prepareDatRateViewOptions(
   emailQuoteRequestId: string,
   shipment: UnifiedQuoteRequest
 ): Promise<CarrierQuoteOption[]> {
+  await cancelStalePendingDatJobs(emailQuoteRequestId, shipment);
+  const searchLoadsOptions = await prepareExistingSearchLoadsOption(emailQuoteRequestId, shipment);
   if (!isDatWorkerEnabled()) {
-    return [datPlaceholder('disabled', 'DAT worker is not enabled on the server.')];
+    return [datPlaceholder('disabled', 'DAT worker is not enabled on the server.')].concat(searchLoadsOptions);
   }
   const candidate = buildDatRateViewRequest(emailQuoteRequestId, shipment);
   if (!candidate) {
-    return [datPlaceholder('needs_equipment', 'Choose Van, Flatbed, or Reefer to prepare DAT RateView.')];
+    return [datPlaceholder('needs_equipment', 'Choose Van, Flatbed, or Reefer to prepare DAT RateView.')].concat(searchLoadsOptions);
   }
-  await db.query(
-    `UPDATE public.dat_rateview_jobs
-     SET status = 'cancelled'
-     WHERE email_quote_request_id = $1
-       AND request_fingerprint <> $2
-       AND status = 'pending'`,
-    [emailQuoteRequestId, candidate.fingerprint]
-  );
   const prior = await db.query(
     `SELECT status, result_payload, error_message
      FROM public.dat_rateview_jobs
@@ -271,13 +689,13 @@ export async function prepareDatRateViewOptions(
     [emailQuoteRequestId, candidate.fingerprint]
   );
   if (!prior.rows.length) {
-    return [placeholderForJobStatus('awaiting_approval')];
+    return [placeholderForJobStatus('awaiting_approval')].concat(searchLoadsOptions);
   }
   const job = prior.rows[0];
   if (job.status === 'completed' && job.result_payload) {
-    return mapDatRateViewResult(validateDatRateViewResult(jsonValue(job.result_payload, null)));
+    return mapDatRateViewResult(validateDatRateViewResult(jsonValue(job.result_payload, null))).concat(searchLoadsOptions);
   }
-  return [placeholderForJobStatus(job.status, job.error_message)];
+  return [placeholderForJobStatus(job.status, job.error_message)].concat(searchLoadsOptions);
 }
 
 export async function requestDatRateViewLookup(
@@ -358,6 +776,103 @@ export async function requestDatRateViewLookup(
        WHERE id = $1
        RETURNING *`,
       [emailQuoteRequestId, JSON.stringify(mergeDatCarrierOptions(currentOptions, datOptions))]
+    );
+    return updated.rows[0];
+  }, approvedBy);
+}
+
+export async function requestDatSearchLoadsLookup(
+  emailQuoteRequestId: string,
+  approvedBy: string
+): Promise<any> {
+  if (!isDatWorkerEnabled()) {
+    const err: any = new Error('DAT_WORKER_ENABLED is not true on the server');
+    err.status = 503;
+    throw err;
+  }
+  return db.transactionWithUser(async function(client) {
+    const quoteResult = await client.query(
+      `SELECT * FROM public.email_quote_requests WHERE id = $1 FOR UPDATE`,
+      [emailQuoteRequestId]
+    );
+    if (!quoteResult.rows.length) {
+      const err: any = new Error('Email quote request not found');
+      err.status = 404;
+      throw err;
+    }
+    const quote = quoteResult.rows[0];
+    if (['ready', 'priced', 'sent'].indexOf(String(quote.status)) < 0) {
+      const err: any = new Error('Save and approve a complete shipment before Search Loads');
+      err.status = 409;
+      throw err;
+    }
+    const shipment = jsonValue(quote.shipment_request, {});
+    const candidate = buildDatSearchLoadsRequest(emailQuoteRequestId, shipment);
+    if (!candidate) {
+      const err: any = new Error('Search Loads requires saved origin, destination, pickup date, and DAT equipment');
+      err.status = 400;
+      throw err;
+    }
+    await client.query(
+      `UPDATE public.dat_rateview_jobs
+       SET status = 'cancelled'
+       WHERE email_quote_request_id = $1
+         AND request_fingerprint <> $2
+         AND status = 'pending'
+         AND input_payload->>'workflowId' = $3`,
+      [emailQuoteRequestId, candidate.fingerprint, DAT_SEARCH_LOADS_WORKFLOW_ID]
+    );
+    const existing = await client.query(
+      `SELECT * FROM public.dat_rateview_jobs
+       WHERE email_quote_request_id = $1 AND request_fingerprint = $2
+       FOR UPDATE`,
+      [emailQuoteRequestId, candidate.fingerprint]
+    );
+    let job = existing.rows[0];
+    if (job && job.status === 'uncertain') {
+      const err: any = new Error('This Search Loads query is uncertain and must be reconciled before resubmission');
+      err.status = 409;
+      throw err;
+    }
+    if (!job) {
+      const inserted = await client.query(
+        `INSERT INTO public.dat_rateview_jobs (
+           id, email_quote_request_id, request_fingerprint, status,
+           input_payload, approved_by, approved_at
+         ) VALUES ($1, $2, $3, 'pending', $4::jsonb, $5, NOW())
+         RETURNING *`,
+        [
+          `dat-search-job-${crypto.randomUUID()}`,
+          emailQuoteRequestId,
+          candidate.fingerprint,
+          JSON.stringify(candidate.request),
+          approvedBy
+        ]
+      );
+      job = inserted.rows[0];
+    } else if (['needs_auth', 'failed', 'cancelled'].indexOf(job.status) > -1) {
+      const reset = await client.query(
+        `UPDATE public.dat_rateview_jobs
+         SET status = 'pending', input_payload = $2::jsonb,
+             approved_by = $3, approved_at = NOW(), worker_id = NULL,
+             claimed_at = NULL, started_at = NULL, completed_at = NULL,
+             result_payload = NULL, error_category = NULL, error_message = NULL
+         WHERE id = $1
+         RETURNING *`,
+        [job.id, JSON.stringify(candidate.request), approvedBy]
+      );
+      job = reset.rows[0];
+    }
+    const currentOptions: CarrierQuoteOption[] = jsonValue(quote.carrier_quotes, []);
+    const searchOption = job.status === 'completed' && job.result_payload
+      ? mapDatSearchLoadsResult(validateDatSearchLoadsResult(jsonValue(job.result_payload, null)))
+      : searchLoadsPlaceholderForJobStatus(job.status);
+    const updated = await client.query(
+      `UPDATE public.email_quote_requests
+       SET carrier_quotes = $2::jsonb
+       WHERE id = $1
+       RETURNING *`,
+      [emailQuoteRequestId, JSON.stringify(mergeDatCarrierOptions(currentOptions, [searchOption]))]
     );
     return updated.rows[0];
   }, approvedBy);
@@ -446,15 +961,19 @@ async function updateQuoteDatPlaceholder(
   );
   if (!quoteResult.rows.length) return;
   const quote = quoteResult.rows[0];
-  const candidate = buildDatRateViewRequest(
-    job.email_quote_request_id,
-    jsonValue(quote.shipment_request, {})
-  );
+  const input = jsonValue(job.input_payload, {});
+  const isSearchLoads = input.workflowId === DAT_SEARCH_LOADS_WORKFLOW_ID;
+  const effectiveOption = isSearchLoads && option.key !== 'datLoadOffers'
+    ? searchLoadsPlaceholderForJobStatus(option.status || 'failed')
+    : option;
+  const candidate = isSearchLoads
+    ? buildDatSearchLoadsRequest(job.email_quote_request_id, jsonValue(quote.shipment_request, {}))
+    : buildDatRateViewRequest(job.email_quote_request_id, jsonValue(quote.shipment_request, {}));
   if (!candidate || candidate.fingerprint !== job.request_fingerprint) return;
   const options: CarrierQuoteOption[] = jsonValue(quote.carrier_quotes, []);
   await client.query(
     `UPDATE public.email_quote_requests SET carrier_quotes = $2::jsonb WHERE id = $1`,
-    [job.email_quote_request_id, JSON.stringify(mergeDatCarrierOptions(options, [option]))]
+    [job.email_quote_request_id, JSON.stringify(mergeDatCarrierOptions(options, [effectiveOption]))]
   );
 }
 
@@ -463,8 +982,54 @@ export async function completeDatRateViewJob(
   workerId: string,
   rawResult: any
 ): Promise<void> {
-  const result = validateDatRateViewResult(rawResult);
   await db.transactionWithUser(async function(client) {
+    const active = await client.query(
+      `SELECT * FROM public.dat_rateview_jobs
+       WHERE id = $1 AND worker_id = $2 AND status IN ('claimed', 'running')
+       FOR UPDATE`,
+      [id, workerId]
+    );
+    if (!active.rows.length) {
+      const err: any = new Error('DAT job is not active for this worker');
+      err.status = 409;
+      throw err;
+    }
+    const activeJob = active.rows[0];
+    const input: DatRateViewRequest | DatSearchLoadsRequest = jsonValue(activeJob.input_payload, {});
+    const isSearchLoads = (input as DatSearchLoadsRequest).workflowId === DAT_SEARCH_LOADS_WORKFLOW_ID;
+    const result = isSearchLoads
+      ? validateDatSearchLoadsResult(rawResult)
+      : validateDatRateViewResult(rawResult);
+    if (isSearchLoads) {
+      const searchInput = input as DatSearchLoadsRequest;
+      const searchResult = result as DatSearchLoadsResult;
+      if (
+        searchResult.requestId !== searchInput.requestId ||
+        searchResult.shipmentRecordId !== searchInput.shipmentRecordId ||
+        searchResult.searchFingerprint !== activeJob.request_fingerprint ||
+        cleanText(searchResult.acceptedCriteria.origin).toLowerCase() !== cleanText(searchInput.origin).toLowerCase() ||
+        cleanText(searchResult.acceptedCriteria.destination).toLowerCase() !== cleanText(searchInput.destination).toLowerCase() ||
+        searchResult.acceptedCriteria.equipmentType !== searchInput.equipmentType ||
+        searchResult.acceptedCriteria.pickupDate !== searchInput.pickupDate
+      ) {
+        const err: any = new Error('DAT Search Loads result does not match the claimed request');
+        err.status = 400;
+        throw err;
+      }
+    } else {
+      const rateInput = input as DatRateViewRequest;
+      const rateResult = result as DatRateViewResult;
+      if (
+        rateResult.requestId !== rateInput.requestId ||
+        cleanText(rateResult.acceptedOrigin).toLowerCase() !== cleanText(rateInput.origin).toLowerCase() ||
+        cleanText(rateResult.acceptedDestination).toLowerCase() !== cleanText(rateInput.destination).toLowerCase() ||
+        rateResult.acceptedEquipmentType !== rateInput.equipmentType
+      ) {
+        const err: any = new Error('DAT result does not match the claimed request');
+        err.status = 400;
+        throw err;
+      }
+    }
     const updated = await client.query(
       `UPDATE public.dat_rateview_jobs
        SET status = 'completed', result_payload = $3::jsonb,
@@ -473,27 +1038,6 @@ export async function completeDatRateViewJob(
        RETURNING *`,
       [id, workerId, JSON.stringify(result)]
     );
-    if (!updated.rows.length) {
-      const err: any = new Error('DAT job is not active for this worker');
-      err.status = 409;
-      throw err;
-    }
-    const input: DatRateViewRequest = jsonValue(updated.rows[0].input_payload, {});
-    if (
-      result.requestId !== input.requestId ||
-      cleanText(result.acceptedOrigin).toLowerCase() !== cleanText(input.origin).toLowerCase() ||
-      cleanText(result.acceptedDestination).toLowerCase() !== cleanText(input.destination).toLowerCase() ||
-      result.acceptedEquipmentType !== input.equipmentType
-    ) {
-      const err: any = new Error('DAT result does not match the claimed request');
-      err.status = 400;
-      throw err;
-    }
-    await updateQuoteDatPlaceholder(
-      client,
-      updated.rows[0],
-      mapDatRateViewResult(result)[0]
-    );
     const quoteResult = await client.query(
       `SELECT shipment_request, carrier_quotes
        FROM public.email_quote_requests WHERE id = $1 FOR UPDATE`,
@@ -501,17 +1045,19 @@ export async function completeDatRateViewJob(
     );
     if (!quoteResult.rows.length) return;
     const quote = quoteResult.rows[0];
-    const candidate = buildDatRateViewRequest(
-      updated.rows[0].email_quote_request_id,
-      jsonValue(quote.shipment_request, {})
-    );
+    const candidate = isSearchLoads
+      ? buildDatSearchLoadsRequest(updated.rows[0].email_quote_request_id, jsonValue(quote.shipment_request, {}))
+      : buildDatRateViewRequest(updated.rows[0].email_quote_request_id, jsonValue(quote.shipment_request, {}));
     if (!candidate || candidate.fingerprint !== updated.rows[0].request_fingerprint) return;
     const options: CarrierQuoteOption[] = jsonValue(quote.carrier_quotes, []);
+    const datOptions = isSearchLoads
+      ? [mapDatSearchLoadsResult(result as DatSearchLoadsResult)]
+      : mapDatRateViewResult(result as DatRateViewResult);
     await client.query(
       `UPDATE public.email_quote_requests SET carrier_quotes = $2::jsonb WHERE id = $1`,
       [
         updated.rows[0].email_quote_request_id,
-        JSON.stringify(mergeDatCarrierOptions(options, mapDatRateViewResult(result)))
+        JSON.stringify(mergeDatCarrierOptions(options, datOptions))
       ]
     );
   });
@@ -538,10 +1084,14 @@ export async function failDatRateViewJob(
       err.status = 409;
       throw err;
     }
+    const input = jsonValue(updated.rows[0].input_payload, {});
+    const placeholder = input.workflowId === DAT_SEARCH_LOADS_WORKFLOW_ID
+      ? searchLoadsPlaceholderForJobStatus(state)
+      : placeholderForJobStatus(state, message);
     await updateQuoteDatPlaceholder(
       client,
       updated.rows[0],
-      placeholderForJobStatus(state, message)
+      placeholder
     );
   });
 }

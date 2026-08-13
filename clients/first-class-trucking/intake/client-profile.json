@@ -9,38 +9,47 @@
   },
   "authorization": {
     "authorized": true,
-    "authorization_scope": "Use the client-authorized shared production DAT login for read-only RateView discovery, testing, and on-demand operation with non-consequential or fictional shipment data. No application-level daily lookup cap applies. No other consequential DAT action is authorized.",
+    "authorization_scope": "Use the client-authorized shared production DAT login for read-only RateView and DAT One Search Loads discovery, testing, and on-demand operation. RateView may use fictional shipment data. Search Loads discovery must use fictional or otherwise explicitly approved shipment/lane data, and every Search Loads query requires approval for that one search. The Search Loads workflow may enter discovery-approved shipment/lane filters, execute the single approved search, read result rows, rank rows by the highest explicit displayed numeric offer, and return up to 10 rows to the CRM with comments and all discovery-approved visible non-contact fields. No application-level daily lookup cap applies to RateView. Booking, bidding, calling or otherwise contacting, messaging, posting, purchasing/payment, revealing contact details, downloading, deletion, account changes, and all other consequential DAT actions are not authorized.",
     "approved_by": "Jack (client approver and DAT account owner; surname and title TBD)",
     "approved_environments": [
-      "DAT production, limited to read-only RateView discovery and searches"
+      "DAT production, limited to approved read-only RateView discovery and searches",
+      "DAT One production, limited to approved read-only Search Loads discovery and searches"
     ],
     "approved_domains": [
-      "login.dat.com"
+      "login.dat.com",
+      "one.dat.com",
+      "iq.dat.com"
     ],
     "production_use_allowed": true,
-    "production_use_constraints": "Read-only RateView use with duplicate and uncertain-submission protection. Always respect DAT's own subscription, credit, usage, and rate controls and stop before booking, posting, messaging, purchasing/payment, deletion, or account changes."
+    "production_use_constraints": "Read-only RateView and Search Loads use with duplicate and uncertain-submission protection. Search Loads discovery uses only fictional or otherwise explicitly approved shipment/lane data, and each Search Loads query requires approval for one search. Search Loads may return only discovery-approved visible non-contact fields to the CRM; it must not reveal contact details or infer an offer from nonnumeric text. Always respect DAT's own subscription, credit, usage, and rate controls and stop before booking, bidding, calling or otherwise contacting, messaging, posting, purchasing/payment, revealing contact details, downloading, deletion, account changes, or any other consequential action."
   },
   "workflow": {
-    "name": "DAT RateView lane pricing",
-    "business_purpose": "Create a Playwright virtual employee that uses DAT RateView lane pricing as part of First Class Trucking's freight quote process.",
-    "trigger": "On demand for the initial script",
+    "name": "DAT RateView lane pricing and DAT One Search Loads",
+    "business_purpose": "Create a Playwright virtual employee that uses DAT RateView lane pricing and a read-only DAT One Search Loads result-ranking workflow as part of First Class Trucking's freight quote process.",
+    "trigger": "On demand. Each Search Loads run requires documented approval for one validated search before submission.",
     "inputs": [
       "Origin, destination, and equipment type are documented by DAT as RateView search inputs",
-      "Any additional inputs DAT RateView requires; the exact UI field list remains TBD pending authorized observation and confirmation"
+      "Any additional inputs DAT RateView requires; the exact UI field list remains TBD pending authorized observation and confirmation",
+      "Approved shipment and lane filters for DAT One Search Loads; exact Search Loads UI fields, labels, required/optional status, allowed values, and normalization rules are TBD pending authorized browser discovery and confirmation"
     ],
     "outputs": [
       "Lowest displayed rate",
       "Displayed market-rate range: low, average, and high",
       "Displayed rate type, timeframe, per-mile value, and fuel information when available",
-      "Lookup timestamp"
+      "Lookup timestamp",
+      "Up to 10 DAT One Search Loads result rows, ranked from highest to lowest by an explicit displayed numeric offer",
+      "For each returned Search Loads row: comments and all discovery-approved visible non-contact fields; any contact details within comments must not be revealed or returned, and the exact field set, redaction behavior, and CRM mapping are TBD pending authorized browser discovery",
+      "Search Loads rows without an explicit displayed numeric offer are not ranked as offers; exact exclusion or fallback presentation behavior is TBD pending discovery and client confirmation"
     ],
-    "existing_process_context": "The existing CRM ingests quote emails. DAT is intended to provide carrier-side quote/rate data later in the freight quote process; the precise handoff is TBD.",
-    "expected_volume": "Approximately 10 RateView lookups per day was provided as an expected volume, not a maximum",
+    "existing_process_context": "The existing CRM ingests quote emails. DAT RateView provides market benchmark data, and the requested DAT One Search Loads workflow returns ranked read-only load-result data to the CRM. The exact Search Loads result-field mapping remains TBD pending authorized discovery.",
+    "expected_volume": "Approximately 10 RateView lookups per day was provided as an expected volume, not a maximum. Search Loads volume is TBD; each Search Loads query requires approval for one search.",
     "schedule_or_sla": "On demand; latency target and support hours are TBD",
     "success_metrics": [
       "Five consecutive successful read-only searches using fictional data",
+      "For each approved Search Loads invocation, execute no more than one validated search and return no more than 10 result rows ranked by the highest explicit displayed numeric offer",
+      "Return Search Loads comments and only discovery-approved visible non-contact fields to the CRM; never reveal or return contact details",
       "No duplicate or uncertain request is submitted again automatically",
-      "No booking, posting, messaging, purchasing/payment, deletion, or account changes",
+      "No booking, bidding, calling or otherwise contacting, messaging, posting, purchasing/payment, revealing contact details, downloading, deletion, or account changes",
       "On authentication loss, pause for human reauthentication and resume from a safe pre-search checkpoint without duplicating a lookup or consuming an unintended extra lane credit"
     ]
   },
@@ -48,14 +57,14 @@
     {
       "name": "DAT",
       "login_url": "https://login.dat.com/u/login/identifier",
-      "purpose": "Obtain RateView lane pricing, including the lowest displayed rate and displayed market-rate information, for the freight quote process",
-      "environment": "Production, authorized for read-only RateView discovery and searches",
-      "account_role": "Client-authorized shared production login owned by Jack; exact DAT permission tier and RateView subscription are TBD. Shared use is a client-accepted operational/licensing exception pending the client's confirmation of DAT contractual compliance."
+      "purpose": "Obtain RateView lane pricing and perform the approved read-only DAT One Search Loads workflow, including returning up to 10 rows ranked by explicit displayed numeric offer with comments and discovery-approved visible non-contact fields to the CRM",
+      "environment": "Production, authorized only for approved read-only RateView and DAT One Search Loads discovery and searches",
+      "account_role": "Client-authorized shared production login owned by Jack; exact DAT permission tier, RateView subscription, and Search Loads entitlement are TBD. Shared use is a client-accepted operational/licensing exception pending the client's confirmation of DAT contractual compliance."
     }
   ],
   "access": {
     "test_accounts": [],
-    "test_account_plan": "Use the shared production login for read-only RateView searches with fictional data. Each live discovery or QA search requires its documented approval; the automation records usage without imposing a daily cap.",
+    "test_account_plan": "No separate test account is available. Use the shared production login for read-only RateView searches with fictional data and for read-only DAT One Search Loads discovery with fictional or otherwise explicitly approved shipment/lane data. Each live discovery or QA search requires documented approval for that one search. RateView usage is recorded without imposing an application-level daily cap; Search Loads volume and any DAT usage implications remain TBD and DAT controls must be respected.",
     "authentication_method": "A human manually enters the client-authorized shared-login credentials. The automation does not store credentials or authentication artifacts.",
     "sso_behavior": "TBD; any SSO interaction remains human-controlled",
     "mfa_behavior": "Human-controlled only. The automation pauses and prompts for manual completion; it must not bypass or automatically handle MFA.",
@@ -69,6 +78,8 @@
     "sensitive_fields": [
       "Shipment and lane inputs",
       "DAT market-rate and pricing outputs",
+      "DAT One Search Loads shipment/lane filters, result rows, displayed numeric offers, comments, and other visible result fields",
+      "Contact details that may be visible in DAT One but are prohibited from being revealed, returned to the CRM, logged, or retained",
       "Customer or quote context if displayed"
     ],
     "screenshot_redactions": [
@@ -77,7 +88,7 @@
     "log_redactions": [
       "Redact commercially confidential data and all authentication information before storage or sharing"
     ],
-    "retention_policy": "Retain redacted screenshots and logs for 30 days, then delete them. Retention for any other evidence type and the exact deletion procedure are TBD.",
+    "retention_policy": "Retain redacted screenshots and logs for 30 days, then delete them. Retention for Search Loads results returned to the CRM, any other evidence type, and the exact deletion procedure are TBD.",
     "prohibited_storage": [
       "passwords",
       "tokens",
@@ -95,7 +106,13 @@
       "automation_boundary": "Before each search, verify the idempotency key and ledger state. Never automatically resubmit a completed, submitted, or uncertain request. Usage counts are audit-only and do not impose a cap."
     },
     {
-      "action": "Booking, posting, messaging, purchasing/payment, deletion, or account changes in DAT",
+      "action": "Execute one read-only DAT One Search Loads query and return ranked non-contact result data to the CRM",
+      "status": "Authorized only for the specifically approved search",
+      "approval_method": "A documented explicit per-search approval tied to one validated set of fictional or otherwise approved shipment/lane filters authorizes exactly one Search Loads query",
+      "automation_boundary": "Before search, verify the approval, normalized request identity, and ledger state. Submit once only. Never automatically resubmit a completed, submitted, or uncertain request. Read result rows only, rank only explicit displayed numeric offers, return at most 10 rows, and include only comments and discovery-approved visible non-contact fields. Exact Search Loads controls, result fields, numeric-offer field semantics, tie handling, and CRM field mapping remain TBD pending authorized browser discovery."
+    },
+    {
+      "action": "Booking, bidding, calling or otherwise contacting, messaging, posting, purchasing/payment, revealing contact details, downloading, deletion, account changes, or any other consequential action in DAT",
       "status": "Not authorized",
       "approval_method": "None; these actions are outside the approved read-only scope",
       "automation_boundary": "Always stop before the action"
@@ -104,8 +121,11 @@
   "acceptance_criteria": [
     "Complete five consecutive successful read-only RateView searches using fictional data",
     "For each search, capture the displayed low, average, and high market range plus rate type, timeframe, per-mile value, and fuel information when available, together with the lookup timestamp",
+    "Complete authorized Search Loads browser discovery using fictional or otherwise explicitly approved shipment/lane data, with documented approval immediately before each search, before treating exact filters, result fields, offer semantics, or CRM mappings as approved",
+    "For each approved Search Loads invocation, execute exactly one validated search, rank result rows from highest to lowest using only the explicit displayed numeric offer, and return no more than 10 rows to the CRM",
+    "For each returned Search Loads row, include comments and all discovery-approved visible non-contact fields, and never reveal, return, log, or retain contact details",
     "Record lookup usage for audit without imposing an application-level daily cap",
-    "Never perform booking, posting, messaging, purchasing/payment, deletion, or account changes",
+    "Never perform booking, bidding, calling or otherwise contacting, messaging, posting, purchasing/payment, revealing contact details, downloading, deletion, account changes, or any other consequential DAT action",
     "On authentication loss, pause for human reauthentication and resume from a safe pre-search checkpoint without duplicating a lookup or consuming an unintended extra lane credit",
     "Keep credentials, authentication artifacts, and unredacted commercially confidential evidence out of the project"
   ],

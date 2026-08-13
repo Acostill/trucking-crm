@@ -13,7 +13,11 @@ import {
   buildCarrierRecommendation,
   CarrierQuoteOption
 } from './carrierQuoteOptions';
-import { prepareDatRateViewOptions } from './datRateViewJobs';
+import {
+  cancelStalePendingDatJobs,
+  prepareDatRateViewOptions
+} from './datRateViewJobs';
+import { assignTruckType } from './truckAssignment';
 
 export interface ShipmentValidation {
   valid: boolean;
@@ -108,7 +112,8 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
     finiteNumber(shipmentDetails.shipment_weight_lbs) ||
     finiteNumber(shipmentDetails.weight);
 
-  return {
+  const temperatureControl = shipmentInfo.temperature_control;
+  const shipment: UnifiedQuoteRequest = {
     pickup: {
       location: {
         city: pickup.city || undefined,
@@ -151,12 +156,21 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
       shipmentDetails.truck_type ||
       wrapper.truck_type ||
       undefined,
+    ...(temperatureControl != null
+      ? {
+          temperatureControl: {
+            minC: temperatureControl.min_c,
+            maxC: temperatureControl.max_c
+          }
+        }
+      : {}),
     commodity: shipmentInfo.commodity || shipmentDetails.commodity || undefined,
     stackable: shipmentInfo.stackable,
     hazardousMaterial: { unNumbers },
     accessorialCodes: accessorials,
     referenceNumber: sample.subject || wrapper.subject || undefined
   };
+  return assignTruckType(shipment).shipment;
 }
 
 export function validateShipmentRequest(shipment: UnifiedQuoteRequest): ShipmentValidation {
@@ -232,10 +246,27 @@ export async function rateEmailQuoteRequest(
     err.status = 404;
     throw err;
   }
-  const shipment: UnifiedQuoteRequest = shipmentOverride ||
+  const inputShipment: UnifiedQuoteRequest = shipmentOverride ||
     (typeof existing.rows[0].shipment_request === 'string'
       ? JSON.parse(existing.rows[0].shipment_request)
       : existing.rows[0].shipment_request || {});
+  const assignment = assignTruckType(inputShipment);
+  const shipment = assignment.shipment;
+  await cancelStalePendingDatJobs(id, shipment);
+  if (assignment.status === 'needs_review') {
+    const result = await db.query(
+      `UPDATE public.email_quote_requests
+       SET shipment_request = $2::jsonb,
+           carrier_quotes = '[]'::jsonb,
+           recommendation = NULL,
+           status = 'needs_review',
+           processing_error = $3
+       WHERE id = $1
+       RETURNING *`,
+      [id, JSON.stringify(shipment), assignment.metadata.reason]
+    );
+    return result.rows[0];
+  }
   const validation = validateShipmentRequest(shipment);
   if (!validation.valid) {
     const result = await db.query(
@@ -334,8 +365,15 @@ export async function processEmailQuoteRequest(id: string): Promise<any> {
     const existingShipment = typeof record.rows[0].shipment_request === 'string'
       ? JSON.parse(record.rows[0].shipment_request)
       : record.rows[0].shipment_request || {};
-    if (!shipment.datEquipmentType && existingShipment.datEquipmentType) {
+    if (
+      existingShipment.truckAssignment &&
+      existingShipment.truckAssignment.source === 'staff' &&
+      existingShipment.truckType
+    ) {
+      shipment.truckType = existingShipment.truckType;
       shipment.datEquipmentType = existingShipment.datEquipmentType;
+      shipment.temperatureControlled = existingShipment.temperatureControlled;
+      shipment.truckAssignment = existingShipment.truckAssignment;
     }
     await db.query(
       `UPDATE public.email_quote_requests

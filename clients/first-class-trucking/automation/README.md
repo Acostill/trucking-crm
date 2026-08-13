@@ -1,6 +1,11 @@
-# First Class Trucking DAT RateView virtual employee
+# First Class Trucking DAT virtual employee
 
-This CLI performs one authorized, read-only DAT Quick Rate Lookup and returns the displayed Spot and Contract market ranges. It does not book, post, message, purchase, delete, or change the DAT account.
+This worker performs two explicitly approved, read-only DAT workflows:
+
+- RateView Quick Rate Lookup returns the displayed Spot and Contract market ranges.
+- Search Loads returns up to ten direct results ranked by highest numeric total Rate, with approved non-contact row fields and safely available comments.
+
+It does not book, contact, call, bid, message, post, save, export, purchase, delete, or change the DAT account.
 
 ## 1. Install
 
@@ -10,7 +15,7 @@ npm install
 npx playwright install chrome
 ```
 
-The CLI defaults to a dedicated profile at `/Users/davidcastillo/Library/Application Support/Optimation AI/First Class DAT Profile`. This preserves DAT's “remember this device for 30 days” recognition without exposing authentication state to source control. To override any setting, copy `configuration.example.env` to `.env`; the CLI loads it automatically.
+The CLI defaults to a dedicated profile at `/Users/davidcastillo/Library/Application Support/Optimation AI/First Class DAT Profile`. This preserves DAT's “remember this device for 30 days” recognition without exposing authentication state to source control. Local settings are loaded from the ignored repository-level file `.local-secrets/first-class-dat-worker.env`. Set `DAT_ENV_FILE` to another absolute path when needed; Railway uses environment variables directly.
 
 ## 2. Initialize or repair authentication
 
@@ -52,7 +57,7 @@ DAT_WORKER_ENABLED=true
 DAT_WORKER_SECRET=<one long random value>
 ```
 
-In this directory, copy `configuration.example.env` to `.env` and set:
+For local operation, copy `configuration.example.env` to the ignored repository-level path `.local-secrets/first-class-dat-worker.env` and set:
 
 ```text
 DAT_CRM_BASE_URL=https://your-render-backend.example.com
@@ -75,12 +80,15 @@ For a connectivity check that claims at most one already-approved CRM job:
 npm run worker:once
 ```
 
-An operations user authorizes a specific lane by clicking **Approve & run DAT
-lookup** in the Quote Inbox. The server releases only that approved job to the
-worker. If the session expired, the job becomes `needs_auth`; run
-`npm run auth`, then have the operator approve that lane again. If DAT may have
-accepted a search but the result could not be verified, the job becomes
-`uncertain` and cannot be automatically resubmitted.
+An operations user authorizes one exact lookup by clicking **Approve & run DAT
+lookup** or **Approve DAT Search Loads** in the Quote Inbox. The Search Loads
+approval fingerprints the saved origin, destination, equipment, pickup date,
+150-mile deadhead radii, Full & Partial load type, and Similar Results off. The
+server releases only that approved job to the worker. If the session expired,
+the job becomes `needs_auth`; run `npm run auth`, then have the operator approve
+the exact lookup again. If DAT may have accepted a search but the result could
+not be verified, the job becomes `uncertain` and cannot be automatically
+resubmitted.
 
 ## 5. Run the worker on Railway
 
@@ -125,11 +133,18 @@ or access arrangement; do not attempt to bypass the control.
 - A completed duplicate returns its stored result without opening DAT.
 - A submitted or uncertain request never resubmits automatically; a human must reconcile it.
 - Logs contain IDs, workflow steps, status, duration, and safe categories only—not lanes, rates, or authentication data.
-- Screenshots mask lane fields and complete rate cards. They are automatically pruned after 30 days.
+- RateView screenshots mask lane fields and complete rate cards. Search Loads stores only a safe pre-submit status record; no Search Loads page or result screenshot is retained. Artifacts are automatically pruned after 30 days.
 - Traces are off by default because they may contain confidential data. Enable them only under an approved data-handling exception.
 
 ## Verification
 
 ```bash
 npm run check
+```
+
+Server contract checks are run from `server/`:
+
+```bash
+npm run test:dat-rateview
+npm run test:dat-search-loads
 ```

@@ -1,4 +1,6 @@
 export const WORKFLOW_ID = "fct-dat-rateview-lane-pricing";
+export const SEARCH_LOADS_WORKFLOW_ID = "fct-dat-search-loads-offers-v1";
+export const SEARCH_LOADS_SCHEMA_VERSION = 1;
 
 export type EquipmentType = "Van" | "Flatbed" | "Reefer";
 export type RateType = "SPOT" | "CONTRACT";
@@ -47,6 +49,82 @@ export interface QuoteResult {
   contract: MarketRateCard;
 }
 
+export type SearchLoadsEquipmentType =
+  | "Vans (Standard)"
+  | "Flatbeds (Standard)"
+  | "Reefers (Standard)";
+
+export interface SearchLoadsRequest {
+  workflowId: typeof SEARCH_LOADS_WORKFLOW_ID;
+  schemaVersion: typeof SEARCH_LOADS_SCHEMA_VERSION;
+  requestId: string;
+  shipmentRecordId: string;
+  searchFingerprint: string;
+  origin: string;
+  destination: string;
+  equipmentType: SearchLoadsEquipmentType;
+  pickupDate: string;
+  originDeadheadMiles: 150;
+  destinationDeadheadMiles: 150;
+  loadType: "Full & Partial";
+  includeSimilarResults: false;
+  approveSearch: boolean;
+}
+
+export interface SearchLoadOffer {
+  rank: number;
+  datLoadId: string;
+  sourceOrder: number;
+  displayedTotal: string;
+  totalUsd: number;
+  rpm: string | null;
+  tripMiles: string | null;
+  origin: string | null;
+  destination: string | null;
+  originDeadhead: string | null;
+  destinationDeadhead: string | null;
+  pickup: string | null;
+  equipmentCode: string | null;
+  weight: string | null;
+  lengthLoadType: string | null;
+  company: string | null;
+  creditScore: string | null;
+  daysToPay: string | null;
+  comments: string | null;
+  commentsStatus: "displayed" | "not_displayed" | "redacted";
+}
+
+export interface SearchLoadsResult {
+  workflowId: typeof SEARCH_LOADS_WORKFLOW_ID;
+  schemaVersion: typeof SEARCH_LOADS_SCHEMA_VERSION;
+  requestId: string;
+  shipmentRecordId: string;
+  searchFingerprint: string;
+  source: "DAT Search Loads";
+  searchTimestamp: string;
+  acceptedCriteria: {
+    origin: string;
+    destination: string;
+    equipmentType: SearchLoadsEquipmentType;
+    pickupDate: string;
+    originDeadheadMiles: 150;
+    destinationDeadheadMiles: 150;
+    loadType: "Full & Partial";
+    includeSimilarResults: false;
+    sort: "Rate - Highest";
+  };
+  directResultCount: number;
+  eligibleCount: number;
+  excludedCount: number;
+  exclusionReasons: Record<string, number>;
+  duplicateCount: number;
+  outcome: "completed" | "empty" | "no_qualifying_offers";
+  offers: SearchLoadOffer[];
+}
+
+export type WorkflowRequest = QuoteRequest | SearchLoadsRequest;
+export type WorkflowResult = QuoteResult | SearchLoadsResult;
+
 export interface LedgerEntry {
   requestId: string;
   fingerprint: string;
@@ -56,7 +134,8 @@ export interface LedgerEntry {
   reservedAt: string;
   submittedAt?: string;
   completedAt?: string;
-  result?: QuoteResult;
+  workflowId?: string;
+  result?: WorkflowResult;
   errorCategory?: string;
 }
 

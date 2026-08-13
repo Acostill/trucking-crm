@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 import http from "node:http";
 import { loadWorkerConfig } from "./workerConfig.ts";
-import { runQuote } from "./runner.ts";
-import { WorkflowError } from "./types.ts";
+import { runQuote, runSearchLoads } from "./runner.ts";
+import {
+  SEARCH_LOADS_WORKFLOW_ID,
+  type QuoteRequest,
+  type SearchLoadsRequest,
+  WorkflowError,
+} from "./types.ts";
 
 interface WorkerJob {
   id: string;
-  request: {
-    requestId: string;
-    origin: string;
-    destination: string;
-    equipmentType: string;
-  };
+  request: QuoteRequest | SearchLoadsRequest;
 }
 
 async function request(
@@ -62,11 +62,19 @@ async function processJob(
     workerId: config.workerId,
   });
   try {
-    const outcome = await runQuote({
-      ...job.request,
-      approveSearch: true,
-      allowHumanAuth: false,
-    });
+    let outcome;
+    if (
+      "workflowId" in job.request &&
+      job.request.workflowId === SEARCH_LOADS_WORKFLOW_ID
+    ) {
+      outcome = await runSearchLoads({ ...job.request, approveSearch: true });
+    } else {
+      outcome = await runQuote({
+        ...job.request,
+        approveSearch: true,
+        allowHumanAuth: false,
+      });
+    }
     await post(config, `/api/dat-worker/jobs/${encodeURIComponent(job.id)}/complete`, {
       workerId: config.workerId,
       result: outcome.result,

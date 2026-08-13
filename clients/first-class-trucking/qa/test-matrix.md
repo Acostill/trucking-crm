@@ -1,8 +1,33 @@
 # Stage 3 QA test matrix
 
-Status: test design only; no cases have been executed.
+Status: `BLOCKED / PENDING_LIVE_RELIABILITY` for release. Search Loads v1 deterministic checks passed on 2026-08-13, including independent retest of three repaired defects. No QA live DAT search was authorized or executed, so the five-consecutive-pass target remains 0/5 and live browser failure paths are not claimed.
 
-Approved source: `discovery/workflow-spec.json`, workflow `fct-dat-rateview-lane-pricing`, version `0.3-approved-no-daily-cap`. Client facts and constraints are taken from the approved `intake/client-profile.json` and `intake/decisions.md`. Browser findings may supply observed locators and state setup later, but they must not change the business or safety oracles below.
+Approved source: `discovery/workflow-spec.json`, workflow `fct-dat-search-loads-offers-v1` within specification version `0.6-approved-search-loads-v1`. Client facts and constraints are taken from the approved `intake/client-profile.json` and `intake/decisions.md`; observed UI facts come from `discovery/browser-findings.md`, `discovery/evidence-manifest.json`, and `discovery/search-loads-structure-redacted.json`.
+
+## Search Loads v1 independent execution
+
+| Test ID | Requirement / risk | Independent method | Result | Release status |
+|---|---|---|---|---|
+| SL-QA-001 | Valid fixed search contract: exact origin/destination autocomplete, discovery-approved equipment, Full & Partial, 150 mi DH-O/DH-D, same pickup start/end, Similar Results false | Automation typecheck plus source-to-spec inspection of validation and form population | Passed | Deterministic only |
+| SL-QA-002 | Invalid or empty inputs, including impossible calendar dates | Automation suite and direct `2026-02-31` rejection reproduction | Passed after FCT-SL-003 repair | Deterministic only |
+| SL-QA-003 | Highest numeric total-dollar Rate, source-order ties, max 10 | Automation ranking unit cases and server result validator contract | Passed | Deterministic only |
+| SL-QA-004 | Empty results and no qualifying numeric offers | Automation unit cases | Passed | Deterministic only |
+| SL-QA-005 | Canceled, blank/nonnumeric, malformed currency, duplicate stable IDs | Automation ranking unit cases; server row-accounting and duplicate validation inspection | Passed | Deterministic only |
+| SL-QA-006 | Contact data omitted; comments optional/read-only | Automation sanitizer unit cases and server contact rejection contract | Passed | Deterministic only |
+| SL-QA-007 | Displayed Rate and parsed numeric value remain identical through server handoff | Direct inconsistent-payload reproduction plus Search Loads server contract | Passed after FCT-SL-002 repair | Deterministic only |
+| SL-QA-008 | One explicit CRM approval is tied to the exact saved immutable search snapshot | Independent UI/server inspection, targeted stale-editor repair review, page lint, and production build | Passed after FCT-SL-001 repair | Deterministic only |
+| SL-QA-009 | Completed duplicate reuse and no second submission | Shared ledger unit suite and runner/server inspection | Passed | Deterministic only |
+| SL-QA-010 | Submitted/uncertain and partial completion cannot be resubmitted automatically | Runner/worker/server state-transition inspection | Passed statically; not failure-injected | Pending live/controlled evidence |
+| SL-QA-011 | Session expiry, MFA/CAPTCHA, and human takeover | Approved design inspection: Search Loads worker denies automated authentication and classifies auth as `needs_auth` | Passed statically; not exercised | Pending authorized controlled/live evidence |
+| SL-QA-012 | Permission change/subscription denial | Fail-closed design inspection | Not executed | Blocked without a safe authorized state |
+| SL-QA-013 | Slow pre-submit and post-submit responses | Bounded-wait and uncertain-state design inspection | Not failure-injected | Pending controlled/live evidence |
+| SL-QA-014 | Popup/frame drift | No popup/frame path is approved; semantic page locators are scoped to the current page | Not executed | Blocked without a safe controlled state |
+| SL-QA-015 | Upload/download failure | Workflow has no upload/download step; static review found no authorized export/download action | Not applicable; any attempt is a failure | Excluded by approved scope |
+| SL-QA-016 | Prohibited DAT actions absent | Static action review of `searchLoads.ts`, runner, and worker; CRM option remains nonselectable/read-only | Passed statically | Live trace audit pending |
+| SL-QA-017 | Server integration and CRM presentation | Server TypeScript, Search Loads contract, page lint, and optimized client build | Passed | Deterministic only |
+| SL-QA-018 | Five isolated consecutive representative live runs | Requires five distinct fictional snapshots and explicit approval for each live search | Not run, 0/5 | Release blocker |
+
+Evidence: `qa/runs/2026-08-13-search-loads-v1/summary.md`. Deterministic passes do not count toward `SL-QA-018`.
 
 ## Test controls
 
@@ -67,3 +92,24 @@ Approved source: `discovery/workflow-spec.json`, workflow `fct-dat-rateview-lane
 ## Explicit non-applicable workflow paths
 
 The approved workflow contains no upload or download step and produces no authorized raw export. Upload/download execution tests are therefore out of scope; an unexpected download or export attempt fails `QA-033`. No popup or frame behavior is approved yet, so undocumented popup/frame behavior is handled conservatively by `QA-019` as UI drift rather than treated as a supported path.
+
+## Truck-assignment v1 extension
+
+These cases are local, zero-credit classification and CRM integration checks. They do not count toward or replace the five-live-DAT-run target.
+
+| Test ID | Requirement | Representative coverage | Expected result | Status |
+|---|---|---|---|---|
+| TA-QA-001 | Cargo Van inclusive capacity | 1 pallet/500 lb and 3 pallets/3,000 lb at 72×52×70 in | Cargo Van; DAT Van | Passed |
+| TA-QA-002 | Box Truck inclusive capacity and promotion | Pallet, weight, and dimension values immediately above Cargo limits; 6 pallets/6,000 lb at 96×96×96 in | Smallest passing Box Truck; DAT Van | Passed |
+| TA-QA-003 | Straight Truck inclusive capacity and promotion | Pallet, weight, and dimension values immediately above Box limits; 14 pallets/8,000 lb at 120×102×110 in | Smallest passing Straight Truck; DAT Van | Passed |
+| TA-QA-004 | Multiple dimension groups | One group fits Cargo and another requires Box | Every group is evaluated; Box selected | Passed |
+| TA-QA-005 | Out-of-range and oversized review | 15 pallets, 8,001 lb, and each axis above the Straight guard | `needs_review`; no truck or DAT equipment | Passed |
+| TA-QA-006 | Invalid and empty freight | Empty request; zero/fractional pallets; zero weight; absent dimensions; zero/fractional counts | `needs_review`; no rating input guessed | Passed |
+| TA-QA-007 | Canonical unit enforcement | Valid-looking values labeled centimeters/kilograms | `needs_review`, `AMBIGUOUS_UNITS`; no assignment | Passed after FCT-TA-001 repair |
+| TA-QA-008 | Reefer mapping and temperature validation | Complete ordered ranges for Cargo/Box/Straight; partial, reversed, empty, and conflicting evidence | Valid ranges map matching reefer variant/DAT Reefer; invalid evidence reviews | Passed after FCT-TA-002 repair |
+| TA-QA-009 | Staff override | Explicit staff Straight Truck and Reefer Box Truck | Override retained; DAT Van/Reefer normalized | Passed |
+| TA-QA-010 | DAT mapping | Every dry and reefer assignment variant | Dry maps Van; reefer maps Reefer | Passed |
+| TA-QA-011 | Rerun safety | Repeat unchanged assigned and `needs_review` inputs | Deep-equal deterministic disposition; no duplicate classification side effect | Passed |
+| TA-QA-012 | No rating on review | Mock database with 15-pallet request; instrument connected-carrier and DAT preparation calls | Status `needs_review`; carrier quotes cleared; zero connected-carrier and zero DAT calls | Passed |
+
+Evidence: `qa/truck-assignment.qa.js` and `qa/runs/2026-08-11-truck-assignment-v1/summary.md`.

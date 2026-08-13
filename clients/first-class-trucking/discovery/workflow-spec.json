@@ -1,10 +1,16 @@
 {
   "schema_version": 1,
   "workflow_id": "fct-dat-rateview-lane-pricing",
-  "name": "First Class Trucking DAT RateView lane pricing",
-  "version": "0.3-approved-no-daily-cap",
+  "name": "First Class Trucking CRM truck assignment, DAT RateView, and DAT Search Loads",
+  "version": "0.6-approved-search-loads-v1",
   "status": "approved",
-  "trigger": "An operator starts an on-demand lookup for one fictional or approved shipment lane.",
+  "change_control": {
+    "prior_approved_version": "0.4-approved-truck-assignment-v1",
+    "prior_approved_scope": "The CRM truck-assignment TA-010 through TA-060 workflow and DAT RateView RV-010 through RV-110 workflow remain approved and unchanged, including their safety, approval, evidence, and rerun boundaries.",
+    "pending_change": "Add a read-only DAT One Search Loads workflow after a durable CRM shipment approval and a single-use per-search approval. Return at most ten available offers ranked by the approved displayed-offer field, with comments and every discovery-approved visible result field, to the same CRM shipment context.",
+    "review_note": "The requester approved the Search Loads business scope and the staged production discovery search on 2026-08-13. Authenticated browser discovery confirmed the exact input, direct-result, total Rate, availability, sort, full-scope, and CRM persistence contracts used by SL-010 through SL-130."
+  },
+  "trigger": "Either an operator starts an approved on-demand RateView lookup, or a durable CRM shipment approval makes one shipment eligible for a separately recorded single-use Search Loads search approval.",
   "preconditions": [
     "The run is authorized for the client-provided shared DAT production account.",
     "A human is available to enter credentials and complete SSO, MFA, CAPTCHA, or reauthentication.",
@@ -50,6 +56,539 @@
     "source label identifying DAT RateView",
     "explicit null plus reason for each approved optional output that is unavailable"
   ],
+  "truck_assignment_extension": {
+    "workflow_id": "fct-crm-truck-kind-assignment",
+    "status": "approved",
+    "intent": "Assign the smallest approved CRM truck variant that satisfies every v1 pallet, weight, dimension-fit, and temperature-control rule, otherwise preserve the record for staff review.",
+    "scope_boundary": "This extension classifies the CRM truck kind and prepares its DAT equipment category only. Dry Cargo Van, Box Truck, and Straight Truck map to DAT Van; their reefer variants map to DAT Reefer. It does not authorize a DAT search or change the RV-070/RV-080 lane-credit approval boundary.",
+    "source_material": [
+      {
+        "id": "CLIENT-SCREENSHOT-DRY-2026-08-11",
+        "description": "Client-provided screenshot of dry truck categories and displayed capacity labels; it is not evidence of vehicle dimensions."
+      },
+      {
+        "id": "CLIENT-SCREENSHOT-REEFER-2026-08-11",
+        "description": "Client-provided screenshot of reefer truck categories and displayed capacity labels; it is not evidence of vehicle dimensions."
+      },
+      {
+        "id": "CLIENT-DIRECTION-2026-08-11-V1",
+        "description": "Requester-approved v1 rules: Cargo Van up to 3 pallets/3,000 lb; Box Truck up to 6 pallets/6,000 lb; Straight Truck up to 14 pallets/8,000 lb; an explicit valid temperature-control requirement selects the matching reefer variant; missing, conflicting, out-of-range, or oversized freight requires staff review."
+      },
+      {
+        "id": "REPOSITORY-QUOTE-OPTIMIZER-GUARDS-2026-08-11",
+        "description": "Existing CRM quoteOptimizer conservative fit guards: Cargo/Sprinter 72x52x70 in, Box Truck 96x96x96 in, and generic enclosed equipment 120x102x110 in. These are temporary v1 guards pending First Class Trucking fleet validation, not client-supplied dimensions."
+      }
+    ],
+    "repository_field_contract_observed": {
+      "source_fields": [
+        "shipment_info.pallets",
+        "shipment_info.dimensions[].length_in",
+        "shipment_info.dimensions[].width_in",
+        "shipment_info.dimensions[].height_in",
+        "shipment_info.dimensions[].count",
+        "shipment_info.total_weight_lbs",
+        "shipment_info.temperature_control",
+        "shipment_info.truck_type"
+      ],
+      "normalized_fields": [
+        "UnifiedQuoteRequest.pieces.quantity",
+        "UnifiedQuoteRequest.pieces.parts[].length",
+        "UnifiedQuoteRequest.pieces.parts[].width",
+        "UnifiedQuoteRequest.pieces.parts[].height",
+        "UnifiedQuoteRequest.pieces.parts[].count",
+        "UnifiedQuoteRequest.weight.value with unit lbs",
+        "UnifiedQuoteRequest.temperatureControl or temperatureControlled",
+        "UnifiedQuoteRequest.truckType",
+        "UnifiedQuoteRequest.datEquipmentType",
+        "UnifiedQuoteRequest.truckAssignment"
+      ],
+      "persistence_fields": [
+        "email_quote_requests.shipment_request JSONB"
+      ],
+      "constraint": "The approved rules in this specification control automatic v1 assignment. A valid truckType explicitly confirmed through the CRM staff override is preserved and normalized to its DAT Van or Reefer category; otherwise automatic evaluation replaces stale automatic assignment metadata."
+    },
+    "preconditions": [
+      "A current CRM shipment request exists and has a stable record identifier.",
+      "Pallet count, total shipment weight, and at least one complete dimension group are present in canonical integer pallets, pounds, and inches.",
+      "Rule version fct-truck-assignment-v1 is enabled only after specification approval."
+    ],
+    "inputs": [
+      {
+        "name": "pallet_count",
+        "required": true,
+        "description": "Shipment pallet count from the CRM shipment request."
+      },
+      {
+        "name": "dimensions",
+        "required": true,
+        "description": "All shipment dimension groups, including positive length, width, height, and count values in inches. Every group must fit the selected v1 direct-axis guard; v1 does not infer rotation, stacking, or a packing layout."
+      },
+      {
+        "name": "total_weight_lbs",
+        "required": true,
+        "description": "Total shipment weight in pounds."
+      },
+      {
+        "name": "service_category",
+        "required": false,
+        "description": "Derived as reefer from a complete valid shipment_info.temperature_control range or an explicit normalized temperatureControlled=true selection. Absent or false selects dry. Partial, invalid, or conflicting evidence routes to staff review."
+      }
+    ],
+    "outputs": [
+      "assigned base_truck_kind of Cargo Van, Box Truck, or Straight Truck only when every v1 rule produces one unambiguous result",
+      "assigned service_category of dry or reefer; reefer serializes as the matching Reefer Cargo Van, Reefer Box Truck, or Reefer Straight Truck variant",
+      "assignment source, rule version, reason, and DAT equipment category (Van for dry; Reefer for reefer)",
+      "human-review reason code with no automatic assignment when freight data is missing, invalid, conflicting, out of range, oversized, or cannot be conservatively assessed"
+    ],
+    "v1_capacity_rules": [
+      {
+        "rule_id": "TA-CAP-CARGO-V1",
+        "candidate_order": 1,
+        "base_truck_kind": "Cargo Van",
+        "dry_variant": "Cargo Van",
+        "reefer_variant": "Reefer Cargo Van",
+        "pallet_min_inclusive": 1,
+        "pallet_max_inclusive": 3,
+        "maximum_total_weight_lbs": 3000,
+        "conservative_fit_guard_inches": {
+          "length_max": 72,
+          "width_max": 52,
+          "height_max": 70,
+          "basis": "Existing CRM Cargo/Sprinter guard; pending client fleet validation in nonblocking Q-018."
+        }
+      },
+      {
+        "rule_id": "TA-CAP-BOX-V1",
+        "candidate_order": 2,
+        "base_truck_kind": "Box Truck",
+        "dry_variant": "Box Truck",
+        "reefer_variant": "Reefer Box Truck",
+        "pallet_min_inclusive": 1,
+        "pallet_max_inclusive": 6,
+        "maximum_total_weight_lbs": 6000,
+        "conservative_fit_guard_inches": {
+          "length_max": 96,
+          "width_max": 96,
+          "height_max": 96,
+          "basis": "Existing CRM Box Truck guard; pending client fleet validation in nonblocking Q-018."
+        }
+      },
+      {
+        "rule_id": "TA-CAP-STRAIGHT-V1",
+        "candidate_order": 3,
+        "base_truck_kind": "Straight Truck",
+        "dry_variant": "Straight Truck",
+        "reefer_variant": "Reefer Straight Truck",
+        "pallet_min_inclusive": 1,
+        "pallet_max_inclusive": 14,
+        "maximum_total_weight_lbs": 8000,
+        "conservative_fit_guard_inches": {
+          "length_max": 120,
+          "width_max": 102,
+          "height_max": 110,
+          "basis": "Existing CRM generic enclosed-equipment upper guard used conservatively for v1 Straight Truck screening; pending client fleet validation in nonblocking Q-018."
+        }
+      }
+    ],
+    "fit_evaluation": {
+      "candidate_selection": "Evaluate candidates in candidate_order and select the first candidate for which pallet count, total weight, and every dimension group satisfy all inclusive limits.",
+      "dimension_groups": "For each group, length_in, width_in, height_in, and count must be finite positive values; count must be an integer. Compare the supplied axes directly to the candidate guard for every repeated item in the group.",
+      "no_inference": "Do not rotate dimensions, relabel axes, infer stacking, calculate a packing layout, or treat individual-piece fit as proof of a loading plan. Pallet count is the approved aggregate capacity control for v1.",
+      "review_boundary": "If the freight requires rotation, stacking, non-palletized packing analysis, or exceeds the Straight Truck guard, record a review reason and make no automatic assignment."
+    },
+    "steps": [
+      {
+        "id": "TA-010",
+        "intent": "Build one auditable truck-assignment input without inventing missing shipment values.",
+        "action": "Read pallet count, every dimension group and count, total weight in pounds, temperature-control fields, current truck fields, and prior assignment metadata; normalize only explicitly supplied canonical values.",
+        "target": "The current CRM shipment_request and its normalized quote-request fields.",
+        "preconditions": ["A CRM shipment request exists."],
+        "postconditions": ["A complete assignment input is available, or control passes to TA-060 without an automatic assignment."],
+        "validation": "Pallet count is an integer of at least 1; total weight is finite and greater than 0 lb; dimensions contain at least one group whose dimensions are finite and greater than 0 inches and whose count is a positive integer; every value used is traceable to a named CRM field. Missing, nonnumeric, unit-ambiguous, or internally inconsistent values fail validation.",
+        "evidence": "The persisted truckAssignment metadata records the rule version and deterministic review or assignment reason; no raw customer data is added to shared logs.",
+        "on_failure": "Pass to TA-060 with MISSING_REQUIRED_FREIGHT_DATA or another deterministic validation reason. Do not start carrier rating or a downstream DAT lookup using a guessed truck kind.",
+        "consequential": false,
+        "approval_required": "No separate approval is required to read the existing CRM record."
+      },
+      {
+        "id": "TA-020",
+        "intent": "Select dry or reefer without inferring a temperature requirement.",
+        "action": "Set service_category to reefer when shipment_info.temperature_control contains finite ordered min_c/max_c values or the normalized CRM temperatureControlled flag is explicitly true. Set dry when neither requires reefer. Treat partial, malformed, reversed, or conflicting evidence as review-only.",
+        "target": "shipment_info.temperature_control and any explicitly supplied normalized temperature-control indicator for the same shipment.",
+        "preconditions": ["TA-010 passed."],
+        "postconditions": ["Exactly one service_category, dry or reefer, is selected, or control passes to TA-060 without an assignment."],
+        "validation": "Reefer has a complete ordered numeric temperature range or an explicit CRM reefer selection; dry has no contradictory temperature evidence.",
+        "evidence": "A redacted decision log containing the record ID, source field name, selected category, and rule version.",
+        "on_failure": "Pass to TA-060 with TEMPERATURE_CONTROL_INCOMPLETE or TEMPERATURE_CONTROL_CONFLICT; preserve existing truck fields.",
+        "consequential": false,
+        "approval_required": "Covered by the approved v1 service-category rule; no per-record approval is required for deterministic classification."
+      },
+      {
+        "id": "TA-030",
+        "intent": "Choose the smallest base truck that passes every conservative v1 capacity check.",
+        "action": "Evaluate TA-CAP-CARGO-V1, TA-CAP-BOX-V1, and TA-CAP-STRAIGHT-V1 in order. A candidate passes only when pallet_count and total_weight_lbs are within its inclusive maxima and every dimension group passes its direct-axis conservative fit guard. Select the first passing candidate.",
+        "target": "The ordered fct-truck-assignment-v1 capacity matrix and normalized TA-010 input.",
+        "preconditions": ["TA-020 selected exactly one service category."],
+        "postconditions": ["Exactly one smallest passing base truck candidate is recorded, or control passes to TA-060 with a deterministic reason."],
+        "validation": "The audit shows pallets, weight, and every dimension group for each evaluated candidate; no larger truck is selected when a smaller candidate passed all constraints.",
+        "evidence": "A redacted rule-evaluation log with pass/fail flags for pallets, weight, and each approved dimension constraint.",
+        "on_failure": "Pass to TA-060 with CAPACITY_OUT_OF_RANGE when pallets exceed 14 or weight exceeds 8,000 lb, OVERSIZED_ENCLOSED_FREIGHT when any supplied axis exceeds 120x102x110 inches, or FIT_REQUIRES_STAFF_VALIDATION when v1 cannot conservatively establish fit. Do not select an unapproved equipment class.",
+        "consequential": false,
+        "approval_required": "Covered by the approved v1 capacity and precedence rules. The fit guards are temporary conservative controls pending nonblocking fleet validation in Q-018."
+      },
+      {
+        "id": "TA-040",
+        "intent": "Produce the matching dry or reefer variant from the selected base truck.",
+        "action": "Serialize the TA-030 candidate as Cargo Van, Box Truck, or Straight Truck for dry service, or as the matching Reefer Cargo Van, Reefer Box Truck, or Reefer Straight Truck variant for reefer service.",
+        "target": "The selected base truck candidate and TA-020 service_category.",
+        "preconditions": ["TA-030 selected exactly one passing base truck."],
+        "postconditions": ["Exactly one approved truck variant and DAT equipment category are ready for persistence with the rule version."],
+        "validation": "Dry never produces a reefer label; a complete temperature-controlled request always produces the reefer variant of the same selected base truck.",
+        "evidence": "Persisted truckAssignment metadata contains the base truck, service category, assignment source, rule version, and reason.",
+        "on_failure": "Pass to TA-060 with VARIANT_MAPPING_ERROR and preserve existing truck fields.",
+        "consequential": false,
+        "approval_required": "Covered by the approved v1 dry/reefer rule."
+      },
+      {
+        "id": "TA-050",
+        "intent": "Persist one unambiguous truck-kind assignment safely in the CRM.",
+        "action": "Persist the approved truckType, datEquipmentType, temperatureControlled state, and truckAssignment metadata inside the shipment request. Preserve a valid CRM staff override as source=staff.",
+        "target": "The current email_quote_requests.shipment_request JSONB record.",
+        "preconditions": ["TA-040 produced exactly one approved truck kind.", "The truck-assignment rule change has client approval."],
+        "postconditions": ["The assigned truck kind, DAT equipment category, source, reason, and rule version are stored before carrier rating begins."],
+        "validation": "Readback shows the expected truckType and DAT Van/Reefer mapping on the same shipment request.",
+        "evidence": "The shipment_request truckAssignment metadata and deterministic test output provide the assignment evidence.",
+        "on_failure": "Stop rating, preserve the quote for staff review, and do not start DAT automatically.",
+        "consequential": false,
+        "approval_required": "Approval of the revised truck-assignment specification. Any later DAT search still requires the unchanged RV-070/RV-080 authorization boundary."
+      },
+      {
+        "id": "TA-060",
+        "intent": "Keep freight that cannot be assigned safely visible to staff without inventing equipment.",
+        "action": "Persist no guessed automatic truck assignment and attach the deterministic review reason produced by TA-010 through TA-040. A valid explicit staff override is a separate source=staff assignment and may proceed.",
+        "target": "The current CRM shipment request and staff review message for the same record.",
+        "preconditions": ["A truck-assignment validation or fit rule failed before a safe assignment was persisted."],
+        "postconditions": ["The record remains available for staff correction with no guessed truck kind and no automatic DAT lookup."],
+        "validation": "The stored shipment has no new automatic truck value, the review reason is visible, and downstream rating does not treat a guessed value as approved.",
+        "evidence": "A redacted review-disposition log with record ID, reason code, rule version, and timestamp.",
+        "on_failure": "Preserve the original record and surface a generic staff-review message; do not retry or overwrite equipment automatically.",
+        "consequential": false,
+        "approval_required": "No additional approval is required to stop safely for staff review."
+      }
+    ],
+    "branches": [
+      {
+        "from": "TA-010",
+        "condition": "A required source value is missing, invalid, or unit-ambiguous",
+        "to": "HUMAN_REVIEW_NO_ASSIGNMENT"
+      },
+      {
+        "from": "TA-020",
+        "condition": "Dry versus reefer cannot be determined by the approved trigger",
+        "to": "HUMAN_REVIEW_NO_ASSIGNMENT"
+      },
+      {
+        "from": "TA-030",
+        "condition": "Pallet, weight, or dimension results conflict or no truck satisfies all approved limits",
+        "to": "TA-060"
+      },
+      {
+        "from": "TA-050",
+        "condition": "Assignment succeeds and an authorized DAT lookup is requested",
+        "to": "RV-010",
+        "resume": "Use the separately approved DAT equipment_type input/mapping and retain all RV duplicate, approval, and lane-credit protections."
+      }
+    ],
+    "blocking_tbd": [],
+    "nonblocking_validation": [
+      "Q-018: First Class Trucking should confirm or replace the conservative v1 dimension guards before client acceptance. Until then, freight that fails these guards goes to staff review rather than receiving a larger guessed truck."
+    ],
+    "rerun_safety": "Every parse or staff save re-evaluates automatic assignments from the current normalized freight values. Valid source=staff overrides are preserved. Truck classification itself never submits DAT; the separate DAT job ledger and approval boundary prevent duplicate searches."
+  },
+  "search_loads_extension": {
+    "workflow_id": "fct-dat-search-loads-offers-v1",
+    "status": "approved",
+    "intent": "After a CRM shipment is durably approved and an authenticated staff member approves one specific search, perform one read-only DAT One Search Loads submission, collect the available result offers across the discovery-approved result scope, rank them by the exact numeric displayed Offer field descending, and return at most ten offers to the same CRM shipment context.",
+    "scope_boundary": "DAT actions are limited to opening Search Loads, populating discovery-approved search inputs, submitting one approved search, traversing the discovery-approved result scope, and reading results. The automation must not book, contact, call, reveal or activate contact details, bid, negotiate, message, post a load, purchase, pay, save/favorite, download/export, change an account, or activate any other result-row or account action.",
+    "approval_boundary": "The existing authenticated CRM approval click is the single-use authorization for exactly one Search Loads submission for one immutable shipment/search snapshot. Durable shipment approval is a precondition but does not alone authorize a search. If any fingerprinted search input changes, or the click cannot be tied to the current snapshot, the authorization is invalid and a new click is required. Discovery and QA also require an explicit per-search human confirmation immediately before the live DAT submission.",
+    "source_material": [
+      {
+        "id": "REQUESTER-DIRECTION-2026-08-13-SEARCH-LOADS-V1",
+        "description": "Requester-approved behavior: use one.dat.com Search Loads after CRM shipment approval; read available offers; rank by highest exact numeric displayed Offer value; return up to ten with comments and relevant visible non-contact fields; perform no booking, contacting, bidding, messaging, posting, purchasing, or account changes."
+      },
+      {
+        "id": "REPOSITORY-CRM-APPROVAL-CONTRACT-2026-08-13",
+        "description": "Repository inspection establishes durable quote approval, shipment/load records, and an existing explicit DAT approval-click pattern. It does not establish a Search Loads job schema, result destination, or browser UI facts."
+      }
+    ],
+    "preconditions": [
+      "The CRM shipment and its durable approval state exist and can be identified unambiguously.",
+      "An authenticated authorized CRM user has clicked the Search Loads approval control for the exact current search snapshot.",
+      "Origin, destination, equipment, date, and every additional discovery-approved required Search Loads input are present, valid, and traceable to the approved CRM shipment snapshot.",
+      "A human is available to enter credentials and complete SSO, MFA, CAPTCHA, shared-session handling, or reauthentication.",
+      "Browser discovery has approved the Search Loads navigation, exact required inputs, total Rate formats, availability rule, result columns, direct-result scope, no-result and failure signals, and semantic locator candidates.",
+      "The run requests no prohibited DAT action."
+    ],
+    "inputs": [
+      {
+        "name": "shipment_record_id",
+        "required": true,
+        "description": "The authoritative email_quote_requests.id for the durably approved quote/shipment context and result handoff."
+      },
+      {
+        "name": "search_approval",
+        "required": true,
+        "description": "Single-use CRM approval event containing approver, approval timestamp, and the fingerprint of the immutable Search Loads input snapshot."
+      },
+      {
+        "name": "origin",
+        "required": true,
+        "description": "CRM shipment origin mapped to the exact discovery-approved Search Loads origin control."
+      },
+      {
+        "name": "destination",
+        "required": true,
+        "description": "CRM shipment destination mapped to the exact discovery-approved Search Loads destination control."
+      },
+      {
+        "name": "equipment_type",
+        "required": true,
+        "description": "Approved CRM-to-DAT equipment value selected only from discovery-observed Search Loads options."
+      },
+      {
+        "name": "pickup_or_availability_date",
+        "required": true,
+        "description": "Use the normalized CRM pickup date for the Search Loads Start date and End date in v1. If no valid pickup date exists, stop before DAT; do not guess a date."
+      },
+      {
+        "name": "additional_required_fields",
+        "required": "TBD",
+        "description": "Exact values for any other visibly required Search Loads fields confirmed by discovery. An unknown required field blocks submission."
+      }
+    ],
+    "outputs": [
+      "shipment_record_id and immutable search fingerprint",
+      "accepted/displayed DAT search criteria for every submitted field",
+      "search timestamp in ISO 8601 format and source label DAT Search Loads",
+      "result-scope description including result count and any discovery-approved page or traversal count",
+      "ranked_offers array containing zero to ten entries",
+      "for each ranked entry: one-based rank, exact parsed numeric displayed Offer value, displayed Offer text, source-order index, comments when displayed, every discovery-approved visible non-contact result field, and stable DAT load ID only when an observed stable ID exists",
+      "excluded-row count and deterministic per-reason counts, including unavailable and MISSING_OR_NON_NUMERIC_OFFER",
+      "duplicate-row count only when deduplication by an observed stable DAT load ID occurred",
+      "explicit empty-result or no-qualifying-offer outcome when appropriate"
+    ],
+    "offer_semantics": {
+      "ranking_field": "DAT visibly labels the result column Rate and provides separate Rate - Highest and Rate per mile - Highest sorts. V1 selects Rate - Highest and ranks only the numeric total-dollar value inside .cell-rate dat-rate .offer. Do not substitute the adjacent RPM, RateView values, market values, comments, estimates, or another numeric field.",
+      "numeric_parsing": "Parse only USD total Rate strings displayed as a dollar sign plus digits with optional comma grouping and optional two decimal places. Preserve the original displayed text. Missing, blank, malformed, unsupported-currency, ambiguous, or non-finite values are not coerced and are excluded as MISSING_OR_NON_NUMERIC_OFFER.",
+      "availability": "Direct rows visibly marked CANCELED are unavailable. A direct row not marked CANCELED is eligible only when it contains an approved numeric total-dollar Rate.",
+      "ordering": "Sort eligible rows by parsed numeric Offer descending. Equal numeric offers retain their stable source order from the fully traversed approved result scope. Do not add another tie-breaker in v1.",
+      "limit": "Return the first ten ranked entries, or all entries when fewer than ten qualify.",
+      "deduplication": "Deduplicate only when browser discovery confirms a stable DAT load ID. When it exists, preserve the first source-order occurrence for that ID and record later occurrences as DUPLICATE_STABLE_DAT_LOAD_ID. When no stable ID is observed, perform no deduplication and do not infer identity from lane, company, comments, Offer, timestamps, or combined fields.",
+      "contact_data": "Do not extract, persist, expose, click, or return names, phone numbers, email addresses, contact-reveal controls, messaging handles, or contact-action URLs. If contact data is intermingled with an otherwise approved field and cannot be separated deterministically, omit the field and report CONTACT_DATA_OMITTED."
+    },
+    "steps": [
+      {
+        "id": "SL-010",
+        "intent": "Bind one search to a valid approved CRM shipment snapshot.",
+        "action": "Read the durable shipment approval, current shipment fields, and single-use Search Loads approval event; normalize only discovery-approved values and calculate the search fingerprint.",
+        "target": "The authoritative CRM shipment, approval record, and Search Loads approval event.",
+        "preconditions": ["A CRM shipment record was identified."],
+        "postconditions": ["One immutable validated input snapshot and fingerprint exist, or the run stops before DAT."],
+        "validation": "Shipment approval is durable; the Search Loads approval click is attributable to an authorized user and matches the current fingerprint; all required values are present and traceable; no prohibited action is requested.",
+        "evidence": "A redacted validation record containing shipment_record_id, fingerprint, approval identity/timestamp, rule version, and field-level pass/fail results without unnecessary shipment values.",
+        "on_failure": "Stop with SHIPMENT_NOT_APPROVED, SEARCH_NOT_APPROVED, APPROVAL_STALE, INPUT_INVALID, or INPUT_MAPPING_TBD. Do not open DAT.",
+        "consequential": false,
+        "approval_required": "The authenticated CRM Search Loads approval click for this exact snapshot."
+      },
+      {
+        "id": "SL-020",
+        "intent": "Prevent duplicate or uncertain Search Loads submissions.",
+        "action": "Reserve the shipment/fingerprint/idempotency key and inspect its ledger state before browser use.",
+        "target": "The Search Loads job and idempotency ledger contract approved before build.",
+        "preconditions": ["SL-010 passed."],
+        "postconditions": ["The run is reserved for one submission, returns a prior completed result, or stops for reconciliation."],
+        "validation": "No submitted, running, uncertain, or completed entry can create another submission for the same fingerprint. A completed entry is reusable without DAT.",
+        "evidence": "A redacted state-transition record with shipment_record_id, fingerprint, prior state, resulting state, and timestamp.",
+        "on_failure": "Return the prior completed result when available; otherwise stop with DUPLICATE_ACTIVE or UNCERTAIN_REQUIRES_RECONCILIATION. Never reset an uncertain submission automatically.",
+        "consequential": false,
+        "approval_required": "Uses the SL-010 single-use approval; no new approval is consumed yet."
+      },
+      {
+        "id": "SL-030",
+        "intent": "Reach only the authorized DAT One application and determine authentication state.",
+        "action": "Open the approved DAT entry point or discovery-approved DAT One page and inspect whether the session is authenticated.",
+        "target": "DAT login and one.dat.com page identities approved by discovery.",
+        "preconditions": ["SL-020 reserved an eligible run."],
+        "postconditions": ["The browser is authenticated or paused at SL-040."],
+        "validation": "The host and visible page identity match approved DAT login or DAT One evidence; no credential field is read or filled by automation.",
+        "evidence": "A redacted screenshot and token-free URL pattern.",
+        "on_failure": "Stop on unknown domain, access denial, or page-identity mismatch with no automatic workaround.",
+        "consequential": false,
+        "approval_required": "No automated credential entry is authorized."
+      },
+      {
+        "id": "SL-040",
+        "intent": "Allow a human to establish or restore the DAT session.",
+        "action": "Pause for manual credentials, SSO, MFA, CAPTCHA, or shared-session handling, then discard stale browser state and revalidate authentication.",
+        "target": "DAT's visible authentication controls.",
+        "preconditions": ["DAT shows an unauthenticated, expired, challenged, or displaced session."],
+        "postconditions": ["An authenticated DAT One landmark is visible, or the run ends without a search."],
+        "validation": "Login controls/challenges are no longer active and an approved authenticated landmark is visible.",
+        "evidence": "A redacted post-login screenshot only; never capture credentials, cookies, tokens, storage state, or recovery codes.",
+        "on_failure": "Stop with AUTH_REQUIRED after the bounded takeover window. Do not bypass or retry challenges automatically.",
+        "consequential": false,
+        "approval_required": "The authorized human controls and approves authentication."
+      },
+      {
+        "id": "SL-050",
+        "intent": "Reach Search Loads without activating an unauthorized DAT capability.",
+        "action": "Navigate through the discovery-approved semantic Search Loads control and verify the search form and read-only scope landmarks.",
+        "target": "DAT One Search Loads entry and search page confirmed during browser discovery.",
+        "preconditions": ["An authenticated DAT session exists."],
+        "postconditions": ["Search Loads is ready or access/UI failure is classified."],
+        "validation": "Approved Search Loads identity and required controls are visible; no Post, Book, Contact, Bid, Message, Purchase, Save, or account action was activated.",
+        "evidence": "A redacted screenshot, URL pattern, and browser-discovery evidence references.",
+        "on_failure": "Stop with PERMISSION_DENIED, SUBSCRIPTION_REQUIRED, or UI_DRIFT; do not enter upgrade/purchase or alternative-privilege flows.",
+        "consequential": false,
+        "approval_required": "Covered by the current run authorization."
+      },
+      {
+        "id": "SL-060",
+        "intent": "Populate the approved shipment criteria accurately without submitting.",
+        "action": "Fill every discovery-approved required Search Loads field and choose only observed suggestions/options matching the CRM snapshot.",
+        "target": "Semantically labeled Search Loads controls established by discovery.",
+        "preconditions": ["SL-050 passed and the session remains authenticated."],
+        "postconditions": ["Every required control displays its intended accepted value and no search has been submitted."],
+        "validation": "Read back each displayed/accepted value and compare it to the fingerprinted snapshot; unknown required fields, defaults, or transformations fail validation.",
+        "evidence": "A commercially redacted pre-submit screenshot and field-by-field comparison log.",
+        "on_failure": "Clear and retry an affected field once only when discovery defines that recovery; otherwise stop for human review. Never guess an option or required value.",
+        "consequential": false,
+        "approval_required": "Field entry is covered by the single-use CRM approval; submission is still blocked until SL-070."
+      },
+      {
+        "id": "SL-070",
+        "intent": "Validate the single-use authorization immediately before the only Search Loads submission.",
+        "action": "Recheck authentication, immutable fingerprint, approval freshness, ledger state, and all displayed criteria; in discovery/QA, record the additional live-search confirmation.",
+        "target": "The CRM approval event, current DAT form, and Search Loads ledger reservation.",
+        "preconditions": ["SL-060 passed and the search control has not been activated."],
+        "postconditions": ["A current single-use authorization exists for exactly the displayed criteria."],
+        "validation": "Session is authenticated; ledger is reserved; approval and fingerprint match; displayed values match; discovery/QA confirmation exists when applicable.",
+        "evidence": "A redacted checkpoint with shipment_record_id, fingerprint, approval timestamp, confirmation timestamp when applicable, and field comparison result.",
+        "on_failure": "For authentication loss return to SL-040 and then repeat SL-050 through SL-070 with fresh field state. For any input or approval change stop and require a new CRM approval click.",
+        "consequential": true,
+        "approval_required": "The existing CRM approval click authorizes this one submission; discovery and QA additionally require explicit per-search human confirmation."
+      },
+      {
+        "id": "SL-080",
+        "intent": "Submit exactly one authorized read-only Search Loads query.",
+        "action": "Atomically mark the job submitted, activate the discovery-approved semantic Search Loads action once, and permanently disable automated resubmission for this fingerprint unless a human reconciles proof that no submission occurred and issues a new approval.",
+        "target": "The validated Search Loads submit action and job ledger.",
+        "preconditions": ["SL-070 produced a current single-use authorization."],
+        "postconditions": ["One search was submitted and the job remains submitted/uncertain until the result scope is validated."],
+        "validation": "One activation produces a recognized loading/results transition and the idempotency key records at most one submitted transition.",
+        "evidence": "A redacted transition screenshot, activation timestamp, and before/after ledger state.",
+        "on_failure": "If activation may have occurred, mark UNCERTAIN and require human reconciliation; never click again automatically. If evidence proves no activation occurred, stop before submission and require a fresh checkpoint and approval as configured by the final job contract.",
+        "consequential": true,
+        "approval_required": "Consumes the single-use authorization established at SL-070."
+      },
+      {
+        "id": "SL-090",
+        "intent": "Classify the Search Loads outcome and establish the complete approved result scope before extraction.",
+        "action": "Wait for a discovery-approved results, empty-result, authentication-loss, permission-error, or bounded-timeout signal; traverse paging or incremental loading only according to the approved discovery contract and record stable source order.",
+        "target": "The Search Loads result region and discovery-approved result-scope controls/states.",
+        "preconditions": ["SL-080 submitted one search."],
+        "postconditions": ["The full approved result scope and source order are established, an empty result is completed, or the run is held for reconciliation."],
+        "validation": "Exactly one recognized outcome is tied to the accepted criteria; traversal reaches the discovery-approved terminal condition without changing filters or activating a row action.",
+        "evidence": "Redacted outcome and terminal-scope screenshots plus page/load-event counts and source-order record.",
+        "on_failure": "After possible submission, retain SUBMITTED_INCOMPLETE or UNCERTAIN and require human reconciliation. Do not resubmit, guess that the first visible page is complete, or use undocumented scrolling/pagination.",
+        "consequential": false,
+        "approval_required": "No additional approval; only read-only result traversal is authorized."
+      },
+      {
+        "id": "SL-100",
+        "intent": "Capture the available offer candidates without exposing contact data.",
+        "action": "In stable source order, read the exact displayed total Rate text from .cell-rate dat-rate .offer, availability indicator, comments when the safe details panel is displayed, observed stable DAT row ID, and every discovery-approved visible non-contact result field from each direct row in the complete result scope.",
+        "target": "Discovery-mapped Search Loads result rows and non-contact fields only.",
+        "preconditions": ["SL-090 established a complete approved result scope or a valid empty result."],
+        "postconditions": ["A source-ordered candidate list or valid empty list exists with no contact field captured."],
+        "validation": "Every extracted value maps to a discovered label/field; row count matches the established scope; contact fields and row actions are absent from output.",
+        "evidence": "Redacted representative result evidence and a structured field-presence/exclusion log; commercially confidential values are not copied into shared QA logs.",
+        "on_failure": "Stop with EXTRACTION_UNVERIFIED or CONTACT_DATA_UNSEPARABLE, retain the submitted state, and require human review without resubmission.",
+        "consequential": false,
+        "approval_required": "No additional approval required for permitted visible non-contact data."
+      },
+      {
+        "id": "SL-110",
+        "intent": "Produce a deterministic eligible set and exclusion audit.",
+        "action": "Apply the discovered availability rule; parse only approved total Rate formats; exclude unavailable or missing/non-numeric total Rate rows; and deduplicate only by the discovery-observed stable DAT row ID, preserving the first source-order occurrence.",
+        "target": "The SL-100 source-ordered candidates and approved parsing/availability contract.",
+        "preconditions": ["SL-100 produced a validated candidate list."],
+        "postconditions": ["Eligible rows, source order, excluded counts/reasons, and any stable-ID duplicate count are deterministic."],
+        "validation": "Every input row is accounted for exactly once as eligible, unavailable, MISSING_OR_NON_NUMERIC_OFFER, DUPLICATE_STABLE_DAT_LOAD_ID, or CONTACT_DATA_OMITTED as applicable; no inferred identity is used.",
+        "evidence": "A redacted row-accounting summary with total, eligible, excluded-by-reason, and duplicate counts plus parser version.",
+        "on_failure": "Stop with OFFER_SEMANTICS_UNVERIFIED; do not coerce, substitute another numeric field, silently drop a row, or resubmit.",
+        "consequential": false,
+        "approval_required": "No additional approval required."
+      },
+      {
+        "id": "SL-120",
+        "intent": "Select the requested top offers reproducibly.",
+        "action": "Stable-sort eligible rows by exact parsed Offer value descending, preserve source order for equal values, assign one-based ranks, and retain the first ten.",
+        "target": "The SL-110 eligible set.",
+        "preconditions": ["SL-110 completed row accounting."],
+        "postconditions": ["A ranked array of zero to ten entries exists with deterministic ties."],
+        "validation": "Offer values are monotonically non-increasing; tied values retain source order; output count equals min(10, eligible count); each output retains its original displayed Offer text and approved visible non-contact fields.",
+        "evidence": "A redacted ranking audit containing source indexes, parsed comparison values, final ranks, eligible count, and output count.",
+        "on_failure": "Stop with RANKING_VALIDATION_FAILED and do not write a partial or differently sorted result to CRM.",
+        "consequential": false,
+        "approval_required": "No additional approval required."
+      },
+      {
+        "id": "SL-130",
+        "intent": "Return one validated Search Loads result to the originating CRM shipment and make reruns safe.",
+        "action": "Atomically persist the validated search criteria, ranked_offers, comments and approved fields, row-accounting summary, scope metadata, timestamp, source, and completed ledger state to the final approved CRM result destination.",
+        "target": "The existing dat_rateview_jobs approval/worker ledger and the originating email_quote_requests.carrier_quotes JSONB result boundary, using a nonselectable datLoadOffers benchmark option.",
+        "preconditions": ["SL-120 validated the final output or SL-090 established a valid empty result.", "The current CRM shipment still matches the submitted fingerprint."],
+        "postconditions": ["The same fingerprint returns the stored result without another DAT search, or a stale-shipment conflict preserves the result for human reconciliation without attaching it to the wrong shipment state."],
+        "validation": "CRM readback matches the validated schema, shipment_record_id, fingerprint, source, timestamp, ranked count, and row-accounting totals; ledger state is completed only after successful atomic persistence.",
+        "evidence": "A redacted completion/readback record with identifiers, counts, timestamp, schema version, ledger state, and artifact paths only.",
+        "on_failure": "Do not resubmit DAT. Retain the validated result in a recoverable write-pending state and retry only the idempotent CRM write, or require human reconciliation when shipment state changed.",
+        "consequential": true,
+        "approval_required": "The originating single-use CRM approval includes writing the validated read-only result to the same approved shipment context; it authorizes no other CRM or DAT mutation."
+      }
+    ],
+    "branches": [
+      {"from": "SL-010", "condition": "Shipment is not durably approved, approval is absent/stale, or a required mapped input is invalid", "to": "STOP_BEFORE_DAT"},
+      {"from": "SL-020", "condition": "A completed result exists for the same fingerprint", "to": "RETURN_PRIOR_SEARCH_LOADS_RESULT"},
+      {"from": "SL-020", "condition": "A submitted, active, or uncertain entry exists", "to": "HUMAN_RECONCILIATION_NO_RESUBMIT"},
+      {"from": "SL-030", "condition": "Session is unauthenticated or expired before submission", "to": "SL-040"},
+      {"from": "SL-040", "condition": "Human authentication succeeds", "to": "SL-050"},
+      {"from": "SL-070", "condition": "Session is lost before submission", "to": "SL-040", "resume": "Repeat SL-050 through SL-070 and require a fresh discovery/QA confirmation; do not reuse stale form state."},
+      {"from": "SL-070", "condition": "Shipment/search fingerprint changed", "to": "STOP_REQUIRE_NEW_CRM_APPROVAL"},
+      {"from": "SL-080", "condition": "Activation or post-submit outcome is uncertain", "to": "HUMAN_RECONCILIATION_NO_RESUBMIT"},
+      {"from": "SL-090", "condition": "DAT displays a discovery-approved empty-result state", "to": "SL-130", "resume": "Persist a completed empty ranked_offers array and zero row counts with the visible outcome reason."},
+      {"from": "SL-090", "condition": "Complete result scope cannot be proven", "to": "SUBMITTED_INCOMPLETE_HUMAN_REVIEW"},
+      {"from": "SL-100", "condition": "An otherwise relevant field contains inseparable contact data", "to": "OMIT_FIELD_AND_RECORD_CONTACT_DATA_OMITTED"},
+      {"from": "SL-130", "condition": "CRM shipment changed after DAT submission", "to": "WRITE_CONFLICT_HUMAN_RECONCILIATION"}
+    ],
+    "blocking_tbd": [],
+    "idempotency": {
+      "key": "Hash the stable shipment_record_id plus every normalized Search Loads field in the immutable submitted snapshot and the workflow/schema version.",
+      "states": ["reserved", "submitted", "submitted_incomplete", "uncertain", "write_pending", "completed", "cancelled_before_submit"],
+      "duplicate_check": "Check before browser use and again immediately before submission. Return completed results; block submitted, submitted_incomplete, uncertain, and write_pending states from another DAT search.",
+      "partial_run_recovery": "Before SL-080, restart from SL-030 only after full revalidation and a current approval. At or after possible SL-080 activation, never resubmit automatically. Retry only an idempotent CRM write of an already validated result."
+    },
+    "evidence_policy": "Evidence must use the existing commercially confidential classification and redaction/30-day screenshot-log rule. Preserve step IDs, timestamps, token-free URL patterns, state transitions, counts, and schema/locator evidence; do not retain credentials, authentication artifacts, contact data, raw sensitive exports, or unredacted shipment/offers in shared artifacts.",
+    "completion_validation": [
+      "The DAT search was tied to one durably approved CRM shipment and one matching single-use CRM approval click.",
+      "At most one Search Loads submission transition exists for the fingerprint.",
+      "The full discovery-approved result scope and stable source order were established, or a recognized empty-result state was recorded.",
+      "Every source row is accounted for; missing/non-numeric Offer rows are excluded with reason counts, and deduplication occurs only by an observed stable DAT load ID.",
+      "Ranked output contains at most ten entries sorted by numeric displayed Offer descending with source-order ties.",
+      "Comments and all allowlisted visible non-contact fields are returned; no contact data or prohibited action is captured or activated.",
+      "CRM readback matches the fingerprinted validated result and a rerun returns it without another DAT submission."
+    ]
+  },
   "steps": [
     {
       "id": "RV-010",
@@ -243,7 +782,7 @@
   "global_failure_policy": {
     "retry_limit": 1,
     "resume_strategy": "Retries are allowed only before RV-080 and only after revalidating authentication, lane fields, and duplicate state. Any failure after possible submission is uncertain and requires human reconciliation without automatic resubmission.",
-    "human_takeover": "A human exclusively handles credentials, SSO, MFA, CAPTCHA, access denial, uncertain post-submit state, and unobserved required fields."
+    "human_takeover": "A human exclusively handles credentials, SSO, MFA, CAPTCHA, access denial, uncertain post-submit state, unobserved required fields, and truck-assignment records affected by unresolved, conflicting, missing, or out-of-range rules."
   },
   "idempotency": {
     "strategy": "Hash the normalized request_id, origin, destination, equipment type, and all additional required field values. Use a local lookup ledger with reserved, submitted, uncertain, completed, and no-rate states plus audit-only submission dates.",
@@ -259,6 +798,8 @@
     "No credential/authentication artifact or unredacted commercially confidential evidence is stored.",
     "No booking, posting, messaging, purchasing/payment, deletion, or account change occurred."
   ],
-  "approved_by": "Jack, First Class Trucking client approver (original scope; surname/title not provided); daily-cap correction confirmed by David Castillo / Optimation AI",
-  "approved_at": "2026-08-11T15:09:56Z"
+  "approved_by": "Jack, First Class Trucking client approver (original DAT scope; surname/title not provided), and David Castillo / Optimation AI. David approved the Search Loads scope and the exact staged production discovery search on 2026-08-13.",
+  "approved_at": "2026-08-11T18:20:00Z",
+  "pending_change_requested_by": "David Castillo / Optimation AI",
+  "pending_change_requested_at": "2026-08-13"
 }

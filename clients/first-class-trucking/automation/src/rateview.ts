@@ -91,6 +91,7 @@ export async function openAuthenticatedTools(
     allowHumanAuth?: boolean;
     humanAuthMode?: "prompt" | "observe" | "deny";
     authenticationOnly?: boolean;
+    target?: "tools" | "search-loads";
   } = {},
 ): Promise<OpenedBrowser> {
   await fs.mkdir(config.userDataDir, { recursive: true, mode: 0o700 });
@@ -100,7 +101,8 @@ export async function openAuthenticatedTools(
     viewport: null,
   });
   const page = context.pages()[0] || (await context.newPage());
-  await page.goto(config.toolsUrl, { waitUntil: "domcontentloaded" });
+  const targetUrl = options.target === "search-loads" ? config.searchLoadsUrl : config.toolsUrl;
+  await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 
   if (isLoginUrl(page.url())) {
     const humanAuthMode = options.humanAuthMode ||
@@ -122,7 +124,7 @@ export async function openAuthenticatedTools(
         "RV-040",
       );
     }
-    await page.goto(config.toolsUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
   }
 
   if (new URL(page.url()).hostname !== "one.dat.com") {
@@ -135,7 +137,7 @@ export async function openAuthenticatedTools(
   }
 
   await waitForDatOne(page, config);
-  if (!options.authenticationOnly) {
+  if (!options.authenticationOnly && options.target !== "search-loads") {
     await expect(page.getByRole("heading", { name: "Tools", exact: true })).toBeVisible({
       timeout: config.resultTimeoutMs,
     });

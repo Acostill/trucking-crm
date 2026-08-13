@@ -3,8 +3,8 @@ import path from "node:path";
 import {
   type LedgerEntry,
   type LedgerFile,
-  type QuoteRequest,
-  type QuoteResult,
+  type WorkflowRequest,
+  type WorkflowResult,
   WorkflowError,
 } from "./types.ts";
 import { calendarDay, requestFingerprint } from "./validation.ts";
@@ -87,11 +87,11 @@ export class RateViewLedger {
   }
 
   async reserve(
-    request: QuoteRequest,
+    request: WorkflowRequest,
     runId: string,
     now = new Date(),
   ): Promise<
-    | { reused: true; result: QuoteResult; submittedToday: number }
+    | { reused: true; result: WorkflowResult; submittedToday: number }
     | { reused: false; fingerprint: string; submittedToday: number }
   > {
     return this.locked(async () => {
@@ -121,6 +121,7 @@ export class RateViewLedger {
       const timestamp = now.toISOString();
       ledger.entries[fingerprint] = {
         requestId: request.requestId,
+        ...( "workflowId" in request ? { workflowId: request.workflowId } : {}),
         fingerprint,
         day,
         runId,
@@ -159,7 +160,7 @@ export class RateViewLedger {
   async complete(
     fingerprint: string,
     runId: string,
-    result: QuoteResult,
+    result: WorkflowResult,
     now = new Date(),
   ): Promise<void> {
     await this.locked(async () => {

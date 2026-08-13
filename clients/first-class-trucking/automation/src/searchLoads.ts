@@ -1,0 +1,467 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { expect, type Locator, type Page } from "@playwright/test";
+import type { AppConfig } from "./config.ts";
+import {
+  SEARCH_LOADS_SCHEMA_VERSION,
+  SEARCH_LOADS_WORKFLOW_ID,
+  type SearchLoadOffer,
+  type SearchLoadsRequest,
+  type SearchLoadsResult,
+  WorkflowError,
+} from "./types.ts";
+
+export interface RawSearchLoadCandidate {
+  datLoadId: string;
+  sourceOrder: number;
+  canceled: boolean;
+  displayedTotal: string | null;
+  rpm: string | null;
+  tripMiles: string | null;
+  origin: string | null;
+  destination: string | null;
+  originDeadhead: string | null;
+  destinationDeadhead: string | null;
+  pickup: string | null;
+  equipmentCode: string | null;
+  weight: string | null;
+  lengthLoadType: string | null;
+  company: string | null;
+  creditScore: string | null;
+  daysToPay: string | null;
+  comments: string | null;
+  commentsStatus: SearchLoadOffer["commentsStatus"];
+}
+
+interface SearchControls {
+  origin: Locator;
+  destination: Locator;
+  search: Locator;
+  startDate: Locator;
+  endDate: Locator;
+}
+
+const CONTACT_EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const CONTACT_PHONE_PATTERN = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/;
+const CONTACT_LINK_PATTERN = /(?:mailto:|tel:|https?:\/\/\S*(?:contact|phone|call|email))/i;
+
+function clean(value: string | null | undefined): string | null {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, 1000) : null;
+}
+
+export function sanitizeNonContactText(value: string | null | undefined): {
+  value: string | null;
+  redacted: boolean;
+} {
+  const normalized = clean(value);
+  if (!normalized) return { value: null, redacted: false };
+  if (
+    CONTACT_EMAIL_PATTERN.test(normalized) ||
+    CONTACT_PHONE_PATTERN.test(normalized) ||
+    CONTACT_LINK_PATTERN.test(normalized)
+  ) {
+    return { value: null, redacted: true };
+  }
+  return { value: normalized, redacted: false };
+}
+
+export function parseDisplayedTotal(value: string | null | undefined): number | null {
+  const normalized = clean(value);
+  if (!normalized || !/^\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?$|^\$\d+(?:\.\d{2})?$/.test(normalized)) {
+    return null;
+  }
+  const parsed = Number(normalized.replace(/[$,]/g, ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function rankSearchLoadCandidates(
+  candidates: RawSearchLoadCandidate[],
+): Pick<SearchLoadsResult,
+  "directResultCount" | "eligibleCount" | "excludedCount" |
+  "exclusionReasons" | "duplicateCount" | "outcome" | "offers"
+> {
+  const exclusionReasons: Record<string, number> = {};
+  const increment = (reason: string) => {
+    exclusionReasons[reason] = (exclusionReasons[reason] || 0) + 1;
+  };
+  const eligible: Array<SearchLoadOffer & { sourceOrder: number }> = [];
+  const seenIds = new Set<string>();
+  let duplicateCount = 0;
+
+  for (const candidate of candidates) {
+    if (!/^table-row-(?!similar-matches-separator)[A-Za-z0-9_-]+$/.test(candidate.datLoadId)) {
+      increment("MISSING_STABLE_DAT_LOAD_ID");
+      continue;
+    }
+    if (seenIds.has(candidate.datLoadId)) {
+      duplicateCount += 1;
+      increment("DUPLICATE_STABLE_DAT_LOAD_ID");
+      continue;
+    }
+    seenIds.add(candidate.datLoadId);
+    if (candidate.canceled) {
+      increment("CANCELED");
+      continue;
+    }
+    const totalUsd = parseDisplayedTotal(candidate.displayedTotal);
+    if (totalUsd === null) {
+      increment("MISSING_OR_NON_NUMERIC_OFFER");
+      continue;
+    }
+
+    const fields = {
+      rpm: sanitizeNonContactText(candidate.rpm).value,
+      tripMiles: sanitizeNonContactText(candidate.tripMiles).value,
+      origin: sanitizeNonContactText(candidate.origin).value,
+      destination: sanitizeNonContactText(candidate.destination).value,
+      originDeadhead: sanitizeNonContactText(candidate.originDeadhead).value,
+      destinationDeadhead: sanitizeNonContactText(candidate.destinationDeadhead).value,
+      pickup: sanitizeNonContactText(candidate.pickup).value,
+      equipmentCode: sanitizeNonContactText(candidate.equipmentCode).value,
+      weight: sanitizeNonContactText(candidate.weight).value,
+      lengthLoadType: sanitizeNonContactText(candidate.lengthLoadType).value,
+      company: sanitizeNonContactText(candidate.company).value,
+      creditScore: sanitizeNonContactText(candidate.creditScore).value,
+      daysToPay: sanitizeNonContactText(candidate.daysToPay).value,
+    };
+    const sanitizedComments = sanitizeNonContactText(candidate.comments);
+    const commentsStatus = sanitizedComments.redacted
+      ? "redacted"
+      : sanitizedComments.value && candidate.commentsStatus === "displayed"
+        ? "displayed"
+        : "not_displayed";
+    eligible.push({
+      rank: 0,
+      datLoadId: candidate.datLoadId,
+      sourceOrder: candidate.sourceOrder,
+      displayedTotal: clean(candidate.displayedTotal) as string,
+      totalUsd,
+      ...fields,
+      comments: sanitizedComments.value,
+      commentsStatus,
+    });
+  }
+
+  eligible.sort((left, right) =>
+    right.totalUsd - left.totalUsd || left.sourceOrder - right.sourceOrder,
+  );
+  const offers = eligible.slice(0, 10).map((offer, index) => ({
+    ...offer,
+    rank: index + 1,
+  }));
+  const excludedCount = Object.values(exclusionReasons).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  return {
+    directResultCount: candidates.length,
+    eligibleCount: eligible.length,
+    excludedCount,
+    exclusionReasons,
+    duplicateCount,
+    outcome: candidates.length === 0
+      ? "empty"
+      : eligible.length === 0
+        ? "no_qualifying_offers"
+        : "completed",
+    offers,
+  };
+}
+
+async function exactOption(page: Page, value: string, timeoutMs: number): Promise<void> {
+  const option = page.getByRole("option", { name: value, exact: true });
+  await option.waitFor({ state: "visible", timeout: timeoutMs });
+  await option.click();
+}
+
+async function selectCity(
+  page: Page,
+  field: Locator,
+  value: string,
+  timeoutMs: number,
+): Promise<void> {
+  await field.fill("");
+  await field.fill(value);
+  await exactOption(page, value, timeoutMs);
+  await expect(field).toHaveValue(value, { timeout: timeoutMs });
+}
+
+async function fillNamedControl(
+  page: Page,
+  name: RegExp,
+  value: string,
+): Promise<Locator> {
+  const control = page.getByRole("spinbutton", { name }).or(
+    page.getByRole("textbox", { name }),
+  );
+  await expect(control).toHaveCount(1);
+  await control.fill(value);
+  await expect(control).toHaveValue(value);
+  return control;
+}
+
+function dateControl(page: Page, kind: "start" | "end"): Locator {
+  const semanticName = kind === "start"
+    ? /(?:Date Range.*Start|Start.*Date|Pickup.*Start)/i
+    : /(?:Date Range.*End|End.*Date|Pickup.*End)/i;
+  const semantic = page.getByRole("textbox", { name: semanticName }).or(
+    page.getByRole("combobox", { name: semanticName }),
+  );
+  const attributes = kind === "start"
+    ? 'input[aria-label*="start" i], input[name*="start" i]'
+    : 'input[aria-label*="end" i], input[name*="end" i]';
+  return semantic.or(page.locator(attributes)).first();
+}
+
+async function fillDate(control: Locator, isoDate: string): Promise<void> {
+  await expect(control).toBeVisible();
+  const inputType = await control.getAttribute("type");
+  const [year, month, day] = isoDate.split("-");
+  const value = inputType === "date" ? isoDate : `${Number(month)}/${Number(day)}/${year}`;
+  await control.fill(value);
+  const actual = await control.inputValue();
+  const acceptedValues = new Set([
+    value,
+    isoDate,
+    `${month}/${day}/${year}`,
+  ]);
+  if (!acceptedValues.has(actual)) {
+    throw new WorkflowError(
+      "FORM_VALUE_REJECTED",
+      `DAT did not retain the approved ${isoDate} date value.`,
+      "SL-060",
+    );
+  }
+}
+
+export async function populateSearchLoadsForm(
+  page: Page,
+  request: SearchLoadsRequest,
+  timeoutMs: number,
+): Promise<SearchControls> {
+  const origin = page.getByRole("combobox", { name: "Origin", exact: true });
+  const destination = page.getByRole("combobox", { name: "Destination", exact: true });
+  const equipment = page.getByRole("combobox", { name: /^Equipment Type/i });
+  const loadType = page.getByRole("combobox", { name: /^Load Type/i });
+  const search = page.getByRole("button", { name: "SEARCH", exact: true });
+  await expect(origin).toHaveCount(1);
+  await expect(destination).toHaveCount(1);
+  await expect(equipment).toHaveCount(1);
+  await expect(loadType).toHaveCount(1);
+  await expect(search).toHaveCount(1);
+
+  await selectCity(page, origin, request.origin, timeoutMs);
+  await selectCity(page, destination, request.destination, timeoutMs);
+  await fillNamedControl(page, /^DH-O$/i, String(request.originDeadheadMiles));
+  await fillNamedControl(page, /^DH-D$/i, String(request.destinationDeadheadMiles));
+
+  await equipment.click();
+  await exactOption(page, request.equipmentType, timeoutMs);
+  await loadType.click();
+  await exactOption(page, request.loadType, timeoutMs);
+
+  const startDate = dateControl(page, "start");
+  const endDate = dateControl(page, "end");
+  await fillDate(startDate, request.pickupDate);
+  await fillDate(endDate, request.pickupDate);
+
+  const similar = page.getByRole("switch", { name: /Include Similar Results/i });
+  if (await similar.count()) {
+    await expect(similar).toHaveAttribute("aria-checked", "false");
+  }
+  await expect(search).toBeEnabled({ timeout: timeoutMs });
+  return { origin, destination, search, startDate, endDate };
+}
+
+export async function captureSearchLoadsPreSubmitEvidence(
+  _page: Page,
+  _controls: SearchControls,
+  runDirectory: string,
+): Promise<void> {
+  await fs.mkdir(runDirectory, { recursive: true, mode: 0o700 });
+  await fs.writeFile(
+    path.join(runDirectory, "pre-submit-evidence.json"),
+    `${JSON.stringify({
+      schemaVersion: 1,
+      capturedAt: new Date().toISOString(),
+      status: "FORM_VALIDATED_PRE_SUBMIT",
+      redaction: "No page screenshot retained; Search Loads can display confidential rates and contact data.",
+    }, null, 2)}\n`,
+    { mode: 0o600 },
+  );
+}
+
+async function safeCellText(row: Locator, selector: string): Promise<string | null> {
+  const cell = row.locator(selector).first();
+  if (!(await cell.count())) return null;
+  const value = await cell.evaluate((element) => {
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll(
+      'a[href^="tel:"], a[href^="mailto:"], button, [role="button"], [aria-label*="phone" i], [aria-label*="email" i], [aria-label*="contact" i], [aria-label*="call" i]',
+    ).forEach((candidate) => candidate.remove());
+    return clone.innerText || clone.textContent || "";
+  });
+  return sanitizeNonContactText(value).value;
+}
+
+function firstMatch(value: string | null, pattern: RegExp): string | null {
+  return value?.match(pattern)?.[0]?.replace(/\s+/g, " ").trim() || null;
+}
+
+async function extractVisibleRow(row: Locator, sourceOrder: number): Promise<RawSearchLoadCandidate> {
+  const datLoadId = clean(await row.getAttribute("id")) || "";
+  const displayedTotal = clean(await row.locator(".cell-rate dat-rate .offer").first().textContent());
+  const rateText = await safeCellText(row, ".cell-rate dat-rate");
+  const routeText = await safeCellText(row, ".cell-route dat-route");
+  const timingText = await safeCellText(row, ".cell-timing dat-timing");
+  const equipmentText = await safeCellText(row, ".cell-equipment dat-equipment");
+  const companyText = await safeCellText(row, ".cell-company dat-company");
+  const creditText = await safeCellText(row, ".cell-credit dat-credit");
+  const cities = routeText?.match(/[A-Za-z][A-Za-z .'-]+,\s*[A-Z]{2}\b/g) || [];
+  const commentsPanel = row.locator("dat-notes .notes-contents.multiline").first();
+  const commentsVisible = Boolean(await commentsPanel.count()) &&
+    await commentsPanel.isVisible().catch(() => false);
+  const rawComments = commentsVisible ? await commentsPanel.textContent() : null;
+  const comments = sanitizeNonContactText(rawComments);
+  return {
+    datLoadId,
+    sourceOrder,
+    canceled: await row.getByText("CANCELED", { exact: true }).count() > 0,
+    displayedTotal,
+    rpm: firstMatch(rateText, /\$[\d,.]+\s*(?:\/\s*mi|per\s+mile)/i),
+    tripMiles: firstMatch(routeText, /[\d,]+\s*(?:mi|miles)\b/i),
+    origin: cities[0] || null,
+    destination: cities[1] || null,
+    originDeadhead: firstMatch(routeText, /DH[-\s]?O\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
+    destinationDeadhead: firstMatch(routeText, /DH[-\s]?D\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
+    pickup: timingText,
+    equipmentCode: firstMatch(equipmentText, /\b(?:V|F|R|VAN|REEFER|FLATBED)\b/i),
+    weight: firstMatch(equipmentText, /[\d,]+\s*(?:lbs?|pounds?)\b/i),
+    lengthLoadType: equipmentText,
+    company: companyText,
+    creditScore: firstMatch(creditText, /(?:credit\s*)?\d{2,3}/i),
+    daysToPay: firstMatch(creditText, /\d+\s*(?:DTP|days?(?:\s+to\s+pay)?)/i),
+    comments: comments.value,
+    commentsStatus: comments.redacted
+      ? "redacted"
+      : commentsVisible && comments.value
+        ? "displayed"
+        : "not_displayed",
+  };
+}
+
+async function directResultCount(page: Page, timeoutMs: number): Promise<number> {
+  const summary = page.getByText(/^\d+\s+Results?$/i).first();
+  await summary.waitFor({ state: "visible", timeout: timeoutMs });
+  const match = clean(await summary.textContent())?.match(/^(\d+)\s+Results?$/i);
+  if (!match) {
+    throw new WorkflowError(
+      "RESULT_SCOPE_UNVERIFIED",
+      "DAT direct-result count could not be verified.",
+      "SL-090",
+    );
+  }
+  return Number(match[1]);
+}
+
+async function chooseHighestRateSort(page: Page, timeoutMs: number): Promise<void> {
+  const sort = page.getByRole("button", { name: /(?:Age - Newest|Sort by)/i }).first();
+  await sort.waitFor({ state: "visible", timeout: timeoutMs });
+  await sort.click();
+  const highest = page.getByRole("menuitem", { name: "Rate - Highest", exact: true }).or(
+    page.getByRole("option", { name: "Rate - Highest", exact: true }),
+  );
+  await highest.first().waitFor({ state: "visible", timeout: timeoutMs });
+  await highest.first().click();
+  await expect(sort).toContainText("Rate - Highest", { timeout: timeoutMs });
+}
+
+async function collectCompleteDirectRows(
+  page: Page,
+  expectedCount: number,
+  timeoutMs: number,
+): Promise<RawSearchLoadCandidate[]> {
+  if (expectedCount === 0) return [];
+  const rows = page.locator('.row-container[id^="table-row-"]:not(#table-row-similar-matches-separator)');
+  const viewport = page.locator("cdk-virtual-scroll-viewport.table-rows-container").first();
+  const collected = new Map<string, RawSearchLoadCandidate>();
+  const deadline = Date.now() + timeoutMs;
+  let unchangedPasses = 0;
+  let lastSize = -1;
+  while (Date.now() < deadline && collected.size < expectedCount) {
+    const count = await rows.count();
+    for (let index = 0; index < count; index += 1) {
+      const row = rows.nth(index);
+      const id = clean(await row.getAttribute("id"));
+      if (!id || collected.has(id)) continue;
+      collected.set(id, await extractVisibleRow(row, collected.size));
+    }
+    if (collected.size === lastSize) unchangedPasses += 1;
+    else unchangedPasses = 0;
+    lastSize = collected.size;
+    if (collected.size >= expectedCount) break;
+    if (!(await viewport.count())) break;
+    await viewport.evaluate((element) => {
+      element.scrollTop = Math.min(
+        element.scrollHeight,
+        element.scrollTop + Math.max(element.clientHeight * 0.8, 400),
+      );
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await page.waitForTimeout(200);
+    if (unchangedPasses >= 5) break;
+  }
+  if (collected.size !== expectedCount) {
+    throw new WorkflowError(
+      "RESULT_SCOPE_UNVERIFIED",
+      `DAT reported ${expectedCount} direct results but ${collected.size} unique direct rows were verified.`,
+      "SL-090",
+    );
+  }
+  return Array.from(collected.values()).map((candidate, index) => ({
+    ...candidate,
+    sourceOrder: index,
+  }));
+}
+
+export async function submitAndExtractSearchLoads(
+  page: Page,
+  request: SearchLoadsRequest,
+  controls: SearchControls,
+  config: AppConfig,
+): Promise<SearchLoadsResult> {
+  await controls.search.click();
+  await page.waitForTimeout(750);
+  const count = await directResultCount(page, config.resultTimeoutMs);
+  const similar = page.getByRole("switch", { name: /Include Similar Results/i });
+  if (await similar.count()) {
+    await expect(similar).toHaveAttribute("aria-checked", "false");
+  }
+  if (count > 0) {
+    await chooseHighestRateSort(page, config.resultTimeoutMs);
+  }
+  const candidates = await collectCompleteDirectRows(page, count, config.resultTimeoutMs);
+  const ranked = rankSearchLoadCandidates(candidates);
+  return {
+    workflowId: SEARCH_LOADS_WORKFLOW_ID,
+    schemaVersion: SEARCH_LOADS_SCHEMA_VERSION,
+    requestId: request.requestId,
+    shipmentRecordId: request.shipmentRecordId,
+    searchFingerprint: request.searchFingerprint,
+    source: "DAT Search Loads",
+    searchTimestamp: new Date().toISOString(),
+    acceptedCriteria: {
+      origin: request.origin,
+      destination: request.destination,
+      equipmentType: request.equipmentType,
+      pickupDate: request.pickupDate,
+      originDeadheadMiles: 150,
+      destinationDeadheadMiles: 150,
+      loadType: "Full & Partial",
+      includeSimilarResults: false,
+      sort: "Rate - Highest",
+    },
+    ...ranked,
+  };
+}

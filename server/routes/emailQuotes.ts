@@ -10,7 +10,10 @@ import {
   getEmailQuotePollState,
   pollGmailQuoteInbox
 } from '../services/emailQuotePoller';
-import { requestDatRateViewLookup } from '../services/datRateViewJobs';
+import {
+  requestDatRateViewLookup,
+  requestDatSearchLoadsLookup
+} from '../services/datRateViewJobs';
 import { sendGmailMessage } from '../services/gmailQuoteInbox';
 
 const router = express.Router();
@@ -222,6 +225,17 @@ router.post('/:id/dat-rateview', async function(req: Request, res: Response, nex
     const userId = await requireOperationsUser(req, res);
     if (!userId) return;
     const record = await requestDatRateViewLookup(req.params.id, userId);
+    res.json(rowToEmailQuote(record, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/dat-search-loads', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = await requireOperationsUser(req, res);
+    if (!userId) return;
+    const record = await requestDatSearchLoadsLookup(req.params.id, userId);
     res.json(rowToEmailQuote(record, true));
   } catch (err) {
     next(err);

@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import {
   type EquipmentType,
   type QuoteRequest,
+  SEARCH_LOADS_SCHEMA_VERSION,
+  SEARCH_LOADS_WORKFLOW_ID,
+  type SearchLoadsRequest,
+  type SearchLoadsEquipmentType,
+  type WorkflowRequest,
   WorkflowError,
 } from "./types.ts";
 
@@ -53,7 +58,8 @@ export function validateRequest(input: {
   };
 }
 
-export function requestFingerprint(request: QuoteRequest): string {
+export function requestFingerprint(request: WorkflowRequest): string {
+  if ("workflowId" in request) return request.searchFingerprint;
   const canonical = [
     request.requestId.toLowerCase(),
     request.origin.toLowerCase(),
@@ -61,6 +67,55 @@ export function requestFingerprint(request: QuoteRequest): string {
     request.equipmentType.toLowerCase(),
   ].join("\u001f");
   return createHash("sha256").update(canonical).digest("hex");
+}
+
+const SEARCH_EQUIPMENT: SearchLoadsEquipmentType[] = [
+  "Vans (Standard)",
+  "Flatbeds (Standard)",
+  "Reefers (Standard)",
+];
+
+function isValidCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+export function validateSearchLoadsRequest(input: Partial<SearchLoadsRequest>): SearchLoadsRequest {
+  const equipmentType = normalizeText(input.equipmentType || "") as SearchLoadsEquipmentType;
+  const request: SearchLoadsRequest = {
+    workflowId: SEARCH_LOADS_WORKFLOW_ID,
+    schemaVersion: SEARCH_LOADS_SCHEMA_VERSION,
+    requestId: normalizeText(input.requestId || ""),
+    shipmentRecordId: normalizeText(input.shipmentRecordId || ""),
+    searchFingerprint: normalizeText(input.searchFingerprint || ""),
+    origin: normalizeText(input.origin || ""),
+    destination: normalizeText(input.destination || ""),
+    equipmentType,
+    pickupDate: normalizeText(input.pickupDate || ""),
+    originDeadheadMiles: input.originDeadheadMiles as 150,
+    destinationDeadheadMiles: input.destinationDeadheadMiles as 150,
+    loadType: input.loadType as "Full & Partial",
+    includeSimilarResults: input.includeSimilarResults as false,
+    approveSearch: input.approveSearch === true,
+  };
+  if (
+    input.workflowId !== SEARCH_LOADS_WORKFLOW_ID ||
+    input.schemaVersion !== SEARCH_LOADS_SCHEMA_VERSION ||
+    !request.requestId || !request.shipmentRecordId || !request.origin || !request.destination ||
+    !/^[a-f0-9]{64}$/.test(request.searchFingerprint) ||
+    !isValidCalendarDate(request.pickupDate) ||
+    !SEARCH_EQUIPMENT.includes(equipmentType) ||
+    request.originDeadheadMiles !== 150 || request.destinationDeadheadMiles !== 150 ||
+    request.loadType !== "Full & Partial" || request.includeSimilarResults !== false
+  ) {
+    throw new WorkflowError(
+      "VALIDATION_ERROR",
+      "Search Loads request does not match the approved v1 criteria.",
+      "SL-010",
+    );
+  }
+  return request;
 }
 
 export function calendarDay(timestamp: Date, timezone: string): string {
