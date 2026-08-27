@@ -37,6 +37,16 @@ function numericValue(value: any): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function stripReplyForwardPrefix(subject: any): string {
+  let value = String(subject || '').trim();
+  let previous: string;
+  do {
+    previous = value;
+    value = value.replace(/^(fwd|fw|re)\s*:\s*/i, '').trim();
+  } while (value !== previous);
+  return value;
+}
+
 function rowToEmailQuote(row: any, includeRaw = false) {
   return {
     id: row.id,
@@ -394,9 +404,11 @@ router.post('/:id/send', async function(req: Request, res: Response, next: NextF
     const row = current.rows[0];
     const to = String(req.body && req.body.to || '').trim();
     const cc = String(req.body && req.body.cc || '').trim();
-    const body = String(req.body && req.body.body || '').trim();
+    const html = String(req.body && req.body.html || '').trim();
+    const cleanOriginalSubject = stripReplyForwardPrefix(row.subject);
     const subject = String(
-      req.body && req.body.subject || `Your First Class Trucking quote${row.subject ? ' — ' + row.subject : ''}`
+      req.body && req.body.subject ||
+      `Your First Class Trucking quote${cleanOriginalSubject ? ' — ' + cleanOriginalSubject : ''}`
     ).trim();
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(to)) {
@@ -407,8 +419,8 @@ router.post('/:id/send', async function(req: Request, res: Response, next: NextF
       res.status(400).json({ error: 'The CC address is not a valid email' });
       return;
     }
-    if (!body) {
-      res.status(400).json({ error: 'Email body is required' });
+    if (!html) {
+      res.status(400).json({ error: 'Email content is required' });
       return;
     }
     if (row.client_price == null) {
@@ -419,8 +431,9 @@ router.post('/:id/send', async function(req: Request, res: Response, next: NextF
       to,
       cc: cc || undefined,
       subject,
-      body,
-      threadId: row.external_thread_id || undefined
+      html,
+      threadId: row.external_thread_id || undefined,
+      inReplyToMessageId: row.internet_message_id || undefined
     });
     const updated = await db.query(
       `UPDATE public.email_quote_requests

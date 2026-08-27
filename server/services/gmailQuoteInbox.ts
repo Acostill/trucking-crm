@@ -1,4 +1,5 @@
-import { getGoogleOAuthCredentials } from './googleOAuthCredentials';
+import crypto from 'crypto';
+import { getGoogleOAuthCredentials, GoogleOAuthRole } from './googleOAuthCredentials';
 
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -63,10 +64,27 @@ export interface GmailMailboxConfiguration {
   missing: string[];
 }
 
-let tokenCache: GmailTokenCache | null = null;
+export interface GmailSendConfiguration {
+  configured: boolean;
+  usingSeparateAccount: boolean;
+  sendAccount: string;
+  fromAddress: string;
+  fromName?: string;
+  missing: string[];
+}
 
-function requiredEnvironment(): Array<{ key: string; value: string | undefined }> {
-  const oauthCredentials = getGoogleOAuthCredentials();
+const tokenCaches: Record<GoogleOAuthRole, GmailTokenCache | null> = {
+  inbox: null,
+  send: null
+};
+
+function refreshTokenFor(role: GoogleOAuthRole): string {
+  if (role === 'send') return String(process.env.GMAIL_SEND_REFRESH_TOKEN || '').trim();
+  return String(process.env.GMAIL_REFRESH_TOKEN || '').trim();
+}
+
+function requiredInboxEnvironment(): Array<{ key: string; value: string | undefined }> {
+  const oauthCredentials = getGoogleOAuthCredentials('inbox');
   return [
     {
       key: 'Google OAuth client (credentials.json or GMAIL_CLIENT_ID + GMAIL_CLIENT_SECRET)',
@@ -77,7 +95,7 @@ function requiredEnvironment(): Array<{ key: string; value: string | undefined }
 }
 
 export function getGmailMailboxConfiguration(): GmailMailboxConfiguration {
-  const missing = requiredEnvironment()
+  const missing = requiredInboxEnvironment()
     .filter(function(entry) { return !entry.value; })
     .map(function(entry) { return entry.key; });
   const rawInterval = Number(process.env.GMAIL_POLL_INTERVAL_MS || 60000);
@@ -94,21 +112,82 @@ export function getGmailMailboxConfiguration(): GmailMailboxConfiguration {
   };
 }
 
-async function getAccessToken(): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60000) {
-    return tokenCache.accessToken;
+export function getGmailSendConfiguration(): GmailSendConfiguration {
+  const inboxConfig = getGmailMailboxConfiguration();
+  const sendRefreshToken = refreshTokenFor('send');
+  const sendAccount = String(process.env.GMAIL_SEND_ACCOUNT || '').trim();
+  const fromAddress = String(process.env.GMAIL_SEND_FROM_ADDRESS || '').trim();
+  const fromName = String(process.env.GMAIL_SEND_FROM_NAME || '').trim();
+
+  const usingSeparateAccount = Boolean(sendRefreshToken);
+
+  if (usingSeparateAccount) {
+    const missing: string[] = [];
+    if (!getGoogleOAuthCredentials('send')) {
+      missing.push(
+        'Google OAuth client (GMAIL_SEND_CLIENT_ID + GMAIL_SEND_CLIENT_SECRET, or the inbox client)'
+      );
+    }
+    if (!sendAccount) missing.push('GMAIL_SEND_ACCOUNT');
+    const resolvedFrom = fromAddress || sendAccount;
+    return {
+      configured: missing.length === 0,
+      usingSeparateAccount: true,
+      sendAccount,
+      fromAddress: resolvedFrom,
+      fromName: fromName || undefined,
+      missing
+    };
   }
 
-  const config = getGmailMailboxConfiguration();
-  const oauthCredentials = getGoogleOAuthCredentials();
-  if (!config.configured) {
-    const err: any = new Error('Gmail quote inbox is not configured');
-    err.status = 503;
-    err.details = { missing: config.missing };
-    throw err;
+  return {
+    configured: inboxConfig.configured,
+    usingSeparateAccount: false,
+    sendAccount: inboxConfig.mailboxAddress,
+    fromAddress: fromAddress || inboxConfig.mailboxAddress,
+    fromName: fromName || undefined,
+    missing: inboxConfig.missing
+  };
+}
+
+async function getAccessToken(role: GoogleOAuthRole = 'inbox'): Promise<string> {
+  const cached = tokenCaches[role];
+  if (cached && cached.expiresAt > Date.now() + 60000) {
+    return cached.accessToken;
   }
+
+  if (role === 'inbox') {
+    const config = getGmailMailboxConfiguration();
+    if (!config.configured) {
+      const err: any = new Error('Gmail quote inbox is not configured');
+      err.status = 503;
+      err.details = { missing: config.missing };
+      throw err;
+    }
+  } else {
+    const config = getGmailSendConfiguration();
+    if (!config.configured) {
+      const err: any = new Error('Gmail send-as workflow is not configured');
+      err.status = 503;
+      err.details = { missing: config.missing };
+      throw err;
+    }
+  }
+
+  const oauthCredentials = getGoogleOAuthCredentials(role);
   if (!oauthCredentials) {
     const err: any = new Error('Google OAuth client credentials are not configured');
+    err.status = 503;
+    throw err;
+  }
+
+  const refreshToken = refreshTokenFor(role);
+  if (!refreshToken) {
+    const err: any = new Error(
+      role === 'send'
+        ? 'GMAIL_SEND_REFRESH_TOKEN is not configured'
+        : 'GMAIL_REFRESH_TOKEN is not configured'
+    );
     err.status = 503;
     throw err;
   }
@@ -119,30 +198,41 @@ async function getAccessToken(): Promise<string> {
     body: new URLSearchParams({
       client_id: oauthCredentials.clientId,
       client_secret: oauthCredentials.clientSecret,
-      refresh_token: process.env.GMAIL_REFRESH_TOKEN || '',
+      refresh_token: refreshToken,
       grant_type: 'refresh_token'
     }).toString()
   });
   const payload: any = await response.json().catch(function() { return {}; });
   if (!response.ok || !payload.access_token) {
-    const err: any = new Error('Unable to authorize the Gmail quote inbox');
+    const baseMessage = role === 'send'
+      ? 'Unable to authorize the Gmail send-as account'
+      : 'Unable to authorize the Gmail quote inbox';
+    const providerError = payload.error_description || payload.error;
+    const err: any = new Error(
+      providerError ? `${baseMessage}: ${providerError}` : baseMessage
+    );
     err.status = 502;
     err.details = {
       providerStatus: response.status,
-      providerError: payload.error_description || payload.error
+      providerError
     };
     throw err;
   }
 
-  tokenCache = {
+  const cache: GmailTokenCache = {
     accessToken: payload.access_token,
     expiresAt: Date.now() + Math.max(60, Number(payload.expires_in || 3600)) * 1000
   };
-  return tokenCache.accessToken;
+  tokenCaches[role] = cache;
+  return cache.accessToken;
 }
 
-async function gmailGet(path: string, params?: Record<string, string>): Promise<any> {
-  const token = await getAccessToken();
+async function gmailGet(
+  path: string,
+  params?: Record<string, string>,
+  role: GoogleOAuthRole = 'inbox'
+): Promise<any> {
+  const token = await getAccessToken(role);
   const url = new URL(GMAIL_API_BASE + path);
   Object.entries(params || {}).forEach(function(entry) {
     url.searchParams.set(entry[0], entry[1]);
@@ -155,20 +245,25 @@ async function gmailGet(path: string, params?: Record<string, string>): Promise<
   });
   const payload: any = await response.json().catch(function() { return {}; });
   if (!response.ok) {
-    if (response.status === 401) tokenCache = null;
-    const err: any = new Error(`Gmail API request failed (${response.status})`);
+    if (response.status === 401) tokenCaches[role] = null;
+    const providerMessage = payload?.error?.message;
+    const err: any = new Error(
+      providerMessage
+        ? `Gmail API request failed (${response.status}): ${providerMessage}`
+        : `Gmail API request failed (${response.status})`
+    );
     err.status = 502;
     err.details = {
       providerStatus: response.status,
-      providerMessage: payload?.error?.message
+      providerMessage
     };
     throw err;
   }
   return payload;
 }
 
-async function gmailPost(path: string, body: any): Promise<any> {
-  const token = await getAccessToken();
+async function gmailPost(path: string, body: any, role: GoogleOAuthRole = 'inbox'): Promise<any> {
+  const token = await getAccessToken(role);
   const response = await fetch(GMAIL_API_BASE + path, {
     method: 'POST',
     headers: {
@@ -180,12 +275,17 @@ async function gmailPost(path: string, body: any): Promise<any> {
   });
   const payload: any = await response.json().catch(function() { return {}; });
   if (!response.ok) {
-    if (response.status === 401) tokenCache = null;
-    const err: any = new Error(`Gmail API request failed (${response.status})`);
+    if (response.status === 401) tokenCaches[role] = null;
+    const providerMessage = payload?.error?.message;
+    const err: any = new Error(
+      providerMessage
+        ? `Gmail API request failed (${response.status}): ${providerMessage}`
+        : `Gmail API request failed (${response.status})`
+    );
     err.status = 502;
     err.details = {
       providerStatus: response.status,
-      providerMessage: payload?.error?.message
+      providerMessage
     };
     throw err;
   }
@@ -314,8 +414,10 @@ function mapGmailMessage(message: GmailMessageResource, mailboxAddress: string):
   };
 }
 
-export async function getGmailMailboxProfile(): Promise<{ emailAddress?: string; messagesTotal?: number }> {
-  const profile = await gmailGet('/users/me/profile');
+export async function getGmailMailboxProfile(
+  role: GoogleOAuthRole = 'inbox'
+): Promise<{ emailAddress?: string; messagesTotal?: number }> {
+  const profile = await gmailGet('/users/me/profile', undefined, role);
   return {
     emailAddress: profile.emailAddress,
     messagesTotal: Number(profile.messagesTotal) || 0
@@ -344,27 +446,64 @@ export async function listGmailQuoteMessages(maxResults = 25): Promise<GmailQuot
   });
 }
 
+function formatFromHeader(address: string, name?: string): string {
+  if (!name) return address;
+  const encodedName = encodeMimeHeaderWord(name);
+  const quotedName = encodedName === name && /[",<>@]/.test(name)
+    ? `"${name.replace(/"/g, '\\"')}"`
+    : encodedName;
+  return `${quotedName} <${address}>`;
+}
+
+function normalizeMessageId(value?: string): string | undefined {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return undefined;
+  return /^<.*>$/.test(trimmed) ? trimmed : `<${trimmed.replace(/^<|>$/g, '')}>`;
+}
+
 export async function sendGmailMessage(params: {
   to: string;
   cc?: string;
   subject: string;
-  body: string;
+  html: string;
   threadId?: string;
+  inReplyToMessageId?: string;
 }): Promise<{ id: string; threadId?: string }> {
-  const config = getGmailMailboxConfiguration();
+  const sendConfig = getGmailSendConfiguration();
+  const role: GoogleOAuthRole = sendConfig.usingSeparateAccount ? 'send' : 'inbox';
+  const fromHeader = formatFromHeader(sendConfig.fromAddress, sendConfig.fromName);
+  const text = htmlToText(params.html);
+  const boundary = `fct_${crypto.randomBytes(12).toString('hex')}`;
+  const inReplyTo = normalizeMessageId(params.inReplyToMessageId);
+  // Gmail thread IDs are per-mailbox. When we authenticate as a different
+  // account for sending, the inbox's threadId does not exist there and the
+  // API returns 404. Rely on In-Reply-To / References for cross-mailbox
+  // threading instead.
+  const threadId = sendConfig.usingSeparateAccount ? undefined : params.threadId;
   const mime = [
-    `From: ${config.mailboxAddress}`,
+    `From: ${fromHeader}`,
     `To: ${params.to}`,
     ...(params.cc ? [`Cc: ${params.cc}`] : []),
     `Subject: ${encodeMimeHeaderWord(params.subject)}`,
+    ...(inReplyTo ? [`In-Reply-To: ${inReplyTo}`, `References: ${inReplyTo}`] : []),
     'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
     'Content-Type: text/plain; charset="UTF-8"',
     '',
-    params.body
+    text,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    '',
+    params.html,
+    '',
+    `--${boundary}--`
   ].join('\r\n');
   const payload = await gmailPost('/users/me/messages/send', {
     raw: encodeBase64Url(mime),
-    ...(params.threadId ? { threadId: params.threadId } : {})
-  });
+    ...(threadId ? { threadId } : {})
+  }, role);
   return { id: payload.id, threadId: payload.threadId };
 }

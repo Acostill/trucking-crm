@@ -79,6 +79,22 @@ Gmail read-only access and deduplicates messages in Postgres; it does not mark,
 move, or delete email. If `emailbot@optimation.io` is an alias, authorize its
 owning mailbox and set `GMAIL_ALLOW_MAILBOX_ALIAS=true`.
 
+To reply from a different Gmail account via a configured send-as alias, fill
+in the `GMAIL_SEND_*` block in `server/.env` (`GMAIL_SEND_ACCOUNT` is the real
+Gmail account, `GMAIL_SEND_FROM_ADDRESS` is the alias that owner has set up
+under Gmail > Settings > Accounts > "Send mail as"). Leave
+`GMAIL_SEND_CLIENT_ID` / `GMAIL_SEND_CLIENT_SECRET` blank to reuse the same
+OAuth client, then authorize the sending account:
+
+```bash
+cd server
+npm run gmail:authorize:send
+```
+
+The helper stores `GMAIL_SEND_REFRESH_TOKEN` in `server/.env`; restart the
+API. When `GMAIL_SEND_REFRESH_TOKEN` is unset, outbound replies keep using
+the inbox mailbox as before.
+
 ### DAT RateView worker
 
 The hosted API stores approved jobs and results. The Playwright browser runs as
