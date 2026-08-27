@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+export type GoogleOAuthRole = 'inbox' | 'send';
+
 export interface GoogleOAuthCredentials {
   clientId: string;
   clientSecret: string;
@@ -48,16 +50,26 @@ function credentialFileCandidates(): string[] {
   return Array.from(new Set(candidates));
 }
 
-export function getGoogleOAuthCredentials(): GoogleOAuthCredentials | null {
-  const clientId = String(process.env.GMAIL_CLIENT_ID || '').trim();
-  const clientSecret = String(process.env.GMAIL_CLIENT_SECRET || '').trim();
+function environmentCredentials(prefix: string, sourceLabel: string): GoogleOAuthCredentials | null {
+  const clientId = String(process.env[`${prefix}CLIENT_ID`] || '').trim();
+  const clientSecret = String(process.env[`${prefix}CLIENT_SECRET`] || '').trim();
   if (clientId && clientSecret) {
-    return {
-      clientId,
-      clientSecret,
-      source: 'environment'
-    };
+    return { clientId, clientSecret, source: sourceLabel };
   }
+  return null;
+}
+
+export function getGoogleOAuthCredentials(role: GoogleOAuthRole = 'inbox'): GoogleOAuthCredentials | null {
+  if (role === 'send') {
+    const sendCredentials = environmentCredentials('GMAIL_SEND_', 'environment:send');
+    if (sendCredentials) return sendCredentials;
+    // Fall back to the inbox OAuth client so operators can reuse the same
+    // Google Cloud client for both flows and only provide a distinct refresh
+    // token for the sending account.
+  }
+
+  const inboxCredentials = environmentCredentials('GMAIL_', 'environment');
+  if (inboxCredentials) return inboxCredentials;
 
   for (const candidate of credentialFileCandidates()) {
     const credentials = credentialsFromFile(candidate);

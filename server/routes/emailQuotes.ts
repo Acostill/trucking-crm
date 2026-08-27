@@ -403,7 +403,8 @@ router.post('/:id/send', async function(req: Request, res: Response, next: NextF
       cc: cc || undefined,
       subject,
       html,
-      threadId: row.external_thread_id || undefined
+      threadId: row.external_thread_id || undefined,
+      inReplyToMessageId: row.internet_message_id || undefined
     });
     const updated = await db.query(
       `UPDATE public.email_quote_requests

@@ -14,6 +14,7 @@
     "db:migrate:email-quote-send-tracking": "ts-node ./scripts/run-email-quote-send-tracking-migration.ts",
     "db:migrate:email-quote-send-cc": "ts-node ./scripts/run-email-quote-send-cc-migration.ts",
     "gmail:authorize": "ts-node ./scripts/authorize-gmail.ts",
+    "gmail:authorize:send": "ts-node ./scripts/authorize-gmail.ts --send",
     "start": "node dist/bin/www.js"
   },
   "dependencies": {
