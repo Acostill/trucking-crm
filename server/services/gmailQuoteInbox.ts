@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { getGoogleOAuthCredentials } from './googleOAuthCredentials';
 
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
@@ -348,19 +349,31 @@ export async function sendGmailMessage(params: {
   to: string;
   cc?: string;
   subject: string;
-  body: string;
+  html: string;
   threadId?: string;
 }): Promise<{ id: string; threadId?: string }> {
   const config = getGmailMailboxConfiguration();
+  const text = htmlToText(params.html);
+  const boundary = `fct_${crypto.randomBytes(12).toString('hex')}`;
   const mime = [
     `From: ${config.mailboxAddress}`,
     `To: ${params.to}`,
     ...(params.cc ? [`Cc: ${params.cc}`] : []),
     `Subject: ${encodeMimeHeaderWord(params.subject)}`,
     'MIME-Version: 1.0',
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
     'Content-Type: text/plain; charset="UTF-8"',
     '',
-    params.body
+    text,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset="UTF-8"',
+    '',
+    params.html,
+    '',
+    `--${boundary}--`
   ].join('\r\n');
   const payload = await gmailPost('/users/me/messages/send', {
     raw: encodeBase64Url(mime),

@@ -211,16 +211,23 @@ function extractEmailAddress(value) {
   return match ? match[0] : '';
 }
 
+function extractDisplayName(headerValue) {
+  const match = String(headerValue || '').match(/^\s*"?([^"<]*)"?\s*<[^>]+>\s*$/);
+  const name = match ? match[1].trim() : '';
+  return name || '';
+}
+
 function extractForwardedContacts(rawText) {
   const text = String(rawText || '');
   const forwardedIndex = text.search(/-{2,}\s*forwarded message\s*-{2,}/i);
-  if (forwardedIndex === -1) return { to: '', cc: '' };
+  if (forwardedIndex === -1) return { to: '', toName: '', cc: '' };
   const headerBlock = text.slice(forwardedIndex, forwardedIndex + 600);
   const fromMatch = headerBlock.match(/^From:\s*(.+)$/im);
   const toMatch = headerBlock.match(/^To:\s*(.+)$/im);
   const to = fromMatch ? extractEmailAddress(fromMatch[1]) : '';
+  const toName = fromMatch ? extractDisplayName(fromMatch[1]) : '';
   const cc = toMatch ? extractEmailAddress(toMatch[1]) : '';
-  return { to, cc: cc && cc.toLowerCase() !== to.toLowerCase() ? cc : '' };
+  return { to, toName, cc: cc && cc.toLowerCase() !== to.toLowerCase() ? cc : '' };
 }
 
 function statusLabel(status) {
@@ -244,37 +251,99 @@ function statusTone(status) {
   return 'working';
 }
 
-function buildQuoteEmailBody(quote) {
-  if (!quote) return '';
-  const shipment = quote.shipment || {};
+function buildDefaultQuoteNote(quote) {
+  const shipment = (quote && quote.shipment) || {};
+  const pickupCity = shipment.pickup && shipment.pickup.location && shipment.pickup.location.city;
+  const deliveryCity = shipment.delivery && shipment.delivery.location && shipment.delivery.location.city;
+  const lane = pickupCity && deliveryCity ? ` for your shipment from ${pickupCity} to ${deliveryCity}` : '';
+  return `Here's your quote${lane}. Reply to this email to confirm and we'll get it scheduled, or let us know if you have any questions.`;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function nlToBr(value) {
+  return escapeHtml(value).split('\n').map(function(line) { return line || '&nbsp;'; }).join('<br />');
+}
+
+const EMAIL_FONT_SANS = "'Inter','SuisseIntl',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+// Matches the sidebar's "First Class CRM Brand Refresh" tokens in App.css (--fct-*).
+const EMAIL_BG_TOP = '#050505';
+const EMAIL_BG_BOTTOM = '#0f172a';
+const EMAIL_ACCENT = '#1e3a8a';
+const EMAIL_ACCENT_LIGHT = '#93c5fd';
+const EMAIL_LINE = 'rgba(255,255,255,.12)';
+const EMAIL_TEXT = 'rgba(255,255,255,.92)';
+const EMAIL_TEXT_MUTED = 'rgba(255,255,255,.62)';
+const EMAIL_TEXT_FAINT = 'rgba(255,255,255,.42)';
+
+function buildQuoteEmailHtml(quote, noteText) {
+  const shipment = (quote && quote.shipment) || {};
   const pickup = shipment.pickup || {};
   const pickupLocation = pickup.location || {};
   const delivery = shipment.delivery || {};
   const deliveryLocation = delivery.location || {};
-  const selection = quote.selection || {};
-  const carrierOptions = Array.isArray(quote.carrierQuotes) ? quote.carrierQuotes : [];
-  const carrierOption = carrierOptions.find(function(option) { return option.key === selection.carrierKey; });
-  const transitTime = carrierOption && carrierOption.transitTime;
+  const selection = (quote && quote.selection) || {};
+  const forwarded = extractForwardedContacts(quote && quote.rawText);
+  const recipientName = forwarded.toName
+    || (!forwarded.to && quote && quote.sender && (quote.sender.name || quote.sender.email))
+    || '';
+  const firstName = recipientName ? String(recipientName).split(' ')[0] : '';
 
-  const detailLines = [
-    `Pickup: ${locationLine(pickupLocation)}${pickup.date ? ' on ' + formatDateTime(pickup.date) : ''}`,
-    `Delivery: ${locationLine(deliveryLocation)}`,
-    selection.carrierSource ? `Carrier: ${selection.carrierSource}` : null,
-    transitTime ? `Estimated transit: ${transitTime} day${transitTime === 1 ? '' : 's'}` : null,
-    `Total price: ${formatMoney(selection.clientPrice)}`
-  ].filter(Boolean);
+  const detailRows = [
+    ['Pickup', locationLine(pickupLocation) + (pickup.date ? ' · ' + formatDateTime(pickup.date) : '')],
+    ['Delivery', locationLine(deliveryLocation)]
+  ];
 
-  return [
-    'Thank you for choosing First Class Trucking!',
-    '',
-    'Here are your quote details:',
-    ...detailLines,
-    '',
-    'Reply to this email to confirm and we will get your shipment scheduled.',
-    '',
-    'Thank you,',
-    'First Class Trucking'
-  ].join('\n');
+  const rowsHtml = detailRows.map(function(row) {
+    return '<tr>'
+      + '<td style="padding:9px 0;border-top:1px solid ' + EMAIL_LINE + ';font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';white-space:nowrap;">' + escapeHtml(row[0]) + '</td>'
+      + '<td style="padding:9px 0 9px 16px;border-top:1px solid ' + EMAIL_LINE + ';font-size:14px;color:' + EMAIL_TEXT + ';text-align:right;">' + escapeHtml(row[1]) + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const noteHtml = noteText && noteText.trim()
+    ? '<p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT_MUTED + ';">' + nlToBr(noteText) + '</p>'
+    : '';
+
+  return '<!doctype html>'
+    + '<html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />'
+    + '<title>Your First Class Trucking quote</title></head>'
+    + '<body style="margin:0;padding:0;background:' + EMAIL_BG_TOP + ';">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg,' + EMAIL_BG_TOP + ' 0%,' + EMAIL_BG_BOTTOM + ' 100%);background-color:' + EMAIL_BG_TOP + ';padding:32px 16px;">'
+    + '<tr><td align="center">'
+    + '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;font-family:' + EMAIL_FONT_SANS + ';">'
+    + '<tr><td style="padding:0 8px 24px;">'
+    + '<span style="display:inline-block;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + EMAIL_TEXT + ';">First Class Trucking</span>'
+    + '<div style="width:32px;height:3px;margin-top:8px;background:' + EMAIL_ACCENT_LIGHT + ';border-radius:2px;"></div>'
+    + '</td></tr>'
+    + '<tr><td style="padding:0 8px;">'
+    + '<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3;font-weight:700;color:' + EMAIL_TEXT + ';">Thank you for choosing First Class Trucking!</h1>'
+    + (firstName ? '<p style="margin:0 0 18px;font-size:14px;color:' + EMAIL_TEXT_MUTED + ';">Hi ' + escapeHtml(firstName) + ',</p>' : '')
+    + noteHtml
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,.08);border:1px solid ' + EMAIL_LINE + ';border-left:3px solid ' + EMAIL_ACCENT + ';border-radius:8px;padding:20px 22px;margin-bottom:22px;">'
+    + rowsHtml
+    + '<tr>'
+    + '<td style="padding:14px 0 0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';">Total price</td>'
+    + '<td style="padding:14px 0 0 16px;font-size:22px;font-weight:700;color:' + EMAIL_ACCENT_LIGHT + ';text-align:right;">' + escapeHtml(formatMoney(selection.clientPrice)) + '</td>'
+    + '</tr>'
+    + '</table>'
+    + '<p style="margin:0 0 26px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT_MUTED + ';">Reply to this email to confirm and we\'ll get your shipment scheduled.</p>'
+    + '<p style="margin:0 0 34px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT + ';">Thank you,<br />First Class Trucking</p>'
+    + '</td></tr>'
+    + '<tr><td style="padding:20px 8px 0;border-top:1px solid ' + EMAIL_LINE + ';font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';">'
+    + 'First Class Trucking'
+    + '</td></tr>'
+    + '</table>'
+    + '</td></tr>'
+    + '</table>'
+    + '</body></html>';
 }
 
 function shipmentToEditor(shipment) {
@@ -396,7 +465,7 @@ export default function EmailQuoteInboxPage() {
   const [staffNotes, setStaffNotes] = useState('');
   const [emailTo, setEmailTo] = useState('');
   const [emailCc, setEmailCc] = useState('');
-  const [emailBody, setEmailBody] = useState('');
+  const [emailNote, setEmailNote] = useState('');
   const [sendingQuoteEmail, setSendingQuoteEmail] = useState(false);
 
   async function requestJson(path, options) {
@@ -455,7 +524,7 @@ export default function EmailQuoteInboxPage() {
       ''
     );
     setEmailCc((detail && detail.quoteSentCc) || forwarded.cc || '');
-    setEmailBody(buildQuoteEmailBody(detail));
+    setEmailNote(buildDefaultQuoteNote(detail));
   }
 
   async function loadDetail(id) {
@@ -523,6 +592,10 @@ export default function EmailQuoteInboxPage() {
     if (!selectedCarrier || selectedCarrier.cost == null || clientPrice === '') return null;
     return Number(clientPrice) - Number(selectedCarrier.cost);
   }, [selectedCarrier, clientPrice]);
+
+  const emailHtml = useMemo(function() {
+    return buildQuoteEmailHtml(selected, emailNote);
+  }, [selected, emailNote]);
 
   function chooseCarrier(option) {
     if (!option.available) return;
@@ -690,7 +763,7 @@ export default function EmailQuoteInboxPage() {
   }
 
   async function sendQuoteEmail() {
-    if (!selected || !emailTo.trim() || !emailBody.trim()) return;
+    if (!selected || !emailTo.trim() || !emailHtml.trim()) return;
     if (previewMode) {
       const updated = {
         ...selected,
@@ -716,7 +789,7 @@ export default function EmailQuoteInboxPage() {
       const detail = await requestJson('/api/email-quotes/' + selected.id + '/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: emailTo.trim(), cc: emailCc.trim(), body: emailBody })
+        body: JSON.stringify({ to: emailTo.trim(), cc: emailCc.trim(), html: emailHtml })
       });
       applyDetail(detail);
       setNotice(
@@ -985,13 +1058,20 @@ export default function EmailQuoteInboxPage() {
                         )}
                       </div>
                       <label className="eq-notes-field">
-                        Message
+                        Personal note <small>(shown to the customer, optional)</small>
                         <textarea
-                          className="eq-email-body"
-                          value={emailBody}
-                          onChange={function(e) { setEmailBody(e.target.value); }}
+                          value={emailNote}
+                          onChange={function(e) { setEmailNote(e.target.value); }}
+                          placeholder="Add a personal note for the customer..."
                         />
                       </label>
+                      <span className="eq-form-kicker eq-preview-kicker">Email preview</span>
+                      <iframe
+                        title="Email preview"
+                        className="eq-email-preview"
+                        srcDoc={emailHtml}
+                        sandbox=""
+                      />
                       <div className="eq-send-row">
                         <label className="eq-send-field">
                           <span>To <em>(receiver)</em></span>
@@ -1015,7 +1095,7 @@ export default function EmailQuoteInboxPage() {
                           type="button"
                           className="eq-secondary-button strong"
                           onClick={sendQuoteEmail}
-                          disabled={!emailTo.trim() || !emailBody.trim() || sendingQuoteEmail}
+                          disabled={!emailTo.trim() || !emailHtml.trim() || sendingQuoteEmail}
                         >
                           <Send size={15} /> {sendingQuoteEmail ? 'Sending...' : selected.status === 'sent' ? 'Resend Quote' : 'Send Quote'}
                         </button>

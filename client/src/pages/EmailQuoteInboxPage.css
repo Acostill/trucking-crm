@@ -820,18 +820,33 @@
   margin-top: 12px;
 }
 
+.eq-notes-field small {
+  margin-left: 4px;
+  color: #92a2b1;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .eq-notes-field textarea {
   min-height: 68px;
   padding: 9px;
   resize: vertical;
 }
 
-.eq-email-body {
-  min-height: 170px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 10.5px;
-  line-height: 1.5;
-  white-space: pre-wrap;
+.eq-preview-kicker {
+  display: block;
+  margin-top: 16px;
+}
+
+.eq-email-preview {
+  width: 100%;
+  height: 480px;
+  margin-top: 8px;
+  border: 1px solid #e5ebf0;
+  border-radius: 9px;
+  background: #050505;
 }
 
 .eq-send-row {
