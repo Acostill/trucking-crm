@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "client": {
+    "name": "First Class Trucking",
+    "slug": "first-class-trucking"
+  },
+  "created_at": "2026-08-10T00:55:43+00:00",
+  "updated_at": "2026-08-13T17:06:25+00:00",
+  "stage": "qa",
+  "gates": {
+    "workspace_ready": true,
+    "intake_approved": true,
+    "spec_approved": true,
+    "discovery_approved": true,
+    "build_complete": true,
+    "qa_passed": false,
+    "client_accepted": false
+  },
+  "release": {
+    "consecutive_pass_target": 5,
+    "accepted_exceptions": []
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "environment": "DAT production (approved read-only RateView and Search Loads scope; visible Chrome browser reserved for manual authentication)",
+  "captured_at": "2026-08-13T12:34:45-04:00",
+  "captured_by": "browser_discovery",
+  "status": "DISCOVERY_COMPLETE",
+  "blocker": null,
+  "redaction_status": "The retained RateView screenshot contains fictional lane inputs only. Search Loads structural evidence omits all shipment, company, contact, offer, market-rate, and comment values; no Search Loads screenshot was retained.",
+  "artifacts": [
+    {
+      "captured_at": "2026-08-11T10:28:32-04:00",
+      "environment": "DAT production",
+      "workflow_step_id": "RV-060",
+      "path": "discovery/screenshots/060-RV-060-quick-rate-ready.png",
+      "url_pattern": "https://one.dat.com/tools",
+      "redaction_status": "Safe: fictional Portland-to-Chicago lane only; no authentication or customer data visible.",
+      "observed_result": "Origin and destination autocomplete values were selected, Van remained selected, and SEARCH became enabled without being activated.",
+      "locator_candidates": [
+        "getByRole('combobox', { name: 'Origin (City, ST / ZIP)*', exact: true })",
+        "getByRole('combobox', { name: 'Destination (City, ST / ZIP)*', exact: true })",
+        "getByRole('combobox', { name: 'Equipment Type Van', exact: true })",
+        "getByRole('button', { name: 'SEARCH', exact: true })"
+      ]
+    },
+    {
+      "captured_at": "2026-08-11T10:32:53-04:00",
+      "environment": "DAT production",
+      "workflow_step_id": "RV-080,RV-090,RV-100",
+      "path": "discovery/result-structure-redacted.json",
+      "url_pattern": "https://one.dat.com/tools",
+      "redaction_status": "Lane and live market values masked; no authentication artifacts present.",
+      "observed_result": "One approved search produced Spot and Contract cards on the Tools page. The result field and selector contract was captured without retaining live rate values in shared evidence.",
+      "locator_candidates": [
+        "dat-market-rate-data .details-container.spot",
+        "dat-market-rate-data .details-container.contract",
+        ".geo-label",
+        ".rate-data",
+        ".rate-permile",
+        ".miles-day-average",
+        ".range-data",
+        "getByRole('button', { name: 'NEW SEARCH', exact: true })"
+      ]
+    },
+    {
+      "captured_at": "2026-08-13T12:34:45-04:00",
+      "environment": "DAT production",
+      "workflow_step_id": "SL-030,SL-050,SL-090,SL-100",
+      "path": "discovery/search-loads-structure-redacted.json",
+      "url_pattern": "https://one.dat.com/search-loads",
+      "redaction_status": "All previously rendered shipment, company, contact, offer, market-rate, and comment values omitted; no screenshot retained.",
+      "observed_result": "One approved fictional search submitted once and returned 23 direct plus 106 similar results with Similar Results off. Rate - Highest produced descending total-dollar values; 15 rows were numeric and 8 were excluded. Direct unique row IDs plus one separator matched the visible direct count. Comments are optional/sanitized when the details panel is displayed. No prohibited action occurred.",
+      "locator_candidates": [
+        "getByRole('button', { name: 'SEARCH', exact: true })",
+        "cdk-virtual-scroll-viewport.table-rows-container",
+        ".cdk-virtual-scroll-content-wrapper .row-container",
+        ".cell-rate dat-rate .offer",
+        "dat-notes .notes-contents.multiline"
+      ]
+    }
+  ]
+}

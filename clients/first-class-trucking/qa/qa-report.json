@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "status": "blocked",
+  "verdict": "BLOCKED",
+  "release_reason": "PENDING_LIVE_RELIABILITY",
+  "tested_version": "workflow fct-dat-search-loads-offers-v1; specification 0.6-approved-search-loads-v1; repository HEAD 53490fd8407bd9b981bca67b7e5a17474602e878 with the recorded working-tree source hashes",
+  "environment": "Local macOS Node.js v25.8.1 deterministic automation/server/client validation. Previously approved DAT production discovery evidence was reviewed. No QA browser session or live DAT search was executed.",
+  "dataset_class": "Synthetic and fictional local request/result data; redacted discovery structure; no credentials, authentication artifacts, customer data, live rates, or contact data retained in QA evidence.",
+  "consecutive_pass_target": 5,
+  "consecutive_passes_achieved": 0,
+  "qa_live_searches_executed": 0,
+  "deterministic_build_quality": "passed",
+  "critical_paths_passed": false,
+  "failure_paths_passed": false,
+  "rerun_safety_passed": false,
+  "session_expiry_passed": false,
+  "human_takeover_passed": false,
+  "blocking_defects": [],
+  "resolved_defects": [
+    "FCT-SL-001: CRM approval is disabled when any visible fingerprinted Search Loads field differs from the saved shipment snapshot",
+    "FCT-SL-002: server rejects a parsed total that does not equal the displayed total-dollar Rate and validates duplicate/tie integrity",
+    "FCT-SL-003: impossible calendar dates are rejected before browser use"
+  ],
+  "deterministic_results": {
+    "automation_typecheck": "passed",
+    "automation_tests": { "passed": 12, "failed": 0 },
+    "server_typecheck": "passed",
+    "server_search_loads_contract": "passed",
+    "server_rateview_regression": "passed",
+    "server_truck_assignment_regression": "passed",
+    "client_page_eslint": "passed with dependency-age informational warnings only",
+    "client_optimized_build": "passed with pre-existing unrelated lint and tooling-data warnings",
+    "targeted_defect_reproductions": { "passed": 3, "failed": 0 }
+  },
+  "validated_controls": [
+    "fixed Full & Partial, 150-mile DH-O/DH-D, same pickup start/end, Similar Results false, and Rate - Highest criteria",
+    "only explicit positive USD total-dollar Rates rank; RPM is never substituted",
+    "descending order, stable source order for ties, ten-row cap, canceled/nonnumeric exclusions, and stable-ID duplicate accounting",
+    "empty and no-qualifying outcomes",
+    "contact-like content omission and read-only optional comments",
+    "server identity, criteria, row-accounting, contact-data, displayed/parsed total, duplicate-ID, and tie-order validation",
+    "nonselectable CRM Search Loads benchmark presentation",
+    "exact saved-snapshot approval guard",
+    "completed-result reuse and uncertain-state no-resubmit design"
+  ],
+  "pending_live_cases": [
+    "Five consecutive isolated representative live Search Loads passes with one explicit approval per search",
+    "Live or safely controlled session expiry and human takeover",
+    "Permission/subscription change and popup/frame drift",
+    "Slow pre-submit and post-submit responses",
+    "Post-submit timeout, partial completion/finalization, and uncertain rerun safety",
+    "Live trace/action audit proving exactly one SEARCH activation and no prohibited action"
+  ],
+  "accepted_exceptions": [
+    "Client-approved shared DAT login may displace another active device.",
+    "Authentication, MFA, CAPTCHA, and reauthentication remain human-controlled.",
+    "Search Loads screenshots and traces that could expose commercially confidential or contact data are not retained by default; safe structured evidence is used."
+  ],
+  "evidence_paths": [
+    "qa/runs/2026-08-13-search-loads-v1/summary.md",
+    "qa/test-matrix.md",
+    "qa/defects.md",
+    "automation/tests/searchLoads.test.ts",
+    "automation/tests/validation.test.ts",
+    "automation/tests/ledger.test.ts",
+    "server/scripts/test-dat-search-loads.ts",
+    "discovery/evidence-manifest.json",
+    "discovery/search-loads-structure-redacted.json"
+  ],
+  "tested_source_sha256": {
+    "automation/src/searchLoads.ts": "82a36924f7058cc74ec59aea2d27ab87676df160d3522dcb84e0aea0e444216a",
+    "automation/src/validation.ts": "b1707c8c114f51b582bf6b85de9372bc062b787ca9c5c208b9845bc9fd578482",
+    "automation/src/runner.ts": "79df641fb6f219db54ac3b09467cac43e025a7e38ffea1763df078b7e285e74c",
+    "automation/src/worker.ts": "da7f5783c68710ef9308d31dda1121774158477f286da59935eba9f5b97cf33f",
+    "server/services/datRateViewJobs.ts": "dfa058a7f1e2103e9604008a12838c1c5626ed56378e91b2d9af4454a71f0c07",
+    "server/services/carrierQuoteOptions.ts": "76599ffa5bd33f0655f4cdedf0651d3b54f7d34a037601d24c28d489f99821a6",
+    "server/routes/emailQuotes.ts": "2785f67385868ca57c1714b7ca4478ec7a37b7a8b20487866ef7f5d5d2978d43",
+    "client/src/pages/EmailQuoteInboxPage.js": "539ccc3bc73288dc045707d7900fdf1efb55528d75869382646a227cdabf82e5",
+    "client/src/pages/EmailQuoteInboxPage.css": "ee328ca7b6147621802d6b6fe033659db5b6b138ce876d71bb427a8253e47725"
+  },
+  "completed_at": "2026-08-13T17:11:27Z"
+}

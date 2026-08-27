@@ -9,20 +9,15 @@ import {
   UnifiedQuoteResponse
 } from './unifiedQuoteService';
 import { GmailQuoteMessage } from './gmailQuoteInbox';
-
-export interface CarrierQuoteOption {
-  key: 'expediteAll' | 'forwardAir';
-  source: string;
-  available: boolean;
-  cost?: number;
-  lineHaul?: number;
-  ratePerMile?: number;
-  truckType?: string;
-  transitTime?: number;
-  rateCalculationId?: string;
-  accessorials?: any[];
-  error?: string;
-}
+import {
+  buildCarrierRecommendation,
+  CarrierQuoteOption
+} from './carrierQuoteOptions';
+import {
+  cancelStalePendingDatJobs,
+  prepareDatRateViewOptions
+} from './datRateViewJobs';
+import { assignTruckType } from './truckAssignment';
 
 export interface ShipmentValidation {
   valid: boolean;
@@ -117,7 +112,8 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
     finiteNumber(shipmentDetails.shipment_weight_lbs) ||
     finiteNumber(shipmentDetails.weight);
 
-  return {
+  const temperatureControl = shipmentInfo.temperature_control;
+  const shipment: UnifiedQuoteRequest = {
     pickup: {
       location: {
         city: pickup.city || undefined,
@@ -160,12 +156,21 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
       shipmentDetails.truck_type ||
       wrapper.truck_type ||
       undefined,
+    ...(temperatureControl != null
+      ? {
+          temperatureControl: {
+            minC: temperatureControl.min_c,
+            maxC: temperatureControl.max_c
+          }
+        }
+      : {}),
     commodity: shipmentInfo.commodity || shipmentDetails.commodity || undefined,
     stackable: shipmentInfo.stackable,
     hazardousMaterial: { unNumbers },
     accessorialCodes: accessorials,
     referenceNumber: sample.subject || wrapper.subject || undefined
   };
+  return assignTruckType(shipment).shipment;
 }
 
 export function validateShipmentRequest(shipment: UnifiedQuoteRequest): ShipmentValidation {
@@ -226,28 +231,6 @@ export function mapCarrierQuotes(response: UnifiedQuoteResponse): CarrierQuoteOp
   ];
 }
 
-async function buildRecommendation(options: CarrierQuoteOption[]) {
-  const available = options
-    .filter(function(option) { return option.available && option.cost; })
-    .sort(function(a, b) { return Number(a.cost) - Number(b.cost); });
-  if (!available.length) return null;
-  const recommended = available[0];
-  const defaultMarginPct = await getDefaultProfitMarginPct();
-  const suggestedClientPrice = Number(
-    (Number(recommended.cost) * (1 + defaultMarginPct / 100)).toFixed(2)
-  );
-  return {
-    carrierKey: recommended.key,
-    carrierSource: recommended.source,
-    carrierCost: recommended.cost,
-    defaultMarginPct,
-    suggestedClientPrice,
-    reason: available.length > 1
-      ? 'Lowest available carrier cost. Staff should confirm service and transit before sending.'
-      : 'Only available carrier rate. Staff should confirm service and transit before sending.'
-  };
-}
-
 export async function rateEmailQuoteRequest(
   id: string,
   shipmentOverride?: UnifiedQuoteRequest
@@ -263,10 +246,27 @@ export async function rateEmailQuoteRequest(
     err.status = 404;
     throw err;
   }
-  const shipment: UnifiedQuoteRequest = shipmentOverride ||
+  const inputShipment: UnifiedQuoteRequest = shipmentOverride ||
     (typeof existing.rows[0].shipment_request === 'string'
       ? JSON.parse(existing.rows[0].shipment_request)
       : existing.rows[0].shipment_request || {});
+  const assignment = assignTruckType(inputShipment);
+  const shipment = assignment.shipment;
+  await cancelStalePendingDatJobs(id, shipment);
+  if (assignment.status === 'needs_review') {
+    const result = await db.query(
+      `UPDATE public.email_quote_requests
+       SET shipment_request = $2::jsonb,
+           carrier_quotes = '[]'::jsonb,
+           recommendation = NULL,
+           status = 'needs_review',
+           processing_error = $3
+       WHERE id = $1
+       RETURNING *`,
+      [id, JSON.stringify(shipment), assignment.metadata.reason]
+    );
+    return result.rows[0];
+  }
   const validation = validateShipmentRequest(shipment);
   if (!validation.valid) {
     const result = await db.query(
@@ -296,8 +296,26 @@ export async function rateEmailQuoteRequest(
     includeDat: false,
     applyDefaultMargin: false
   });
-  const carrierQuotes = mapCarrierQuotes(unified);
-  const recommendation = await buildRecommendation(carrierQuotes);
+  const connectedCarrierQuotes = mapCarrierQuotes(unified);
+  let datOptions: CarrierQuoteOption[];
+  try {
+    datOptions = await prepareDatRateViewOptions(id, shipment);
+  } catch (err: any) {
+    // Keep connected carrier rating available even when the separate worker queue is unavailable.
+    console.error('DAT RateView preparation failed:', err && err.message ? err.message : err);
+    datOptions = [{
+      key: 'datRateView',
+      source: 'DAT RateView',
+      available: false,
+      selectable: false,
+      benchmark: true,
+      status: 'failed',
+      error: 'DAT worker queue is unavailable. Connected carrier rates are still current.'
+    }];
+  }
+  const carrierQuotes = connectedCarrierQuotes.concat(datOptions);
+  const defaultMarginPct = await getDefaultProfitMarginPct();
+  const recommendation = buildCarrierRecommendation(carrierQuotes, defaultMarginPct);
   const status = recommendation ? 'ready' : 'needs_review';
   const processingError = recommendation
     ? null
@@ -324,7 +342,7 @@ export async function rateEmailQuoteRequest(
 
 export async function processEmailQuoteRequest(id: string): Promise<any> {
   const record = await db.query(
-    `SELECT id, raw_text
+    `SELECT id, raw_text, shipment_request
      FROM public.email_quote_requests
      WHERE id = $1`,
     [id]
@@ -344,6 +362,19 @@ export async function processEmailQuoteRequest(id: string): Promise<any> {
     );
     const parsed = await parseEmailWithOpenRouter(record.rows[0].raw_text);
     const shipment = parsedEmailToShipmentRequest(parsed);
+    const existingShipment = typeof record.rows[0].shipment_request === 'string'
+      ? JSON.parse(record.rows[0].shipment_request)
+      : record.rows[0].shipment_request || {};
+    if (
+      existingShipment.truckAssignment &&
+      existingShipment.truckAssignment.source === 'staff' &&
+      existingShipment.truckType
+    ) {
+      shipment.truckType = existingShipment.truckType;
+      shipment.datEquipmentType = existingShipment.datEquipmentType;
+      shipment.temperatureControlled = existingShipment.temperatureControlled;
+      shipment.truckAssignment = existingShipment.truckAssignment;
+    }
     await db.query(
       `UPDATE public.email_quote_requests
        SET parsed_payload = $2::jsonb,

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-08-11T10:32:53-04:00",
+  "environment": "DAT production",
+  "workflow_step_ids": ["RV-080", "RV-090", "RV-100"],
+  "url_pattern": "https://one.dat.com/tools",
+  "submission_count": 1,
+  "result_cards": [
+    {
+      "rate_type": "SPOT",
+      "root": "dat-market-rate-data .details-container.spot",
+      "fields": {
+        "accepted_market_lane": ".geo-label",
+        "displayed_average": ".rate-data",
+        "displayed_per_mile": ".rate-permile",
+        "miles_and_timeframe": ".miles-day-average",
+        "displayed_range": ".range-data"
+      },
+      "values": "REDACTED"
+    },
+    {
+      "rate_type": "CONTRACT",
+      "root": "dat-market-rate-data .details-container.contract",
+      "fields": {
+        "accepted_market_lane": ".geo-label",
+        "displayed_average": ".rate-data",
+        "displayed_per_mile": ".rate-permile",
+        "miles_and_timeframe": ".miles-day-average",
+        "displayed_range": ".range-data"
+      },
+      "values": "REDACTED"
+    }
+  ],
+  "success_signal": "button NEW SEARCH visible with both result cards",
+  "fuel_observation": "No separate fuel field was displayed in Quick Rate Lookup.",
+  "redaction_status": "Lane and live market values masked. No credential, MFA, token, cookie, or browser-storage data included."
+}

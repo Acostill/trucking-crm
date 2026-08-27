@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-08-13T12:34:45-04:00",
+  "environment": "DAT production",
+  "workflow_step_ids": [
+    "SL-030",
+    "SL-050",
+    "SL-090",
+    "SL-100"
+  ],
+  "url_pattern": "https://one.dat.com/search-loads",
+  "status": "DISCOVERY_COMPLETE",
+  "redaction_status": "All shipment, company, contact, offer, market-rate, and comment values are omitted. No screenshot was retained.",
+  "observed_form_contract": {
+    "fields": [
+      "Origin city autocomplete",
+      "Origin deadhead radius (DH-O)",
+      "Destination city autocomplete",
+      "Destination deadhead radius (DH-D)",
+      "Equipment Type autocomplete",
+      "Load Type combobox",
+      "Length in feet",
+      "Weight in pounds",
+      "Date Range start and end",
+      "Load Requirements filter",
+      "Search Back filter",
+      "Company filter",
+      "Book/Bid filter"
+    ],
+    "submit_control": "button with accessible name SEARCH",
+    "observed_required_fields": [
+      "Origin accepted autocomplete value",
+      "Destination accepted autocomplete value",
+      "at least one Equipment Type chip",
+      "Date Range start date and end date"
+    ],
+    "observed_defaults": {
+      "origin_deadhead_miles": 150,
+      "destination_deadhead_miles": 150,
+      "load_type": "Full & Partial",
+      "search_back": "24 hours",
+      "date_range": "current local calendar day for both start and end in the observed form"
+    },
+    "accepted_value_behavior": "Origin and Destination require selecting an exact autocomplete option. The SEARCH control was enabled after the exact city options were selected while an equipment chip and date range were present.",
+    "staged_approved_data_contract": {
+      "origin": "Portland, OR",
+      "destination": "Chicago, IL",
+      "equipment": "Vans (Standard)",
+      "load_type": "Full & Partial",
+      "origin_deadhead_miles": 150,
+      "destination_deadhead_miles": 150,
+      "start_date": "2026-08-13",
+      "end_date": "2026-08-13",
+      "search_submitted": true,
+      "submitted_at": "2026-08-13T16:34:43.226Z"
+    },
+    "optional_field_rule": "Map normalized weight when available. Leave unsupported optional Length and advanced filters unset; never guess."
+  },
+  "observed_result_contract": {
+    "result_count_landmarks": [
+      "direct result count",
+      "similar result count",
+      "Include Similar Results switch"
+    ],
+    "sort_landmark": "Sort by menu contains Rate - Highest and Rate per mile - Highest as distinct choices. Rate - Highest was selected and, after the bounded update, numeric displayed totals were descending.",
+    "virtual_scroll": {
+      "viewport": "cdk-virtual-scroll-viewport.table-rows-container",
+      "content": ".cdk-virtual-scroll-content-wrapper",
+      "row": ".row-container"
+    },
+    "row_fields": {
+      "age": ".cell-age dat-age",
+      "displayed_total_and_per_mile": ".cell-rate dat-rate; displayed total is contained by .offer",
+      "route_and_trip_miles": ".cell-route dat-route",
+      "pickup": ".cell-timing dat-timing",
+      "equipment_weight_length_load_type": ".cell-equipment dat-equipment",
+      "company": ".cell-company dat-company",
+      "credit_and_days_to_pay": ".cell-credit dat-credit"
+    },
+    "details": {
+      "comments": "dat-notes .notes-contents.multiline",
+      "non_contact_candidates": [
+        "origin and destination",
+        "pickup dates",
+        "trip miles",
+        "equipment load/truck/length/weight",
+        "commodity",
+        "reference ID",
+        "total rate",
+        "rate per mile",
+        "displayed market rates",
+        "company and non-contact company facts"
+      ]
+    },
+    "prohibited_fields_and_actions": [
+      "contact information",
+      "phone",
+      "email",
+      "Book Now",
+      "contact controls",
+      "bid",
+      "message",
+      "post",
+      "save or favorite",
+      "export or download"
+    ],
+    "direct_result_scope": "Include Similar Results was observed false. The results summary reported the direct count separately from similar results. V1 includes direct results only.",
+    "rate_semantics": "The visible column label is Rate, not Offer. Each numeric row presents a total-dollar .offer value and a distinct per-mile value. V1 ranks only the total-dollar value by selecting Rate - Highest; it never ranks RPM or RateView market data.",
+    "availability_semantics": "Rows visibly marked CANCELED are unavailable. Direct rows without a numeric total-dollar Rate remain excluded as MISSING_OR_NON_NUMERIC_OFFER. Numeric direct rows not marked CANCELED are eligible.",
+    "stable_identity": "Every observed .row-container had a unique table-row-* DOM id. Treat it as a candidate DAT row identifier only; use it for deduplication only if the fresh approved result confirms stability through the result update.",
+    "fresh_result_verification": {
+      "direct_result_count": 23,
+      "similar_result_count": 106,
+      "direct_dom_rows": 23,
+      "separator_rows": 1,
+      "numeric_eligible_rows": 15,
+      "missing_or_nonnumeric_total_rows": 8,
+      "returned_rows": 10,
+      "similar_results_included": false,
+      "total_rates_descending_after_sort": true
+    },
+    "comment_rule": "Read dat-notes .notes-contents.multiline only when the read-only details panel is displayed. Sanitize and omit phone/email-like content. If the panel is not displayed, return null with not_displayed status; never activate a contact control to obtain comments."
+  },
+  "authentication_observation": "The authorized human restored the shared DAT session. Search Loads was authenticated at the approved one.dat.com route.",
+  "actions_performed": "Authenticated structural discovery, exact fictional input staging, one explicitly approved Search Loads submission, Rate - Highest selection, direct-result scope validation, and read-only row/comment-control inspection. No booking, contact, bid, message, post, purchase, save, export, download, or account action was activated."
+}

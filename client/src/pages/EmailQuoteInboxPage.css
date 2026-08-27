@@ -145,10 +145,10 @@
   font-weight: 700;
 }
 
-.eq-mailbox-meta .eq-dat-disabled {
-  color: #8c692e;
-  background: #fff8e9;
-  border-color: #ead8ac;
+.eq-mailbox-meta .eq-dat-enabled {
+  color: #176b5a;
+  background: #e6f4f0;
+  border-color: #b7dace;
 }
 
 .eq-message {
@@ -550,7 +550,13 @@
 }
 
 .eq-field-grid.freight {
-  grid-template-columns: repeat(5, minmax(80px, .7fr)) minmax(160px, 1.5fr);
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+}
+
+.eq-field-grid.freight .commodity,
+.eq-field-grid.freight .temperature-control,
+.eq-field-grid.freight .truck-assignment {
+  grid-column: span 2;
 }
 
 .eq-field-grid label,
@@ -569,6 +575,7 @@
 }
 
 .eq-field-grid input,
+.eq-field-grid select,
 .eq-money-field input,
 .eq-notes-field textarea {
   width: 100%;
@@ -582,12 +589,67 @@
   outline: none;
 }
 
-.eq-field-grid input {
+.eq-field-grid input,
+.eq-field-grid select {
   height: 36px;
   padding: 0 9px;
 }
 
+.eq-field-grid .eq-checkbox-field {
+  min-height: 36px;
+  margin-top: 5px;
+  padding: 0 10px;
+  border: 1px solid #cdd8e1;
+  border-radius: 8px;
+  color: #15293d;
+  background: #fbfcfd;
+  font-size: 10px;
+}
+
+.eq-field-grid .eq-checkbox-field input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: #2d8dac;
+}
+
+.eq-assignment-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #b9d7c9;
+  border-radius: 9px;
+  color: #1d6655;
+  background: #f1f8f5;
+}
+
+.eq-assignment-note.review {
+  border-color: #e8cea2;
+  color: #875519;
+  background: #fff6e7;
+}
+
+.eq-assignment-note strong,
+.eq-assignment-note span {
+  display: block;
+}
+
+.eq-assignment-note strong {
+  color: #172b3e;
+  font-size: 11px;
+}
+
+.eq-assignment-note span {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .eq-field-grid input:focus,
+.eq-field-grid select:focus,
 .eq-money-field input:focus,
 .eq-notes-field textarea:focus {
   border-color: #62a9bf;
@@ -630,6 +692,31 @@
 .eq-carrier-card.unavailable {
   cursor: not-allowed;
   opacity: .68;
+}
+
+.eq-carrier-card.benchmark {
+  cursor: default;
+  border-color: #b9d7c9;
+  background: linear-gradient(180deg, #fbfefd, #f1f8f5);
+  opacity: 1;
+}
+
+.eq-carrier-top em.market {
+  color: #1d6655;
+  background: #def1ea;
+}
+
+.eq-market-range {
+  display: flex;
+  gap: 12px;
+  margin: -2px 0 10px;
+  color: #3c6670;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.eq-dat-button {
+  flex: 0 0 auto;
 }
 
 .eq-carrier-top {
@@ -708,6 +795,150 @@
   color: #4f6878;
   background: #eef5f7;
   font-size: 10px;
+  line-height: 1.45;
+}
+
+.eq-dat-loads-section {
+  border-color: #bdd4df;
+  background: linear-gradient(180deg, #fcfeff, #f5f9fb);
+}
+
+.eq-dat-loads-state {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid #e4cda6;
+  border-radius: 10px;
+  color: #8c5c25;
+  background: #fff8ed;
+}
+
+.eq-dat-loads-state strong,
+.eq-dat-loads-state span {
+  display: block;
+}
+
+.eq-dat-loads-state strong {
+  color: #4b3825;
+  font-size: 11px;
+}
+
+.eq-dat-loads-state span {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.eq-dat-loads-summary,
+.eq-dat-loads-criteria {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.eq-dat-loads-summary span,
+.eq-dat-loads-criteria em {
+  padding: 5px 8px;
+  border: 1px solid #cfdae2;
+  border-radius: 999px;
+  color: #53697a;
+  background: #fff;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.eq-dat-loads-summary strong {
+  color: #173d56;
+}
+
+.eq-dat-loads-criteria {
+  color: #294d64;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.eq-dat-loads-criteria em {
+  color: #176b5a;
+  border-color: #b9d7c9;
+  background: #edf8f4;
+  font-weight: 750;
+}
+
+.eq-dat-loads-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #cedae3;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.eq-dat-loads-table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.eq-dat-loads-table th,
+.eq-dat-loads-table td {
+  padding: 10px;
+  border-bottom: 1px solid #e4eaef;
+  vertical-align: top;
+  text-align: left;
+}
+
+.eq-dat-loads-table th {
+  color: #6a7b8c;
+  background: #f4f7f9;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.eq-dat-loads-table th:nth-child(1) { width: 13%; }
+.eq-dat-loads-table th:nth-child(2) { width: 20%; }
+.eq-dat-loads-table th:nth-child(3) { width: 10%; }
+.eq-dat-loads-table th:nth-child(4) { width: 16%; }
+.eq-dat-loads-table th:nth-child(5) { width: 14%; }
+.eq-dat-loads-table th:nth-child(6) { width: 9%; }
+.eq-dat-loads-table th:nth-child(7) { width: 18%; }
+
+.eq-dat-loads-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.eq-dat-loads-table td strong,
+.eq-dat-loads-table td span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.eq-dat-loads-table td strong {
+  color: #193247;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.eq-dat-loads-table td:first-child strong {
+  color: #116b58;
+  font-size: 11px;
+}
+
+.eq-dat-loads-table td span {
+  margin-top: 4px;
+  color: #718092;
+  font-size: 8px;
+  line-height: 1.4;
+}
+
+.eq-dat-loads-note {
+  margin: 9px 0 0;
+  color: #6b7b8b;
+  font-size: 9px;
   line-height: 1.45;
 }
 
@@ -991,5 +1222,11 @@
   .eq-carrier-grid,
   .eq-pricing-grid {
     grid-template-columns: 1fr;
+  }
+
+  .eq-field-grid.freight .commodity,
+  .eq-field-grid.freight .temperature-control,
+  .eq-field-grid.freight .truck-assignment {
+    grid-column: auto;
   }
 }

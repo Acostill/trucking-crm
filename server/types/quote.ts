@@ -47,6 +47,23 @@ export interface UnifiedQuoteRequest {
   weight?: Weight;
   truckType?: string;
   equipmentCategory?: string;
+  datEquipmentType?: 'Van' | 'Flatbed' | 'Reefer' | string;
+  temperatureControlled?: boolean;
+  temperatureControl?: {
+    minC?: number;
+    maxC?: number;
+    [key: string]: any;
+  };
+  truckAssignment?: {
+    status?: 'assigned' | 'needs_review' | string;
+    source?: 'auto' | 'staff' | string;
+    ruleVersion?: string;
+    reasonCode?: string;
+    reason?: string;
+    baseTruckType?: string;
+    serviceCategory?: 'dry' | 'reefer' | string;
+    [key: string]: any;
+  };
   hazardousMaterial?: {
     unNumbers?: string[];
   };
@@ -92,4 +109,3 @@ export interface StandardizedQuote {
   };
   error?: string;
 }
-

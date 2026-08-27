@@ -41,7 +41,11 @@ const EMPTY_EDITOR = {
   width: '',
   height: '',
   totalWeight: '',
-  commodity: ''
+  commodity: '',
+  temperatureControlled: false,
+  truckType: '',
+  truckTypeSource: '',
+  datEquipmentType: ''
 };
 
 const PREVIEW_USER = {
@@ -62,6 +66,15 @@ const PREVIEW_MAILBOX = {
   lastSkipped: 3,
   lastFailed: 0
 };
+
+const TRUCK_TYPE_OPTIONS = [
+  'Cargo Van',
+  'Box Truck',
+  'Straight Truck',
+  'Reefer Cargo Van',
+  'Reefer Box Truck',
+  'Reefer Straight Truck'
+];
 
 const PREVIEW_QUOTES = [
   {
@@ -95,7 +108,16 @@ const PREVIEW_QUOTES = [
         parts: [{ count: 1, length: 48, width: 40, height: 48 }]
       },
       weight: { value: 500, unit: 'lbs' },
-      commodity: 'Medical equipment'
+      commodity: 'Medical equipment',
+      temperatureControlled: false,
+      truckType: 'Cargo Van',
+      truckAssignment: {
+        status: 'assigned',
+        source: 'auto',
+        ruleVersion: 'fct-truck-assignment-v1',
+        reason: 'Smallest truck within 3 pallets, 3,000 lb, and the v1 dimension guard.'
+      },
+      datEquipmentType: 'Van'
     },
     carrierQuotes: [
       {
@@ -115,6 +137,71 @@ const PREVIEW_QUOTES = [
         lineHaul: 1396.4,
         truckType: 'Expedited LTL',
         transitTime: 1
+      },
+      {
+        key: 'datSpot',
+        source: 'DAT Spot Market',
+        available: true,
+        selectable: false,
+        benchmark: true,
+        status: 'completed',
+        cost: 1285,
+        marketAverage: 1285,
+        marketLow: 1095,
+        marketHigh: 1460,
+        ratePerMile: 1.92,
+        lowRatePerMile: 1.64,
+        highRatePerMile: 2.18,
+        miles: 669,
+        timeframe: '7 days',
+        truckType: 'Van'
+      },
+      {
+        key: 'datContract',
+        source: 'DAT Contract Market',
+        available: true,
+        selectable: false,
+        benchmark: true,
+        status: 'completed',
+        cost: 1340,
+        marketAverage: 1340,
+        marketLow: 1170,
+        marketHigh: 1515,
+        ratePerMile: 2.0,
+        lowRatePerMile: 1.75,
+        highRatePerMile: 2.26,
+        miles: 669,
+        timeframe: '90 days',
+        truckType: 'Van'
+      },
+      {
+        key: 'datLoadOffers',
+        source: 'DAT Search Loads',
+        available: true,
+        selectable: false,
+        benchmark: true,
+        status: 'completed',
+        lookupTimestamp: '2026-08-13T16:34:43.226Z',
+        resultCount: 23,
+        eligibleCount: 15,
+        excludedCount: 8,
+        outcome: 'completed',
+        acceptedCriteria: {
+          origin: 'Miami, FL',
+          destination: 'Atlanta, GA',
+          equipmentType: 'Vans (Standard)',
+          pickupDate: '2026-08-03',
+          originDeadheadMiles: 150,
+          destinationDeadheadMiles: 150,
+          loadType: 'Full & Partial',
+          includeSimilarResults: false,
+          sort: 'Rate - Highest'
+        },
+        offers: [
+          { rank: 1, datLoadId: 'table-row-preview-1', displayedTotal: '$2,450', totalUsd: 2450, rpm: '$3.66/mi', tripMiles: '669 mi', origin: 'Miami, FL', destination: 'Atlanta, GA', originDeadhead: 'DH-O 12 mi', destinationDeadhead: 'DH-D 18 mi', pickup: 'Aug 3', equipmentCode: 'V', weight: '500 lbs', lengthLoadType: 'Van · Full', company: 'Demo Carrier One', creditScore: '97', daysToPay: '18 DTP', comments: 'Team pickup requested; appointment required.', commentsStatus: 'displayed' },
+          { rank: 2, datLoadId: 'table-row-preview-2', displayedTotal: '$2,300', totalUsd: 2300, rpm: '$3.44/mi', tripMiles: '669 mi', origin: 'Miami, FL', destination: 'Atlanta, GA', originDeadhead: 'DH-O 25 mi', destinationDeadhead: 'DH-D 9 mi', pickup: 'Aug 3', equipmentCode: 'V', weight: '500 lbs', lengthLoadType: 'Van · Full', company: 'Demo Carrier Two', creditScore: '94', daysToPay: '21 DTP', comments: null, commentsStatus: 'not_displayed' },
+          { rank: 3, datLoadId: 'table-row-preview-3', displayedTotal: '$2,150', totalUsd: 2150, rpm: '$3.21/mi', tripMiles: '669 mi', origin: 'Miami, FL', destination: 'Atlanta, GA', originDeadhead: 'DH-O 31 mi', destinationDeadhead: 'DH-D 22 mi', pickup: 'Aug 3', equipmentCode: 'V', weight: '500 lbs', lengthLoadType: 'Van · Full', company: 'Demo Carrier Three', creditScore: '91', daysToPay: '25 DTP', comments: 'No touch freight.', commentsStatus: 'displayed' }
+        ]
       }
     ],
     recommendation: {
@@ -123,7 +210,7 @@ const PREVIEW_QUOTES = [
       carrierCost: 1248.62,
       defaultMarginPct: 18,
       suggestedClientPrice: 1473.37,
-      reason: 'Lowest available carrier cost. Staff should confirm service and transit before sending.'
+      reason: 'Lowest available carrier cost. Compare it with the DAT market benchmark, then confirm service and transit before sending.'
     },
     selection: {
       carrierKey: null,
@@ -163,7 +250,13 @@ const PREVIEW_QUOTES = [
       },
       pieces: { quantity: 2, unit: 'in', parts: [{}] },
       weight: { unit: 'lbs' },
-      commodity: 'Aircraft parts'
+      commodity: 'Aircraft parts',
+      truckAssignment: {
+        status: 'needs_review',
+        source: 'auto',
+        ruleVersion: 'fct-truck-assignment-v1',
+        reason: 'Pallet count, total weight, and complete dimensions are required before assigning a truck.'
+      }
     },
     carrierQuotes: [],
     recommendation: null,
@@ -367,13 +460,17 @@ function shipmentToEditor(shipment) {
     width: firstPart.width != null ? String(firstPart.width) : '',
     height: firstPart.height != null ? String(firstPart.height) : '',
     totalWeight: weight.value != null ? String(weight.value) : '',
-    commodity: (shipment && shipment.commodity) || ''
+    commodity: (shipment && shipment.commodity) || '',
+    temperatureControlled: Boolean(shipment && shipment.temperatureControlled),
+    truckType: (shipment && shipment.truckType) || '',
+    truckTypeSource: (shipment && shipment.truckAssignment && shipment.truckAssignment.source) || '',
+    datEquipmentType: (shipment && shipment.datEquipmentType) || ''
   };
 }
 
 function buildShipment(editor, existing) {
   const palletCount = Number(editor.pallets) || undefined;
-  return {
+  const shipment = {
     ...(existing || {}),
     pickup: {
       ...((existing && existing.pickup) || {}),
@@ -413,8 +510,26 @@ function buildShipment(editor, existing) {
       value: Number(editor.totalWeight) || undefined,
       unit: 'lbs'
     },
-    commodity: editor.commodity.trim()
+    commodity: editor.commodity.trim(),
+    temperatureControlled: Boolean(editor.temperatureControlled),
+    truckType: editor.truckType,
+    datEquipmentType: editor.datEquipmentType
   };
+
+  if (!editor.truckType) {
+    delete shipment.truckType;
+    delete shipment.truckAssignment;
+    delete shipment.datEquipmentType;
+  } else if (editor.truckTypeSource === 'staff') {
+    shipment.truckAssignment = {
+      status: 'assigned',
+      source: 'staff',
+      ruleVersion: 'fct-truck-assignment-v1',
+      reason: 'Truck type confirmed by staff.'
+    };
+  }
+
+  return shipment;
 }
 
 function QuoteListItem({ quote, active, onClick }) {
@@ -456,6 +571,8 @@ export default function EmailQuoteInboxPage() {
   const [savingShipment, setSavingShipment] = useState(false);
   const [savingPrice, setSavingPrice] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
+  const [runningDat, setRunningDat] = useState(false);
+  const [runningDatLoads, setRunningDatLoads] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [editor, setEditor] = useState(EMPTY_EDITOR);
@@ -527,22 +644,22 @@ export default function EmailQuoteInboxPage() {
     setEmailNote(buildDefaultQuoteNote(detail));
   }
 
-  async function loadDetail(id) {
+  async function loadDetail(id, silent) {
     if (!id) return;
     if (previewMode) {
       const detail = quotes.find(function(quote) { return quote.id === id; });
       if (detail) applyDetail(detail);
       return;
     }
-    setDetailLoading(true);
-    setError('');
+    if (!silent) setDetailLoading(true);
+    if (!silent) setError('');
     try {
       const detail = await requestJson('/api/email-quotes/' + id);
       applyDetail(detail);
     } catch (requestError) {
       setError(requestError.message || 'Unable to load the email quote');
     } finally {
-      setDetailLoading(false);
+      if (!silent) setDetailLoading(false);
     }
   }
 
@@ -581,6 +698,21 @@ export default function EmailQuoteInboxPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, previewMode]);
 
+  useEffect(function() {
+    if (previewMode || !selected) return undefined;
+    const options = Array.isArray(selected.carrierQuotes) ? selected.carrierQuotes : [];
+    const waitingForDat = options.some(function(option) {
+      return (option.key === 'datRateView' || option.key === 'datLoadOffers') &&
+        ['pending', 'running'].indexOf(option.status) > -1;
+    });
+    if (!waitingForDat) return undefined;
+    const timer = window.setInterval(function() {
+      loadDetail(selected.id, true);
+    }, 4000);
+    return function() { window.clearInterval(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected && selected.id, selected && JSON.stringify(selected.carrierQuotes), previewMode]);
+
   const selectedCarrier = useMemo(function() {
     const options = selected && Array.isArray(selected.carrierQuotes)
       ? selected.carrierQuotes
@@ -598,7 +730,7 @@ export default function EmailQuoteInboxPage() {
   }, [selected, emailNote]);
 
   function chooseCarrier(option) {
-    if (!option.available) return;
+    if (!option.available || option.selectable === false || option.benchmark === true) return;
     setCarrierKey(option.key);
     const defaultMargin =
       selected && selected.selection && selected.selection.marginPct != null
@@ -712,6 +844,50 @@ export default function EmailQuoteInboxPage() {
     }
   }
 
+  async function approveDatLookup() {
+    if (!selected) return;
+    if (previewMode) {
+      setNotice('Demo DAT lookup is complete. Spot and Contract market benchmarks are shown below.');
+      return;
+    }
+    setRunningDat(true);
+    setError('');
+    setNotice('');
+    try {
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/dat-rateview', {
+        method: 'POST'
+      });
+      applyDetail(detail);
+      setNotice('DAT lookup approved. The worker will update this quote automatically.');
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to approve the DAT lookup');
+    } finally {
+      setRunningDat(false);
+    }
+  }
+
+  async function approveDatSearchLoads() {
+    if (!selected) return;
+    if (previewMode) {
+      setNotice('Demo DAT Search Loads results are shown below, ranked by highest total Rate.');
+      return;
+    }
+    setRunningDatLoads(true);
+    setError('');
+    setNotice('');
+    try {
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/dat-search-loads', {
+        method: 'POST'
+      });
+      applyDetail(detail);
+      setNotice('DAT Search Loads approved. The worker will return up to 10 highest direct rates automatically.');
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to approve DAT Search Loads');
+    } finally {
+      setRunningDatLoads(false);
+    }
+  }
+
   async function saveClientPrice() {
     if (!selected || !selectedCarrier) return;
     if (previewMode) {
@@ -817,6 +993,38 @@ export default function EmailQuoteInboxPage() {
   const carrierQuotes = selected && Array.isArray(selected.carrierQuotes)
     ? selected.carrierQuotes
     : [];
+  const datStatusOption = carrierQuotes.find(function(option) { return option.key === 'datRateView'; });
+  const datCompleted = carrierQuotes.some(function(option) {
+    return option.key === 'datSpot' || option.key === 'datContract';
+  });
+  const datBusy = datStatusOption && ['pending', 'running'].indexOf(datStatusOption.status) > -1;
+  const datLoadsOption = carrierQuotes.find(function(option) { return option.key === 'datLoadOffers'; });
+  const datLoadsBusy = datLoadsOption && ['pending', 'running'].indexOf(datLoadsOption.status) > -1;
+  const datLoadsCompleted = datLoadsOption && datLoadsOption.status === 'completed';
+  const datEquipmentSaved = Boolean(editor.datEquipmentType) &&
+    editor.datEquipmentType === shipment.datEquipmentType;
+  const savedEditor = shipmentToEditor(shipment);
+  const searchLoadsSnapshotSaved = [
+    'pickupCity',
+    'pickupState',
+    'pickupZip',
+    'pickupDate',
+    'deliveryCity',
+    'deliveryState',
+    'deliveryZip',
+    'datEquipmentType'
+  ].every(function(field) {
+    return String(editor[field] || '').trim().toUpperCase() ===
+      String(savedEditor[field] || '').trim().toUpperCase();
+  });
+  const datApprovalDisabled = runningDat || datBusy || datCompleted ||
+    !datEquipmentSaved || (datStatusOption && datStatusOption.status === 'disabled');
+  const datLoadsApprovalDisabled = runningDatLoads || datLoadsBusy || datLoadsCompleted ||
+    !datEquipmentSaved || !editor.pickupDate || !searchLoadsSnapshotSaved ||
+    (datLoadsOption && datLoadsOption.status === 'disabled');
+  const carrierCostOptions = carrierQuotes.filter(function(option) {
+    return option.key !== 'datLoadOffers';
+  });
   const mailboxReady = mailbox && mailbox.configured && !mailbox.lastError;
 
   return (
@@ -852,7 +1060,7 @@ export default function EmailQuoteInboxPage() {
             <div className="eq-mailbox-meta">
               <span>{mailbox && mailbox.lastSuccessAt ? 'Last checked ' + formatDateTime(mailbox.lastSuccessAt) : 'Not checked yet'}</span>
               <span>Forward Air + ExpediteAll</span>
-              <span className="eq-dat-disabled">DAT later</span>
+              <span className="eq-dat-enabled">DAT RateView + Search Loads worker</span>
             </div>
           </section>
 
@@ -955,6 +1163,56 @@ export default function EmailQuoteInboxPage() {
                         <label>Height (in)<input type="number" value={editor.height} onChange={function(e) { setEditor({ ...editor, height: e.target.value }); }} /></label>
                         <label><span><Weight size={13} /> Total weight (lb)</span><input type="number" value={editor.totalWeight} onChange={function(e) { setEditor({ ...editor, totalWeight: e.target.value }); }} /></label>
                         <label className="commodity">Commodity<input value={editor.commodity} onChange={function(e) { setEditor({ ...editor, commodity: e.target.value }); }} /></label>
+                        <label className="temperature-control">
+                          Temperature service
+                          <span className="eq-checkbox-field">
+                            <input
+                              type="checkbox"
+                              checked={editor.temperatureControlled}
+                              onChange={function(e) {
+                                const checked = e.target.checked;
+                                const dryTruckType = String(editor.truckType || '').replace(/^Reefer\s+/i, '');
+                                setEditor({
+                                  ...editor,
+                                  temperatureControlled: checked,
+                                  truckType: dryTruckType ? (checked ? 'Reefer ' + dryTruckType : dryTruckType) : '',
+                                  datEquipmentType: checked ? 'Reefer' : (dryTruckType ? 'Van' : editor.datEquipmentType)
+                                });
+                              }}
+                            />
+                            Refrigerated / controlled
+                          </span>
+                        </label>
+                        <label className="truck-assignment">
+                          Assigned truck
+                          <select
+                            value={editor.truckType}
+                            onChange={function(e) {
+                              const truckType = e.target.value;
+                              const reefer = /^Reefer\b/i.test(truckType);
+                              setEditor({
+                                ...editor,
+                                truckType,
+                                truckTypeSource: truckType ? 'staff' : '',
+                                temperatureControlled: truckType ? reefer : editor.temperatureControlled,
+                                datEquipmentType: truckType ? (reefer ? 'Reefer' : 'Van') : ''
+                              });
+                            }}
+                          >
+                            <option value="">Assign automatically</option>
+                            {TRUCK_TYPE_OPTIONS.map(function(truckType) {
+                              return <option key={truckType} value={truckType}>{truckType}</option>;
+                            })}
+                          </select>
+                        </label>
+                        <label className="dat-equipment">DAT equipment<select value={editor.datEquipmentType} onChange={function(e) { setEditor({ ...editor, datEquipmentType: e.target.value }); }}><option value="">Choose equipment</option><option value="Van">Van</option><option value="Flatbed">Flatbed</option><option value="Reefer">Reefer</option></select></label>
+                      </div>
+                      <div className={'eq-assignment-note ' + (((selected.shipment || {}).truckAssignment || {}).status === 'needs_review' ? 'review' : '')}>
+                        <Truck size={15} />
+                        <div>
+                          <strong>{((selected.shipment || {}).truckType) || 'Automatic truck assignment pending'}</strong>
+                          <span>{(((selected.shipment || {}).truckAssignment || {}).reason) || 'The smallest safe truck will be assigned from pallets, weight, dimensions, and temperature service when you save.'}</span>
+                        </div>
                       </div>
                     </div>
 
@@ -968,34 +1226,52 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section">
                     <div className="eq-section-heading">
-                      <div><Truck size={18} /><span><strong>Connected carrier costs</strong><small>DAT is intentionally excluded from this phase.</small></span></div>
+                      <div><Truck size={18} /><span><strong>Carrier costs + DAT market benchmarks</strong><small>Select a bookable carrier cost. Use DAT Spot and Contract ranges to validate the market.</small></span></div>
+                      <button type="button" className="eq-secondary-button eq-dat-button" onClick={approveDatLookup} disabled={datApprovalDisabled} title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !datEquipmentSaved ? 'Save shipment details before approving DAT' : ''}>
+                        <RefreshCw size={14} className={(runningDat || datBusy) ? 'spinning' : ''} />
+                        {datCompleted ? 'DAT complete' : datBusy ? 'DAT lookup running' : 'Approve & run DAT lookup'}
+                      </button>
                     </div>
-                    {carrierQuotes.length ? (
+                    {carrierCostOptions.length ? (
                       <div className="eq-carrier-grid">
-                        {carrierQuotes.map(function(option) {
+                        {carrierCostOptions.map(function(option) {
                           const recommended = selected.recommendation && selected.recommendation.carrierKey === option.key;
-                          const active = carrierKey === option.key;
+                          const active = carrierKey === option.key && option.selectable !== false;
+                          const benchmark = option.benchmark === true;
                           return (
                             <button
                               type="button"
                               key={option.key}
-                              className={'eq-carrier-card ' + (active ? 'active ' : '') + (!option.available ? 'unavailable' : '')}
+                              className={'eq-carrier-card ' + (active ? 'active ' : '') + (!option.available ? 'unavailable ' : '') + (benchmark ? 'benchmark' : '')}
                               onClick={function() { chooseCarrier(option); }}
-                              disabled={!option.available}
+                              disabled={!option.available || option.selectable === false}
                             >
                               <div className="eq-carrier-top">
                                 <span>{option.source}</span>
                                 {recommended && <em><Sparkles size={12} /> Suggested</em>}
+                                {benchmark && <em className="market">Market benchmark</em>}
                                 {active && <Check size={16} />}
                               </div>
                               {option.available ? (
                                 <>
                                   <strong>{formatMoney(option.cost)}</strong>
-                                  <p>Carrier cost</p>
-                                  <div className="eq-carrier-details">
-                                    <span>{option.truckType || 'Service confirmed by carrier'}</span>
-                                    <span>{option.transitTime ? option.transitTime + ' day transit' : 'Transit pending'}</span>
-                                  </div>
+                                  <p>{benchmark ? 'Market average — not a bookable carrier quote' : 'Carrier cost'}</p>
+                                  {benchmark ? (
+                                    <>
+                                      <div className="eq-market-range"><span>Low {formatMoney(option.marketLow)}</span><span>High {formatMoney(option.marketHigh)}</span></div>
+                                      <div className="eq-carrier-details">
+                                        <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi avg' : 'Per-mile unavailable'}</span>
+                                        <span>{option.miles ? option.miles.toLocaleString() + ' mi' : 'Miles unavailable'}</span>
+                                        <span>{option.timeframe || 'Market timeframe unavailable'}</span>
+                                        <span>{option.truckType || 'Equipment confirmed by DAT'}</span>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="eq-carrier-details">
+                                      <span>{option.truckType || 'Service confirmed by carrier'}</span>
+                                      <span>{option.transitTime ? option.transitTime + ' day transit' : 'Transit pending'}</span>
+                                    </div>
+                                  )}
                                 </>
                               ) : (
                                 <div className="eq-carrier-error"><AlertCircle size={16} /><span>{option.error || 'No rate returned'}</span></div>
@@ -1009,6 +1285,78 @@ export default function EmailQuoteInboxPage() {
                     )}
                     {selected.recommendation && (
                       <div className="eq-suggestion-line"><Sparkles size={14} /><strong>Suggestion:</strong> {selected.recommendation.reason}</div>
+                    )}
+                  </section>
+
+                  <section className="eq-section eq-dat-loads-section">
+                    <div className="eq-section-heading">
+                      <div><Truck size={18} /><span><strong>DAT Search Loads — highest rates</strong><small>Read-only direct results, ranked by total Rate. Similar Results and contact information are excluded.</small></span></div>
+                      <button
+                        type="button"
+                        className="eq-secondary-button eq-dat-button"
+                        onClick={approveDatSearchLoads}
+                        disabled={datLoadsApprovalDisabled}
+                        title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !editor.pickupDate ? 'Add and save a pickup date first' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and DAT equipment before approving Search Loads' : ''}
+                      >
+                        <RefreshCw size={14} className={(runningDatLoads || datLoadsBusy) ? 'spinning' : ''} />
+                        {datLoadsCompleted ? 'Search Loads complete' : datLoadsBusy ? 'Search Loads running' : 'Approve DAT Search Loads'}
+                      </button>
+                    </div>
+
+                    {!datLoadsOption ? (
+                      <div className="eq-rate-empty"><Truck size={22} /><p>Save a complete shipment, then approve one exact DAT Search Loads query.</p></div>
+                    ) : !datLoadsOption.available ? (
+                      <div className="eq-dat-loads-state">
+                        <AlertCircle size={17} />
+                        <div><strong>{datLoadsOption.status === 'pending' || datLoadsOption.status === 'running' ? 'DAT worker in progress' : 'DAT Search Loads is waiting'}</strong><span>{datLoadsOption.error || 'The worker has not returned a verified result yet.'}</span></div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="eq-dat-loads-summary">
+                          <span><strong>{datLoadsOption.offers ? datLoadsOption.offers.length : 0}</strong> shown</span>
+                          <span><strong>{datLoadsOption.resultCount || 0}</strong> direct results</span>
+                          <span><strong>{datLoadsOption.eligibleCount || 0}</strong> eligible rates</span>
+                          <span><strong>{datLoadsOption.excludedCount || 0}</strong> excluded</span>
+                          <span>Sorted <strong>Rate — highest</strong></span>
+                        </div>
+                        {datLoadsOption.acceptedCriteria && (
+                          <div className="eq-dat-loads-criteria">
+                            <span>{datLoadsOption.acceptedCriteria.origin}</span>
+                            <ArrowRight size={13} />
+                            <span>{datLoadsOption.acceptedCriteria.destination}</span>
+                            <em>{datLoadsOption.acceptedCriteria.equipmentType}</em>
+                            <em>{datLoadsOption.acceptedCriteria.pickupDate}</em>
+                            <em>150 mi DH-O / DH-D</em>
+                          </div>
+                        )}
+                        {datLoadsOption.offers && datLoadsOption.offers.length ? (
+                          <div className="eq-dat-loads-table-wrap">
+                            <table className="eq-dat-loads-table">
+                              <thead>
+                                <tr><th>Rank / rate</th><th>Lane</th><th>Pickup</th><th>Equipment</th><th>Company</th><th>Credit</th><th>Comments</th></tr>
+                              </thead>
+                              <tbody>
+                                {datLoadsOption.offers.map(function(offer) {
+                                  return (
+                                    <tr key={offer.datLoadId}>
+                                      <td><strong>#{offer.rank} {offer.displayedTotal || formatMoney(offer.totalUsd)}</strong><span>{offer.rpm || 'RPM unavailable'} · {offer.tripMiles || 'miles unavailable'}</span></td>
+                                      <td><strong>{offer.origin || 'Origin unavailable'} <ArrowRight size={11} /> {offer.destination || 'Destination unavailable'}</strong><span>{offer.originDeadhead || 'DH-O unavailable'} · {offer.destinationDeadhead || 'DH-D unavailable'}</span></td>
+                                      <td><strong>{offer.pickup || 'Pickup unavailable'}</strong></td>
+                                      <td><strong>{offer.equipmentCode || 'Equipment unavailable'}</strong><span>{offer.weight || 'Weight unavailable'} · {offer.lengthLoadType || 'Length/load type unavailable'}</span></td>
+                                      <td><strong>{offer.company || 'Company unavailable'}</strong></td>
+                                      <td><strong>{offer.creditScore || '—'}</strong><span>{offer.daysToPay || 'DTP unavailable'}</span></td>
+                                      <td><strong>{offer.comments || (offer.commentsStatus === 'redacted' ? 'Contact details removed' : 'Not displayed')}</strong></td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="eq-rate-empty"><Truck size={22} /><p>No eligible numeric direct rates were returned for this approved search.</p></div>
+                        )}
+                        <p className="eq-dat-loads-note">These are read-only DAT load-board rates for pricing context. They are not bookable carrier selections in this CRM.</p>
+                      </>
                     )}
                   </section>
 

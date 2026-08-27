@@ -1,0 +1,25 @@
+{
+  "name": "first-class-dat-rateview-employee",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "auth": "tsx src/cli.ts auth",
+    "auth:cloud": "tsx src/cloudAuth.ts",
+    "quote": "tsx src/cli.ts quote",
+    "worker": "tsx src/worker.ts",
+    "worker:once": "tsx src/worker.ts --once",
+    "demo:stored": "tsx src/cli.ts quote --request-id discovery-2026-08-11-portland-chicago-van --origin \"Portland, OR\" --destination \"Chicago, IL\" --equipment Van --approve-search",
+    "test": "tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@playwright/test": "1.62.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "tsx": "^4.20.3",
+    "typescript": "^5.4.5"
+  }
+}
