@@ -1,6 +1,6 @@
 # Stage 3 QA test matrix
 
-Status: `BLOCKED / PENDING_LIVE_RELIABILITY` for release. Search Loads v1 deterministic checks passed on 2026-08-13, including independent retest of three repaired defects. No QA live DAT search was authorized or executed, so the five-consecutive-pass target remains 0/5 and live browser failure paths are not claimed.
+Status: `BLOCKED / OPEN_RELEASE_DEFECT_AND_PENDING_LIVE_RELIABILITY` for release. Search Loads v1 deterministic checks passed on 2026-08-13, including independent retest of three repaired defects. One production QA attempt was explicitly authorized on 2026-09-01 but failed before submission on a delayed authentication redirect. No DAT search was executed or credit consumed, the live pass target remains 0/5, and `FCT-SL-004` is open.
 
 Approved source: `discovery/workflow-spec.json`, workflow `fct-dat-search-loads-offers-v1` within specification version `0.6-approved-search-loads-v1`. Client facts and constraints are taken from the approved `intake/client-profile.json` and `intake/decisions.md`; observed UI facts come from `discovery/browser-findings.md`, `discovery/evidence-manifest.json`, and `discovery/search-loads-structure-redacted.json`.
 
@@ -18,16 +18,16 @@ Approved source: `discovery/workflow-spec.json`, workflow `fct-dat-search-loads-
 | SL-QA-008 | One explicit CRM approval is tied to the exact saved immutable search snapshot | Independent UI/server inspection, targeted stale-editor repair review, page lint, and production build | Passed after FCT-SL-001 repair | Deterministic only |
 | SL-QA-009 | Completed duplicate reuse and no second submission | Shared ledger unit suite and runner/server inspection | Passed | Deterministic only |
 | SL-QA-010 | Submitted/uncertain and partial completion cannot be resubmitted automatically | Runner/worker/server state-transition inspection | Passed statically; not failure-injected | Pending live/controlled evidence |
-| SL-QA-011 | Session expiry, MFA/CAPTCHA, and human takeover | Approved design inspection: Search Loads worker denies automated authentication and classifies auth as `needs_auth` | Passed statically; not exercised | Pending authorized controlled/live evidence |
+| SL-QA-011 | Session expiry, MFA/CAPTCHA, and human takeover | Approved design inspection plus production attempt 001 with a delayed redirect to the DAT login boundary | Failed: redirect surfaced as `UNKNOWN / UNEXPECTED_ERROR` instead of `AUTH_REQUIRED / needs_auth`; no submission occurred | Release-blocking FCT-SL-004 |
 | SL-QA-012 | Permission change/subscription denial | Fail-closed design inspection | Not executed | Blocked without a safe authorized state |
 | SL-QA-013 | Slow pre-submit and post-submit responses | Bounded-wait and uncertain-state design inspection | Not failure-injected | Pending controlled/live evidence |
 | SL-QA-014 | Popup/frame drift | No popup/frame path is approved; semantic page locators are scoped to the current page | Not executed | Blocked without a safe controlled state |
 | SL-QA-015 | Upload/download failure | Workflow has no upload/download step; static review found no authorized export/download action | Not applicable; any attempt is a failure | Excluded by approved scope |
 | SL-QA-016 | Prohibited DAT actions absent | Static action review of `searchLoads.ts`, runner, and worker; CRM option remains nonselectable/read-only | Passed statically | Live trace audit pending |
 | SL-QA-017 | Server integration and CRM presentation | Server TypeScript, Search Loads contract, page lint, and optimized client build | Passed | Deterministic only |
-| SL-QA-018 | Five isolated consecutive representative live runs | Requires five distinct fictional snapshots and explicit approval for each live search | Not run, 0/5 | Release blocker |
+| SL-QA-018 | Five isolated consecutive representative live runs | Requires five distinct fictional snapshots and explicit approval for each live search | Attempted 1; attempt 001 failed pre-submit, 0 searches executed, 0/5 passes | Release blocker |
 
-Evidence: `qa/runs/2026-08-13-search-loads-v1/summary.md`. Deterministic passes do not count toward `SL-QA-018`.
+Evidence: `qa/runs/2026-08-13-search-loads-v1/summary.md` and `qa/runs/2026-09-01-live-search-001/summary.md`. Deterministic passes and failed pre-submit attempts do not count toward `SL-QA-018`.
 
 ## Test controls
 
