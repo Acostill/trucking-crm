@@ -23,6 +23,32 @@ interface OpenedBrowser {
   page: Page;
 }
 
+type DatTarget = "tools" | "search-loads";
+
+function authRequired(target: DatTarget, message: string): WorkflowError {
+  return new WorkflowError(
+    "AUTH_REQUIRED",
+    message,
+    target === "search-loads" ? "SL-040" : "RV-040",
+  );
+}
+
+function assertApprovedDatOneUrl(page: Page, target: DatTarget): void {
+  if (isLoginUrl(page.url())) {
+    throw authRequired(
+      target,
+      "DAT requires manual authentication. Run the documented authentication flow on the worker host.",
+    );
+  }
+  if (new URL(page.url()).hostname !== "one.dat.com") {
+    throw new WorkflowError(
+      "UNKNOWN_DOMAIN",
+      "DAT navigation left the approved one.dat.com domain.",
+      target === "search-loads" ? "SL-030" : "RV-030",
+    );
+  }
+}
+
 async function waitForHumanAuthentication(
   page: Page,
   config: AppConfig,
@@ -60,6 +86,63 @@ function isLoginUrl(url: string): boolean {
     parsed.hostname === "login.dat.com" ||
     (parsed.hostname === "www.dat.com" && parsed.pathname.startsWith("/login"))
   );
+}
+
+/**
+ * Wait for the approved target landmark while also observing delayed DAT login
+ * redirects. This runs before any workflow form locators are evaluated.
+ */
+export async function waitForAuthenticatedTarget(
+  page: Page,
+  target: DatTarget,
+  timeoutMs: number,
+): Promise<void> {
+  assertApprovedDatOneUrl(page, target);
+
+  const targetReady = target === "search-loads"
+    ? Promise.all([
+      page.getByRole("combobox", { name: "Origin", exact: true })
+        .waitFor({ state: "visible", timeout: timeoutMs }),
+      page.getByRole("combobox", { name: "Destination", exact: true })
+        .waitFor({ state: "visible", timeout: timeoutMs }),
+      page.getByRole("button", { name: "SEARCH", exact: true })
+        .waitFor({ state: "visible", timeout: timeoutMs }),
+    ]).then(() => "ready" as const)
+    : page.getByRole("heading", { name: "Tools", exact: true })
+      .waitFor({ state: "visible", timeout: timeoutMs })
+      .then(() => "ready" as const);
+
+  const loginRedirect = page.waitForURL(
+    (url) => isLoginUrl(url.toString()),
+    { timeout: timeoutMs },
+  ).then(() => "auth" as const).catch(() => new Promise<never>(() => undefined));
+  const unknownDomainRedirect = page.waitForURL(
+    (url) => url.hostname !== "one.dat.com" && !isLoginUrl(url.toString()),
+    { timeout: timeoutMs },
+  ).then(() => "unknown" as const).catch(() => new Promise<never>(() => undefined));
+
+  try {
+    const outcome = await Promise.race([
+      targetReady,
+      loginRedirect,
+      unknownDomainRedirect,
+    ]);
+    if (outcome === "auth") {
+      throw authRequired(
+        target,
+        "DAT redirected to the manual authentication boundary while the application was loading.",
+      );
+    }
+    if (outcome === "unknown") assertApprovedDatOneUrl(page, target);
+    // Close the race where the landmark and redirect become observable together.
+    assertApprovedDatOneUrl(page, target);
+  } catch (error) {
+    // A navigation can detach the target landmark before the URL watcher settles.
+    // Reclassify from the current URL so session loss never surfaces as a raw
+    // Playwright locator error.
+    assertApprovedDatOneUrl(page, target);
+    throw error;
+  }
 }
 
 async function waitForDatOne(page: Page, config: AppConfig): Promise<void> {
@@ -101,46 +184,46 @@ export async function openAuthenticatedTools(
     viewport: null,
   });
   const page = context.pages()[0] || (await context.newPage());
-  const targetUrl = options.target === "search-loads" ? config.searchLoadsUrl : config.toolsUrl;
+  const target: DatTarget = options.target === "search-loads" ? "search-loads" : "tools";
+  const targetUrl = target === "search-loads" ? config.searchLoadsUrl : config.toolsUrl;
   await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 
-  if (isLoginUrl(page.url())) {
-    const humanAuthMode = options.humanAuthMode ||
-      (options.allowHumanAuth === false ? "deny" : "prompt");
-    if (config.headless || humanAuthMode === "deny") {
-      await context.close();
-      throw new WorkflowError(
-        "AUTH_REQUIRED",
-        "DAT requires manual authentication. Run the documented authentication flow on the worker host.",
-        "RV-040",
-      );
+  const humanAuthMode = options.humanAuthMode ||
+    (options.allowHumanAuth === false ? "deny" : "prompt");
+  let authenticationAttempted = false;
+  while (true) {
+    try {
+      assertApprovedDatOneUrl(page, target);
+      await waitForDatOne(page, config);
+      // Authentication setup must prove the same stable authenticated landmark
+      // as a workflow run; a transient one.dat.com URL alone is insufficient.
+      await waitForAuthenticatedTarget(page, target, config.resultTimeoutMs);
+      break;
+    } catch (error) {
+      const delayedAuthRedirect = isLoginUrl(page.url());
+      const requiresAuth = error instanceof WorkflowError &&
+        error.category === "AUTH_REQUIRED";
+      if (!delayedAuthRedirect && !requiresAuth) {
+        await context.close();
+        throw error;
+      }
+      if (authenticationAttempted || config.headless || humanAuthMode === "deny") {
+        await context.close();
+        throw authRequired(
+          target,
+          authenticationAttempted
+            ? "DAT is still showing the login boundary."
+            : "DAT requires manual authentication. Run the documented authentication flow on the worker host.",
+        );
+      }
+      authenticationAttempted = true;
+      await waitForHumanAuthentication(page, config, humanAuthMode);
+      if (isLoginUrl(page.url())) {
+        await context.close();
+        throw authRequired(target, "DAT is still showing the login boundary.");
+      }
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
     }
-    await waitForHumanAuthentication(page, config, humanAuthMode);
-    if (isLoginUrl(page.url())) {
-      await context.close();
-      throw new WorkflowError(
-        "AUTH_REQUIRED",
-        "DAT is still showing the login boundary.",
-        "RV-040",
-      );
-    }
-    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
-  }
-
-  if (new URL(page.url()).hostname !== "one.dat.com") {
-    await context.close();
-    throw new WorkflowError(
-      "UNKNOWN_DOMAIN",
-      "DAT navigation left the approved one.dat.com domain.",
-      "RV-030",
-    );
-  }
-
-  await waitForDatOne(page, config);
-  if (!options.authenticationOnly && options.target !== "search-loads") {
-    await expect(page.getByRole("heading", { name: "Tools", exact: true })).toBeVisible({
-      timeout: config.resultTimeoutMs,
-    });
   }
   return { context, page };
 }
