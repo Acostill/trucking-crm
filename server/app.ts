@@ -1,4 +1,5 @@
 import createError from 'http-errors';
+import crypto from 'crypto';
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -18,6 +19,7 @@ import openrouterDimensionsRouter from './routes/openrouterDimensions';
 import customerRouter from './routes/customer';
 import emailQuotesRouter from './routes/emailQuotes';
 import datWorkerRouter from './routes/datWorker';
+import db from './db';
 
 const app = express();
 // In dev (ts-node-dev) this file runs in place, so __dirname is server/.
@@ -56,11 +58,28 @@ app.use(cors(corsOptions));
 app.set('views', path.join(ROOT_DIR, 'views'));
 app.set('view engine', 'jade');
 
-app.use(logger('dev'));
+app.use(function(req: Request, res: Response, next: NextFunction) {
+  const supplied = String(req.get('X-Request-ID') || '').trim();
+  const requestId = /^[A-Za-z0-9._:-]{1,120}$/.test(supplied)
+    ? supplied
+    : crypto.randomUUID();
+  res.setHeader('X-Request-ID', requestId);
+  next();
+});
+app.use(logger(':method :url :status :response-time ms requestId=:res[x-request-id]'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(ROOT_DIR, 'public')));
+
+app.get('/api/health', async function(_req: Request, res: Response) {
+  try {
+    await db.query('SELECT 1');
+    res.json({ status: 'ok' });
+  } catch (_err) {
+    res.status(503).json({ status: 'unavailable' });
+  }
+});
 
 // Self-hosted single-port mode: the public landing page (landing/dist) owns
 // "/" and its own asset paths, the Lanely CRM (client/build) owns everything

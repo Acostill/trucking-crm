@@ -112,6 +112,15 @@ Use that same secret only in the Railway worker variables or in
 the public Render backend URL. Railway deployment and human reauthentication
 instructions are in `clients/first-class-trucking/automation/README.md`.
 
+For the Render production service, use locked dependencies and the compiled
+server instead of the development watcher:
+
+```text
+Build Command: npm ci --include=dev && npm run build
+Start Command: npm start
+Health Check Path: /api/health
+```
+
 For the local fallback:
 
 ```bash
