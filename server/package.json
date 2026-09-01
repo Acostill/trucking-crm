@@ -2,15 +2,19 @@
   "name": "server",
   "version": "0.0.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only ./bin/www.ts",
     "build": "tsc && npm run build:landing && npm run build:client",
-    "build:landing": "cd ../landing && npm install && npm run build",
-    "build:client": "cd ../client && npm install && CI=false npm run build",
+    "build:landing": "cd ../landing && npm ci --include=dev && npm run build",
+    "build:client": "cd ../client && npm ci --include=dev && CI=false npm run build",
     "db:migrate:email-quotes": "ts-node ./scripts/run-email-quote-migration.ts",
     "db:migrate:dat-rateview": "ts-node ./scripts/run-dat-rateview-migration.ts",
     "test:dat-rateview": "ts-node ./scripts/test-dat-rateview-integration.ts",
     "test:dat-search-loads": "ts-node ./scripts/test-dat-search-loads.ts",
+    "test:dat-worker-state": "ts-node ./scripts/test-dat-worker-state-machine.ts",
     "test:truck-assignment": "ts-node ./scripts/test-truck-assignment.ts",
     "db:migrate:quotes-audit-columns": "ts-node ./scripts/run-quotes-audit-columns-migration.ts",
     "db:migrate:email-quote-thread-index": "ts-node ./scripts/run-email-quote-thread-index-migration.ts",

@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { isDeepStrictEqual } from 'util';
 import db from '../db';
 import { UnifiedQuoteRequest } from '../types/quote';
 import {
@@ -903,6 +904,27 @@ export async function claimDatRateViewJob(workerId: string): Promise<any | null>
          AND started_at IS NULL
          AND claimed_at < NOW() - INTERVAL '10 minutes'`
     );
+    const resumable = await client.query(
+      `SELECT * FROM public.dat_rateview_jobs
+       WHERE worker_id = $1
+         AND status = 'claimed'
+         AND started_at IS NULL
+       ORDER BY claimed_at ASC
+       FOR UPDATE SKIP LOCKED
+       LIMIT 1`,
+      [workerId]
+    );
+    if (resumable.rows.length) {
+      const renewed = await client.query(
+        `UPDATE public.dat_rateview_jobs
+         SET claimed_at = NOW()
+         WHERE id = $1 AND worker_id = $2
+           AND status = 'claimed' AND started_at IS NULL
+         RETURNING *`,
+        [resumable.rows[0].id, workerId]
+      );
+      if (renewed.rows.length) return datWorkerJobPayload(renewed.rows[0]);
+    }
     const pending = await client.query(
       `SELECT * FROM public.dat_rateview_jobs
        WHERE status = 'pending'
@@ -921,17 +943,38 @@ export async function claimDatRateViewJob(workerId: string): Promise<any | null>
     );
     const job = updated.rows[0];
     await updateQuoteDatPlaceholder(client, job, placeholderForJobStatus('claimed'));
-    return {
-      id: job.id,
-      request: jsonValue(job.input_payload, {}),
-      approvedAt: job.approved_at,
-      attemptCount: job.attempt_count
-    };
+    return datWorkerJobPayload(job);
   });
+}
+
+function datWorkerJobPayload(job: any): any {
+  return {
+    id: job.id,
+    request: jsonValue(job.input_payload, {}),
+    approvedAt: job.approved_at,
+    attemptCount: job.attempt_count
+  };
 }
 
 export async function startDatRateViewJob(id: string, workerId: string): Promise<void> {
   await db.transactionWithUser(async function(client) {
+    const current = await client.query(
+      `SELECT * FROM public.dat_rateview_jobs
+       WHERE id = $1 AND worker_id = $2
+       FOR UPDATE`,
+      [id, workerId]
+    );
+    if (!current.rows.length) {
+      const err: any = new Error('DAT job is not claimed by this worker');
+      err.status = 409;
+      throw err;
+    }
+    if (current.rows[0].status === 'running') return;
+    if (current.rows[0].status !== 'claimed') {
+      const err: any = new Error('DAT job is not claimed by this worker');
+      err.status = 409;
+      throw err;
+    }
     const result = await client.query(
       `UPDATE public.dat_rateview_jobs
        SET status = 'running', started_at = NOW()
@@ -983,19 +1026,19 @@ export async function completeDatRateViewJob(
   rawResult: any
 ): Promise<void> {
   await db.transactionWithUser(async function(client) {
-    const active = await client.query(
+    const current = await client.query(
       `SELECT * FROM public.dat_rateview_jobs
-       WHERE id = $1 AND worker_id = $2 AND status IN ('claimed', 'running')
+       WHERE id = $1 AND worker_id = $2
        FOR UPDATE`,
       [id, workerId]
     );
-    if (!active.rows.length) {
+    if (!current.rows.length) {
       const err: any = new Error('DAT job is not active for this worker');
       err.status = 409;
       throw err;
     }
-    const activeJob = active.rows[0];
-    const input: DatRateViewRequest | DatSearchLoadsRequest = jsonValue(activeJob.input_payload, {});
+    const currentJob = current.rows[0];
+    const input: DatRateViewRequest | DatSearchLoadsRequest = jsonValue(currentJob.input_payload, {});
     const isSearchLoads = (input as DatSearchLoadsRequest).workflowId === DAT_SEARCH_LOADS_WORKFLOW_ID;
     const result = isSearchLoads
       ? validateDatSearchLoadsResult(rawResult)
@@ -1006,7 +1049,7 @@ export async function completeDatRateViewJob(
       if (
         searchResult.requestId !== searchInput.requestId ||
         searchResult.shipmentRecordId !== searchInput.shipmentRecordId ||
-        searchResult.searchFingerprint !== activeJob.request_fingerprint ||
+        searchResult.searchFingerprint !== currentJob.request_fingerprint ||
         cleanText(searchResult.acceptedCriteria.origin).toLowerCase() !== cleanText(searchInput.origin).toLowerCase() ||
         cleanText(searchResult.acceptedCriteria.destination).toLowerCase() !== cleanText(searchInput.destination).toLowerCase() ||
         searchResult.acceptedCriteria.equipmentType !== searchInput.equipmentType ||
@@ -1029,6 +1072,17 @@ export async function completeDatRateViewJob(
         err.status = 400;
         throw err;
       }
+    }
+    if (currentJob.status === 'completed') {
+      if (isDeepStrictEqual(jsonValue(currentJob.result_payload, null), result)) return;
+      const err: any = new Error('DAT job is already completed with a different result');
+      err.status = 409;
+      throw err;
+    }
+    if (['claimed', 'running'].indexOf(currentJob.status) === -1) {
+      const err: any = new Error('DAT job is not active for this worker');
+      err.status = 409;
+      throw err;
     }
     const updated = await client.query(
       `UPDATE public.dat_rateview_jobs
@@ -1071,13 +1125,37 @@ export async function failDatRateViewJob(
   message: string
 ): Promise<void> {
   await db.transactionWithUser(async function(client) {
+    const cleanedCategory = cleanText(category).slice(0, 100);
+    const cleanedMessage = cleanText(message).slice(0, 500);
+    const current = await client.query(
+      `SELECT * FROM public.dat_rateview_jobs
+       WHERE id = $1 AND worker_id = $2
+       FOR UPDATE`,
+      [id, workerId]
+    );
+    if (!current.rows.length) {
+      const err: any = new Error('DAT job is not active for this worker');
+      err.status = 409;
+      throw err;
+    }
+    const currentJob = current.rows[0];
+    if (
+      currentJob.status === state &&
+      cleanText(currentJob.error_category) === cleanedCategory &&
+      cleanText(currentJob.error_message) === cleanedMessage
+    ) return;
+    if (['claimed', 'running'].indexOf(currentJob.status) === -1) {
+      const err: any = new Error('DAT job is not active for this worker');
+      err.status = 409;
+      throw err;
+    }
     const updated = await client.query(
       `UPDATE public.dat_rateview_jobs
        SET status = $3, error_category = $4, error_message = $5,
            completed_at = NOW()
        WHERE id = $1 AND worker_id = $2 AND status IN ('claimed', 'running')
        RETURNING *`,
-      [id, workerId, state, cleanText(category).slice(0, 100), cleanText(message).slice(0, 500)]
+      [id, workerId, state, cleanedCategory, cleanedMessage]
     );
     if (!updated.rows.length) {
       const err: any = new Error('DAT job is not active for this worker');

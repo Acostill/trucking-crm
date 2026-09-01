@@ -116,6 +116,12 @@ DAT_CRM_BASE_URL=https://your-render-backend.example.com
 DAT_WORKER_SECRET=<same long random value configured on Render>
 DAT_WORKER_ID=first-class-railway-dat
 DAT_WORKER_POLL_INTERVAL_MS=5000
+DAT_CRM_REQUEST_TIMEOUT_MS=10000
+DAT_CRM_RETRY_MAX_ATTEMPTS=3
+DAT_CRM_RETRY_BASE_DELAY_MS=250
+DAT_CRM_RETRY_MAX_DELAY_MS=5000
+DAT_CRM_RETRY_429_MAX_DELAY_MS=10000
+DAT_WORKER_READINESS_STALE_MS=60000
 ```
 
 Attach one persistent volume at `/data`. Use the public Railway domain only
@@ -135,6 +141,24 @@ or access arrangement; do not attempt to bypass the control.
 - Logs contain IDs, workflow steps, status, duration, and safe categories only—not lanes, rates, or authentication data.
 - RateView screenshots mask lane fields and complete rate cards. Search Loads stores only a safe pre-submit status record; no Search Loads page or result screenshot is retained. Artifacts are automatically pruned after 30 days.
 - Traces are off by default because they may contain confidential data. Enable them only under an approved data-handling exception.
+
+### CRM transport and readiness
+
+- Each CRM request has a 10-second default timeout. Queue claims and identical
+  `start`, `complete`, and `fail` callbacks retry at most three total attempts
+  with exponential backoff and jitter for network errors and HTTP `502`,
+  `503`, `504`, or `520` responses. The CRM state machine makes these repeated
+  callbacks idempotent and rejects a conflicting terminal outcome.
+- HTTP `429` is retried only when the server supplies a valid `Retry-After`
+  value of at most 10 seconds. Other status codes fail immediately.
+- Retry applies only to the CRM HTTP callback. The DAT browser search is never
+  repeated by the transport layer, including after an ambiguous result-delivery
+  response.
+- `/health` allows a 60-second startup window, then returns HTTP `503` when an
+  idle worker has not completed a successful CRM queue poll within 60 seconds.
+  It stays healthy while a claimed DAT job is active so Railway cannot restart
+  the browser during a potentially consequential submission. The response
+  exposes timestamps and safe error categories, never secrets or lane data.
 
 ## Verification
 
