@@ -3,7 +3,7 @@
   "status": "blocked",
   "verdict": "BLOCKED",
   "release_reason": "OPEN_RELEASE_DEFECT_AND_PENDING_LIVE_RELIABILITY",
-  "tested_version": "origin/main 1ea3e4e + this repair commit, including the live-DOM chip-readback follow-up; automation/src/searchLoads.ts SHA-256 3b0fa57bcbd95e1617933ba7c78fe23486c64f96af3f94c5d211f56cf6dd8a09",
+  "tested_version": "origin/main 1ea3e4e + this repair commit, including the timing/idempotency follow-up; automation/src/searchLoads.ts SHA-256 750f0760bb0a1c59f826879cd7b48dd00ff110aeb842263a7a22425a2cc69747",
   "historical_live_sources": "2026-09-01 attempt 001 used Render CRM/API source db30a19 and Railway DAT worker source d6a1950",
   "environment": "One explicitly authorized fictional production attempt used the client-authorized CRM on Render, DAT One, and the Railway worker. The 2026-09-02 equipment repair was validated locally on macOS 26.5.1 arm64 with Node.js v25.8.1, npm 11.11.0, Playwright 1.62.0, and headless Chromium synthetic fixtures. No 2026-09-02 live DAT search or deployment occurred.",
   "dataset_class": "One explicitly approved fictional immutable production QA snapshot from attempt 001 plus synthetic request and DOM fixture data and redacted approved discovery evidence. QA evidence retains no lane values, rates, contact data, credentials, authentication artifacts, screenshots, or raw browser evidence from the production attempt.",
@@ -55,7 +55,7 @@
     "post_rebase_automation_check": "passed on origin/main plus the equipment repair",
     "automation_typecheck": "passed",
     "automation_tests": {
-      "passed": 33,
+      "passed": 34,
       "failed": 0
     },
     "delayed_auth_and_unknown_domain_readiness_tests": {
@@ -64,11 +64,14 @@
     },
     "fct_sl_004_builder_repair": "ready for independent controlled and live retest; defect remains open",
     "independent_equipment_contract_tests": {
-      "passed": 6,
+      "passed": 8,
       "failed": 0,
       "search_activations": 0,
       "realistic_cancel_icon_exclusion": "passed",
-      "wrong_extra_label_rejection": "passed"
+      "wrong_extra_label_rejection": "passed",
+      "auto_collapse_two_stale_chips": "passed with three open events",
+      "already_open_idempotency": "passed with zero summary clicks",
+      "hidden_contract_validation_before_open": "passed with zero summary clicks"
     },
     "server_typecheck_2026_09_01": "passed",
     "post_rebase_focused_server_contracts": {
@@ -106,6 +109,9 @@
     "decorative initials do not select Vans Specialized or another wrong option",
     "known mat-icon[matchipremove] text cancel is removed only from a cloned chip before exact selected-label comparison",
     "additional non-decoration selected-chip text such as Reefers Extra is rejected",
+    "hidden equipment input attributes are validated before opening the editor",
+    "the equipment editor is reopened immediately before each unique stale-chip removal and final fill when DAT collapses it",
+    "an already-visible equipment input skips the summary click and is not toggled closed",
     "recovered authentication, session-recovery, diagnostics, CRM transport, callback-idempotency, and worker-health source matches the recorded Railway source hashes"
   ],
   "required_retest_evidence": [
@@ -147,9 +153,9 @@
     "discovery/evidence-manifest.json"
   ],
   "tested_source_sha256": {
-    "automation/src/searchLoads.ts": "3b0fa57bcbd95e1617933ba7c78fe23486c64f96af3f94c5d211f56cf6dd8a09",
-    "automation/tests/searchLoads.test.ts": "9a855d7e94fc0583cf36f6f9d1f24af34e52f6cef64a2217908b5786b0a131dc",
-    "qa/runs/2026-09-02-dat-equipment-repair/equipment-contract.qa.test.ts": "c05eacf19f058168b43a670cb87510791b9514146175d82b590a1be3b9579f36",
+    "automation/src/searchLoads.ts": "750f0760bb0a1c59f826879cd7b48dd00ff110aeb842263a7a22425a2cc69747",
+    "automation/tests/searchLoads.test.ts": "8ea7bf4614aad9e3a30f11b6cbb2ea1f1e825eff20c332566c2dc74151317a24",
+    "qa/runs/2026-09-02-dat-equipment-repair/equipment-contract.qa.test.ts": "e98f4ec1231db4e9bc2d1fc34f2b00513e77a37d3033f3a4f6fb9e50aac5286c",
     "automation/src/rateview.ts": "b8c764d32f45400c856effb39c158755130be796615876205ccbab87c35396a6",
     "automation/src/runner.ts": "cf286c14b0b0dcb04f513d44ae65c238cea58a900a4933f03845e434756ed475",
     "automation/src/worker.ts": "725160c4f6e12b668811f0dddb6ce609ecd2c6261b468fffcd3b0c929c356614",
@@ -161,5 +167,5 @@
     "automation/src/validation.ts": "b1707c8c114f51b582bf6b85de9372bc062b787ca9c5c208b9845bc9fd578482",
     "server/services/datRateViewJobs.ts": "dfa058a7f1e2103e9604008a12838c1c5626ed56378e91b2d9af4454a71f0c07"
   },
-  "updated_at": "2026-09-02T11:55:07-05:00"
+  "updated_at": "2026-09-02T12:07:31-05:00"
 }

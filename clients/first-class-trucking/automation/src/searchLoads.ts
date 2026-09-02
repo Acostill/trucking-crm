@@ -289,9 +289,6 @@ export async function selectSearchLoadsEquipment(
       "SL-060",
     );
   }
-
-  await summary.click({ timeout: timeoutMs });
-  await input.waitFor({ state: "visible", timeout: timeoutMs });
   if (
     await input.getAttribute("role") !== "combobox" ||
     await input.getAttribute("placeholder") !== "Equipment"
@@ -303,10 +300,24 @@ export async function selectSearchLoadsEquipment(
     );
   }
 
+  const openEquipmentControl = async (): Promise<void> => {
+    if (await input.isVisible().catch(() => false)) return;
+    try {
+      await summary.click({ timeout: timeoutMs });
+      await input.waitFor({ state: "visible", timeout: timeoutMs });
+    } catch {
+      throw new WorkflowError(
+        "UI_DRIFT",
+        "DAT Search Loads Equipment Type control did not open safely.",
+        "SL-060",
+      );
+    }
+  };
+
   while (await selectedChips.count() > 0) {
     const chip = selectedChips.first();
     const remove = chip.locator("[matchipremove]");
-    if (await remove.count() !== 1 || !await remove.isVisible().catch(() => false)) {
+    if (await remove.count() !== 1) {
       throw new WorkflowError(
         "UI_DRIFT",
         "DAT Search Loads selected equipment chip cannot be removed safely.",
@@ -314,7 +325,16 @@ export async function selectSearchLoadsEquipment(
       );
     }
     const before = await selectedChips.count();
-    await remove.click({ timeout: timeoutMs });
+    await openEquipmentControl();
+    try {
+      await remove.click({ timeout: Math.min(timeoutMs, 500) });
+    } catch {
+      throw new WorkflowError(
+        "UI_DRIFT",
+        "DAT Search Loads selected equipment chip cannot be removed safely.",
+        "SL-060",
+      );
+    }
     try {
       await expect(selectedChips).toHaveCount(before - 1, { timeout: timeoutMs });
     } catch {
@@ -326,6 +346,7 @@ export async function selectSearchLoadsEquipment(
     }
   }
 
+  await openEquipmentControl();
   await input.fill(uiLabel);
   const exactPrimaryLabel = page.getByText(uiLabel, { exact: true });
   const option = page.locator('mat-option[role="option"]').filter({

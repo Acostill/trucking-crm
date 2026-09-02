@@ -6,7 +6,7 @@ Approved source: `discovery/workflow-spec.json`, workflow `fct-dat-search-loads-
 
 ## 2026-09-02 Equipment Type repair validation
 
-Tested source: `origin/main 1ea3e4e + this repair commit`, including the live-DOM chip-readback follow-up whose `automation/src/searchLoads.ts` SHA-256 is `3b0fa57bcbd95e1617933ba7c78fe23486c64f96af3f94c5d211f56cf6dd8a09`.
+Tested source: `origin/main 1ea3e4e + this repair commit`, including the timing/idempotency follow-up whose `automation/src/searchLoads.ts` SHA-256 is `750f0760bb0a1c59f826879cd7b48dd00ff110aeb842263a7a22425a2cc69747`.
 
 | Test ID | Requirement / risk | Independent method | Result | Release status |
 |---|---|---|---|---|
@@ -18,11 +18,12 @@ Tested source: `origin/main 1ea3e4e + this repair commit`, including the live-DO
 | SL-EQ-QA-006 | Require exactly one selected chip matching the mapped label | Injected no-chip, wrong-chip, wrong-extra-label, and multiple-chip outcomes | Passed, 4/4 failure states; `FORM_VALUE_REJECTED` at `SL-060`; zero `SEARCH` activations | Deterministic repair evidence |
 | SL-EQ-QA-007 | Stale-chip removal must be safe and observable | Injected absent removal control and a removal click that did not change chip count | Passed, 2/2 failure states; fail closed at `SL-060`; zero `SEARCH` activations | Deterministic repair evidence |
 | SL-EQ-QA-008 | Preserve recovered Railway reliability source exactly and exclude secret/profile material | Compared seven SHA-256 values with the builder's authenticated read-only reconciliation record; scanned automation files for private keys, common token forms, storage state, cookies, and browser-profile artifacts | Passed, 7/7 hashes; no matching secret/profile artifact | Deterministic provenance evidence |
-| SL-EQ-QA-009 | Follow-up automation regression | Fresh `npm run typecheck` and `npm test` after the live-DOM readback fix | Passed; typecheck and 33/33 tests | Deterministic regression evidence |
+| SL-EQ-QA-009 | Follow-up automation regression | Fresh bounded `npm run typecheck` and `npm test` after timing/idempotency hardening | Passed; typecheck and 34/34 tests | Deterministic regression evidence |
 | SL-EQ-QA-010 | Server request/result identity, worker state transitions, and RateView compatibility | Fresh DAT Search Loads, DAT RateView, and worker state-machine focused scripts | Passed, 3/3 contract suites | Deterministic regression evidence |
 | SL-EQ-QA-011 | Client build decision | Checked the working-tree diff for client/server contract changes | Not applicable; no client or server file changed, so the conditional client build was not run | Correctly excluded |
 | SL-EQ-QA-012 | Five isolated consecutive representative live Search Loads passes | Requires five explicit per-search approvals and live DAT submissions | Not run, 0/5 | Release blocker |
 | SL-EQ-QA-013 | Live retained chip includes known Material removal-icon text | Reproduced `mat-chip-ripple + mapped label + mat-icon[matchipremove][aria-hidden=true] cancel`; asserted raw text includes `cancel`, helper succeeds only after excluding `[matchipremove]`, and `Reefers Extra` fails | Passed independently; 6/6 suite; zero `SEARCH` activations | Deterministic fix evidence; post-fix deployed no-search confirmation pending |
+| SL-EQ-QA-014 | Stateful editor timing and idempotent open/reopen | Independent 100ms auto-collapse fixture across two stale chips; initially/continuously open fixture; invalid hidden input role before open | Passed independently; final suite 8/8; three opens for collapsing path, zero summary clicks for already-open path, zero `SEARCH` activations | Deterministic fix evidence; deployment confirmation pending |
 
 Independent evidence: `qa/runs/2026-09-02-dat-equipment-repair/equipment-contract.qa.test.ts` and `qa/runs/2026-09-02-dat-equipment-repair/qa-summary.md`. The initial sandboxed `tsx` launches were unable to create local IPC sockets (`EPERM`); approved reruns passed and this environmental restriction is not a product defect.
 

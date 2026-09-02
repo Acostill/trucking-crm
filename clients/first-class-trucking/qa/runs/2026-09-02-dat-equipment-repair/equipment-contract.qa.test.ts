@@ -26,7 +26,10 @@ type FixtureMode =
   | "no-chip"
   | "wrong-chip"
   | "wrong-extra-label"
-  | "multiple-chip";
+  | "multiple-chip"
+  | "auto-collapse"
+  | "keep-open"
+  | "bad-hidden-contract";
 
 const mappings: Array<{
   requestLabel: SearchLoadsEquipmentType;
@@ -58,6 +61,10 @@ function request(equipmentType: SearchLoadsEquipmentType): SearchLoadsRequest {
 
 function fixture(mode: FixtureMode): string {
   const removeAttribute = mode === "missing-remove" ? "" : "matchipremove";
+  const timedControl = ["auto-collapse", "keep-open", "bad-hidden-contract"].includes(mode);
+  const initialDisplay = mode === "keep-open" ? "block" : timedControl ? "none" : null;
+  const displayStyle = initialDisplay ? `style="display:${initialDisplay}"` : "";
+  const inputRole = mode === "bad-hidden-contract" ? "textbox" : "combobox";
   const reeferOptions = mode === "missing-option"
     ? ""
     : `
@@ -68,14 +75,14 @@ function fixture(mode: FixtureMode): string {
   return `
     <mat-form-field>
       <span>Equipment Type*</span>
-      <mat-chip-list role="listbox">
+      <mat-chip-list role="listbox" ${displayStyle}>
         <mat-chip role="option"><div class="mat-chip-ripple"></div> Vans (Standard) <mat-icon ${removeAttribute} aria-hidden="true">cancel</mat-icon></mat-chip>
         <mat-chip role="option"><div class="mat-chip-ripple"></div> Flatbeds <mat-icon ${removeAttribute} aria-hidden="true">cancel</mat-icon></mat-chip>
       </mat-chip-list>
       <div class="summary-element" contenteditable="true">Equipment</div>
-      <input data-test="equipment-type-dropdown" role="combobox" placeholder="Equipment" style="display:none" />
+      <input data-test="equipment-type-dropdown" role="${inputRole}" placeholder="Equipment" style="display:${initialDisplay ?? "none"}" />
     </mat-form-field>
-    <div id="options">
+    <div id="options" ${displayStyle}>
       <mat-option role="option"><span class="decorative" aria-hidden="true">V</span><span class="primary">Vans (Standard)</span></mat-option>
       <mat-option role="option"><span class="decorative" aria-hidden="true">S</span><span class="primary">Vans (Specialized)</span></mat-option>
       <mat-option role="option"><span class="decorative" aria-hidden="true">F</span><span class="primary">Flatbeds</span></mat-option>
@@ -87,10 +94,30 @@ function fixture(mode: FixtureMode): string {
       const field = document.querySelector('mat-form-field');
       const list = field.querySelector('mat-chip-list');
       const input = field.querySelector('input');
+      const options = document.querySelector('#options');
+      const timedControl = ${JSON.stringify(timedControl)};
+      const autoCollapse = mode === 'auto-collapse';
+      const keepOpen = mode === 'keep-open';
+      let closeTimer;
+      const close = () => {
+        input.style.display = 'none';
+        list.style.display = 'none';
+        options.style.display = 'none';
+        document.body.dataset.closeCount = String(Number(document.body.dataset.closeCount || '0') + 1);
+      };
+      const open = () => {
+        clearTimeout(closeTimer);
+        input.style.display = 'block';
+        list.style.display = 'block';
+        options.style.display = 'block';
+        document.body.dataset.openCount = String(Number(document.body.dataset.openCount || '0') + 1);
+        if (autoCollapse) closeTimer = setTimeout(close, 100);
+      };
       const wireRemove = (chip) => {
         const remove = chip.querySelector('[matchipremove]');
         if (remove) remove.addEventListener('click', () => {
           if (mode !== 'stuck-remove') chip.remove();
+          if (autoCollapse) close();
         });
       };
       const addChip = (label) => {
@@ -114,7 +141,10 @@ function fixture(mode: FixtureMode): string {
       };
       list.querySelectorAll('mat-chip').forEach(wireRemove);
       field.querySelector('.summary-element').addEventListener('click', () => {
-        input.style.display = 'block';
+        document.body.dataset.summaryClicks = String(Number(document.body.dataset.summaryClicks || '0') + 1);
+        if (!timedControl) input.style.display = 'block';
+        else if (input.style.display === 'none') open();
+        else if (!keepOpen) close();
       });
       document.querySelectorAll('mat-option').forEach((option) => option.addEventListener('click', () => {
         const intended = option.querySelector('.primary').textContent.trim();
@@ -211,4 +241,53 @@ test("empty, wrong, extra-label, and multiple selected-chip states fail closed b
   await expectClosedFailure("wrong-chip", "FORM_VALUE_REJECTED");
   await expectClosedFailure("wrong-extra-label", "FORM_VALUE_REJECTED");
   await expectClosedFailure("multiple-chip", "FORM_VALUE_REJECTED");
+});
+
+test("reopens a 100ms auto-collapsing editor before both stale-chip removals and final fill", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(fixture("auto-collapse"));
+    await selectSearchLoadsEquipment(page, "Reefers (Standard)", 1000);
+    assert.deepEqual(
+      (await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts())
+        .map((value) => value.replace(/\s+/g, " ").trim()),
+      ["Reefers cancel"],
+    );
+    assert.equal(Number(await page.locator("body").getAttribute("data-summary-clicks")), 3);
+    assert.equal(Number(await page.locator("body").getAttribute("data-open-count")), 3);
+    assert.ok(Number(await page.locator("body").getAttribute("data-close-count")) >= 2);
+    assert.equal(await page.locator("body").getAttribute("data-search-clicks"), null);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("validates a hidden input before open and never toggles an already-open editor", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const invalid = await browser.newPage();
+    await invalid.setContent(fixture("bad-hidden-contract"));
+    await assert.rejects(
+      selectSearchLoadsEquipment(invalid, "Reefers (Standard)", 500),
+      (error: unknown) =>
+        error instanceof WorkflowError && error.category === "UI_DRIFT" && error.stepId === "SL-060",
+    );
+    assert.equal(await invalid.locator("body").getAttribute("data-summary-clicks"), null);
+    assert.equal(await invalid.locator("body").getAttribute("data-search-clicks"), null);
+    await invalid.close();
+
+    const open = await browser.newPage();
+    await open.setContent(fixture("keep-open"));
+    await selectSearchLoadsEquipment(open, "Reefers (Standard)", 1000);
+    assert.deepEqual(
+      (await open.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts())
+        .map((value) => value.replace(/\s+/g, " ").trim()),
+      ["Reefers cancel"],
+    );
+    assert.equal(await open.locator("body").getAttribute("data-summary-clicks"), null);
+    assert.equal(await open.locator("body").getAttribute("data-search-clicks"), null);
+  } finally {
+    await browser.close();
+  }
 });

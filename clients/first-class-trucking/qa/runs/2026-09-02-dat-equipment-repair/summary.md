@@ -61,6 +61,15 @@ Fresh verification after this follow-up:
 - independent realistic-DOM Equipment Type QA passed `6/6`, including raw `cancel` icon text exclusion and rejection of an additional non-decoration label (`Reefers Extra`), with zero `SEARCH` activations;
 - focused server contracts passed `3/3`: DAT Search Loads, DAT RateView, and worker state machine.
 
+## Timing/idempotency follow-up
+
+The final automation-only hardening validates hidden input attributes before opening, treats an already-visible input as open, and immediately opens or reopens before each unique `[matchipremove]` normal click and before final fill. Final tested `searchLoads.ts` SHA-256 is `750f0760bb0a1c59f826879cd7b48dd00ff110aeb842263a7a22425a2cc69747`.
+
+- Automation typecheck passed and the bounded automation suite passed `34/34`.
+- Independent timing/equipment fixtures passed `8/8`: 100ms auto-collapse across two stale chips recorded three opens, the continuously open state recorded zero summary clicks, and an invalid hidden input contract failed before any open attempt.
+- Every independent timing path recorded zero `SEARCH` activations.
+- Server contracts were not rerun because this follow-up changes only the browser control timing; the prior focused server result remains `3/3`.
+
 ## Remaining QA
 
 - In an authorized staged session, exercise `SL-060` through exact Reefer chip readback and enabled `SEARCH` without pressing `SEARCH`.

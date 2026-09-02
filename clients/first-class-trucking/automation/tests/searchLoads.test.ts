@@ -110,22 +110,23 @@ const equipmentCases: Array<{
 ];
 
 function equipmentFixture(
-  mode: "normal" | "duplicate-chip" | "ambiguous-option" | "wrong-label" = "normal",
+  mode: "normal" | "duplicate-chip" | "ambiguous-option" | "wrong-label" | "keep-open" = "normal",
 ): string {
   const duplicateReefer = mode === "ambiguous-option"
     ? '<mat-option role="option"><span aria-hidden="true">R</span><span>Reefers</span></mat-option>'
     : "";
+  const initialDisplay = mode === "keep-open" ? "block" : "none";
   return `
     <mat-form-field>
       <span>Equipment Type*</span>
-      <mat-chip-list role="listbox">
+      <mat-chip-list role="listbox" style="display:${initialDisplay}">
         <mat-chip role="option"><div class="mat-chip-ripple"></div> Vans (Standard) <mat-icon matchipremove aria-hidden="true">cancel</mat-icon></mat-chip>
         <mat-chip role="option"><div class="mat-chip-ripple"></div> Flatbeds <mat-icon matchipremove aria-hidden="true">cancel</mat-icon></mat-chip>
       </mat-chip-list>
       <div class="summary-element" contenteditable="true">Equipment</div>
-      <input data-test="equipment-type-dropdown" role="combobox" placeholder="Equipment" style="display:none" />
+      <input data-test="equipment-type-dropdown" role="combobox" placeholder="Equipment" style="display:${initialDisplay}" />
     </mat-form-field>
-    <div id="options">
+    <div id="options" style="display:${initialDisplay}">
       <mat-option role="option"><span aria-hidden="true">V</span><span>Vans (Standard)</span></mat-option>
       <mat-option role="option"><span aria-hidden="true">S</span><span>Vans (Specialized)</span></mat-option>
       <mat-option role="option"><span aria-hidden="true">F</span><span>Flatbeds</span></mat-option>
@@ -137,7 +138,27 @@ function equipmentFixture(
       const field = document.querySelector('mat-form-field');
       const list = field.querySelector('mat-chip-list');
       const input = field.querySelector('input');
-      const wireRemove = (chip) => chip.querySelector('[matchipremove]').addEventListener('click', () => chip.remove());
+      const options = document.querySelector('#options');
+      const keepOpen = ${JSON.stringify(mode)} === 'keep-open';
+      let closeTimer;
+      const close = () => {
+        input.style.display = 'none';
+        list.style.display = 'none';
+        options.style.display = 'none';
+        document.body.dataset.closeCount = String(Number(document.body.dataset.closeCount || '0') + 1);
+      };
+      const open = () => {
+        clearTimeout(closeTimer);
+        input.style.display = 'block';
+        list.style.display = 'block';
+        options.style.display = 'block';
+        document.body.dataset.openCount = String(Number(document.body.dataset.openCount || '0') + 1);
+        if (!keepOpen) closeTimer = setTimeout(close, 100);
+      };
+      const wireRemove = (chip) => chip.querySelector('[matchipremove]').addEventListener('click', () => {
+        chip.remove();
+        if (!keepOpen) close();
+      });
       const addChip = (label) => {
         const chip = document.createElement('mat-chip');
         chip.setAttribute('role', 'option');
@@ -154,7 +175,11 @@ function equipmentFixture(
         wireRemove(chip);
       };
       list.querySelectorAll('mat-chip').forEach(wireRemove);
-      field.querySelector('.summary-element').addEventListener('click', () => { input.style.display = 'block'; });
+      field.querySelector('.summary-element').addEventListener('click', () => {
+        document.body.dataset.summaryClicks = String(Number(document.body.dataset.summaryClicks || '0') + 1);
+        if (input.style.display === 'none') open();
+        else close();
+      });
       document.querySelectorAll('mat-option').forEach((option) => option.addEventListener('click', () => {
         addChip(option.querySelector('span:last-child').textContent.trim());
         if (${JSON.stringify(mode)} === 'duplicate-chip') addChip('Flatbeds');
@@ -185,9 +210,29 @@ test("clears stale equipment and retains exactly one mapped chip for all approve
           .map((value) => value.replace(/\s+/g, " ").trim()),
         [`${uiLabel} cancel`],
       );
+      assert.equal(Number(await page.locator("body").getAttribute("data-open-count")), 3);
+      assert.ok(Number(await page.locator("body").getAttribute("data-close-count")) >= 2);
       assert.equal(await page.locator("body").getAttribute("data-search-clicks"), null);
       await page.close();
     }
+  } finally {
+    await browser.close();
+  }
+});
+
+test("does not toggle an already-open equipment editor closed between removals", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(equipmentFixture("keep-open"));
+    await selectSearchLoadsEquipment(page, "Reefers (Standard)", 2000);
+    assert.deepEqual(
+      (await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts())
+        .map((value) => value.replace(/\s+/g, " ").trim()),
+      ["Reefers cancel"],
+    );
+    assert.equal(await page.locator("body").getAttribute("data-summary-clicks"), null);
+    assert.equal(await page.locator("body").getAttribute("data-search-clicks"), null);
   } finally {
     await browser.close();
   }

@@ -9,7 +9,7 @@ The working-tree repair passes deterministic release validation with no new impl
 - Original independent-run base: pre-rebase `HEAD 1a5dbedb4ad2786d3c15f8a6c11c79c236d6ed37` plus the then-uncommitted 2026-09-02 equipment repair and recovered Railway reliability source.
 - Final merged verification source: `origin/main 1ea3e4e + this repair commit`.
 - Initial equipment repair file: `automation/src/searchLoads.ts`, SHA-256 `019d6129c39a03276e30fc08260058573c9d9a401157a81538e4ab5b940c64c1`.
-- Follow-up live-DOM chip-readback source: `automation/src/searchLoads.ts`, SHA-256 `3b0fa57bcbd95e1617933ba7c78fe23486c64f96af3f94c5d211f56cf6dd8a09`; builder test SHA-256 `9a855d7e94fc0583cf36f6f9d1f24af34e52f6cef64a2217908b5786b0a131dc`.
+- Final timing/idempotency follow-up source: `automation/src/searchLoads.ts`, SHA-256 `750f0760bb0a1c59f826879cd7b48dd00ff110aeb842263a7a22425a2cc69747`; builder test SHA-256 `8ea7bf4614aad9e3a30f11b6cbb2ea1f1e825eff20c332566c2dc74151317a24`.
 - Environment: local macOS 26.5.1 arm64; Node.js v25.8.1; npm 11.11.0; Playwright 1.62.0; headless Chromium fixtures.
 - Data: synthetic DOM and request data only. No live DAT query, production job, credential change, profile copy, deployment, customer data, rate result, or contact data.
 
@@ -19,14 +19,14 @@ The working-tree repair passes deterministic release validation with no new impl
 |---|---:|---:|---|
 | Automation TypeScript typecheck | 1 | 0 | `npm run typecheck` |
 | Original pre-rebase automation tests | 28 | 0 | Initial independent-run evidence |
-| Final follow-up automation tests | 33 | 0 | Fresh typecheck and suite; realistic retained chips contain `mat-icon[matchipremove]` text `cancel` |
-| Independent Equipment Type QA tests | 6 | 0 | Fresh realistic-DOM run; 3 mappings, icon exclusion, stale chips, missing/ambiguous options, removal failure, empty/wrong/extra-label/multiple selected chips, and zero `SEARCH` activation |
+| Final timing/idempotency automation tests | 34 | 0 | Fresh typecheck and suite; includes auto-collapse and already-open editor coverage |
+| Independent Equipment Type QA tests | 8 | 0 | Fresh run adds 100ms auto-collapse, two stale-chip reopens, hidden-contract-before-open, and continuously-open idempotency; zero `SEARCH` activations |
 | Focused server contract suites | 3 | 0 | Rerun post-rebase: DAT Search Loads, DAT RateView, and worker state machine |
 | Recovered Railway source hash comparisons | 7 | 0 | All seven non-repair source hashes exactly match the builder's reconciliation record |
 | Client build | 0 | 0 | Not run: no client or server contract file changed |
 | Live release sequence | 0 | 0 | Not authorized; required target remains 0/5 |
 
-Final merged executable evidence: automation `33/33`, independent equipment QA `6/6`, and focused server contracts `3/3`, all passing. The separate TypeScript typecheck passed. The earlier `28/28` automation and `2/2` server results remain original pre-rebase chronology and are superseded by the broader post-rebase verification for the final merged source.
+Final focused evidence: automation `34/34` and independent equipment/timing QA `8/8`, both passing, plus the previously completed focused server contracts `3/3`. The separate TypeScript typecheck passed. No server suite was rerun for this automation-only timing change.
 
 The first sandboxed launch of each `tsx` suite failed before test execution because the sandbox denied creation of the temporary local IPC socket. The authorized reruns completed successfully. This is recorded as an environment constraint, not an automation failure.
 
@@ -41,6 +41,9 @@ The first sandboxed launch of each `tsx` suite failed before test execution beca
 - Observed-style decorative initials did not cause selection of `Vans (Specialized)` or another wrong option.
 - Raw retained-chip text was verified as `<mapped label> cancel`; removing only the cloned `[matchipremove]` decoration yielded the exact mapped business label.
 - A retained label with additional non-decoration text (`Reefers Extra`) was rejected as `FORM_VALUE_REJECTED`, proving the repair does not weaken readback to a partial match.
+- Hidden input role/placeholder attributes are validated before attempting to open the editor; an invalid hidden contract failed with zero summary clicks.
+- A 100ms auto-collapsing fixture with two stale chips required and recorded three opens: once before each removal and once before final fill.
+- An initially and continuously open editor completed with zero summary clicks, proving the open helper does not toggle an already-open control closed.
 - Every independent success and failure fixture recorded zero `SEARCH` activations.
 - The seven recovered reliability files exactly match the recorded Railway-source hashes. A filename and high-confidence token/key scan found no storage state, cookie, browser-profile artifact, private key, or common credential token form in automation source.
 - `git diff --check` passed.
