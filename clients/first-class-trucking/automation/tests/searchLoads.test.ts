@@ -6,6 +6,7 @@ import {
   rankSearchLoadCandidates,
   sanitizeNonContactText,
   searchLoadsEquipmentUiLabel,
+  selectExactSearchLoadsOption,
   selectSearchLoadsEquipment,
   type RawSearchLoadCandidate,
 } from "../src/searchLoads.ts";
@@ -203,6 +204,58 @@ test("maps all approved request labels to the current DAT UI labels", () => {
     equipmentCases.map(({ requestLabel }) => searchLoadsEquipmentUiLabel(requestLabel)),
     equipmentCases.map(({ uiLabel }) => uiLabel),
   );
+});
+
+test("selects one exact primary option label when DAT adds decorative accessible text", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <div role="option"><span aria-hidden="true">P</span><span>Portland, OR</span></div>
+      <div role="option"><span aria-hidden="true">S</span><span>Portland, OR Metro</span></div>
+      <script>
+        document.querySelectorAll('[role="option"]').forEach((option) => {
+          option.addEventListener('click', () => {
+            document.body.dataset.selected = option.textContent.trim();
+          });
+        });
+      </script>
+    `);
+    await selectExactSearchLoadsOption(
+      page,
+      "Portland, OR",
+      2000,
+      "Origin",
+    );
+    assert.equal(await page.locator("body").getAttribute("data-selected"), "PPortland, OR");
+  } finally {
+    await browser.close();
+  }
+});
+
+test("fails closed when an exact primary option label is ambiguous", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <div role="option"><span aria-hidden="true">A</span><span>Portland, OR</span></div>
+      <div role="option"><span aria-hidden="true">B</span><span>Portland, OR</span></div>
+      <script>
+        document.querySelectorAll('[role="option"]').forEach((option) => {
+          option.addEventListener('click', () => {
+            document.body.dataset.clicks = String(Number(document.body.dataset.clicks || '0') + 1);
+          });
+        });
+      </script>
+    `);
+    await assert.rejects(
+      selectExactSearchLoadsOption(page, "Portland, OR", 2000, "Origin"),
+      (error: unknown) => error instanceof WorkflowError && error.category === "UI_DRIFT",
+    );
+    assert.equal(await page.locator("body").getAttribute("data-clicks"), null);
+  } finally {
+    await browser.close();
+  }
 });
 
 test("clears stale equipment and retains exactly one mapped chip for all approved values", async () => {

@@ -198,10 +198,44 @@ export function rankSearchLoadCandidates(
   };
 }
 
-async function exactOption(page: Page, value: string, timeoutMs: number): Promise<void> {
-  const option = page.getByRole("option", { name: value, exact: true });
-  await option.waitFor({ state: "visible", timeout: timeoutMs });
-  await option.click();
+export async function selectExactSearchLoadsOption(
+  page: Page,
+  value: string,
+  timeoutMs: number,
+  fieldName = "field",
+): Promise<void> {
+  const visibleOptions = page.locator('[role="option"]:visible');
+  try {
+    await visibleOptions.first().waitFor({ state: "visible", timeout: timeoutMs });
+  } catch {
+    throw new WorkflowError(
+      "UI_DRIFT",
+      `DAT did not display a ${fieldName} option for the approved value.`,
+      "SL-060",
+    );
+  }
+
+  const exactAccessible = page
+    .getByRole("option", { name: value, exact: true })
+    .filter({ visible: true });
+  if (await exactAccessible.count() === 1) {
+    await exactAccessible.click();
+    return;
+  }
+
+  // Current DAT Material options can prepend decorative text to the option's
+  // accessible name. Match the exact primary visible label inside one visible
+  // option, while still failing closed on a missing or ambiguous match.
+  const exactPrimaryLabel = page.getByText(value, { exact: true });
+  const primaryMatches = visibleOptions.filter({ has: exactPrimaryLabel });
+  if (await primaryMatches.count() !== 1) {
+    throw new WorkflowError(
+      "UI_DRIFT",
+      `DAT ${fieldName} options are missing or ambiguous for the approved value.`,
+      "SL-060",
+    );
+  }
+  await primaryMatches.click();
 }
 
 async function selectCity(
@@ -209,10 +243,11 @@ async function selectCity(
   field: Locator,
   value: string,
   timeoutMs: number,
+  fieldName: "Origin" | "Destination",
 ): Promise<void> {
   await field.fill("");
   await field.fill(value);
-  await exactOption(page, value, timeoutMs);
+  await selectExactSearchLoadsOption(page, value, timeoutMs, fieldName);
   await expect(field).toHaveValue(value, { timeout: timeoutMs });
 }
 
@@ -413,14 +448,19 @@ async function populateSearchLoadsFormOnce(
   await expect(loadType).toHaveCount(1);
   await expect(search).toHaveCount(1);
 
-  await selectCity(page, origin, request.origin, timeoutMs);
-  await selectCity(page, destination, request.destination, timeoutMs);
+  await selectCity(page, origin, request.origin, timeoutMs, "Origin");
+  await selectCity(page, destination, request.destination, timeoutMs, "Destination");
   await fillNamedControl(page, /^DH-O$/i, String(request.originDeadheadMiles));
   await fillNamedControl(page, /^DH-D$/i, String(request.destinationDeadheadMiles));
 
   await selectSearchLoadsEquipment(page, request.equipmentType, timeoutMs);
   await loadType.click();
-  await exactOption(page, request.loadType, timeoutMs);
+  await selectExactSearchLoadsOption(
+    page,
+    request.loadType,
+    timeoutMs,
+    "Load Type",
+  );
 
   const startDate = dateControl(page, "start");
   const endDate = dateControl(page, "end");
