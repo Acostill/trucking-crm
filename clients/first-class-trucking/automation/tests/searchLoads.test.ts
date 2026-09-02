@@ -233,6 +233,33 @@ test("selects one exact primary option label when DAT adds decorative accessible
   }
 });
 
+test("selects one normalized exact primary option when CRM and DAT casing differ", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <div role="option"><span aria-hidden="true">N</span><span>Newton, KS</span></div>
+      <div role="option"><span aria-hidden="true">N</span><span>Newton, IA</span></div>
+      <script>
+        document.querySelectorAll('[role="option"]').forEach((option) => {
+          option.addEventListener('click', () => {
+            document.body.dataset.selected = option.textContent.trim();
+          });
+        });
+      </script>
+    `);
+    await selectExactSearchLoadsOption(
+      page,
+      "NEWTON, KS",
+      2000,
+      "Origin",
+    );
+    assert.equal(await page.locator("body").getAttribute("data-selected"), "NNewton, KS");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("fails closed when an exact primary option label is ambiguous", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

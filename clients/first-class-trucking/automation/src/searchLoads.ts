@@ -228,14 +228,41 @@ export async function selectExactSearchLoadsOption(
   // option, while still failing closed on a missing or ambiguous match.
   const exactPrimaryLabel = page.getByText(value, { exact: true });
   const primaryMatches = visibleOptions.filter({ has: exactPrimaryLabel });
-  if (await primaryMatches.count() !== 1) {
+  if (await primaryMatches.count() === 1) {
+    await primaryMatches.click();
+    return;
+  }
+
+  const normalizedMatchIndexes = await visibleOptions.evaluateAll(
+    (options, expected) => {
+      const target = expected.replace(/\s+/g, " ").trim().toLowerCase();
+      const matchingIndexes: number[] = [];
+      for (let index = 0; index < options.length; index += 1) {
+        const option = options[index];
+        const candidates = [option, ...Array.from(option.querySelectorAll("*"))];
+        for (const candidate of candidates) {
+          const text = ((candidate as HTMLElement).innerText || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .toLowerCase();
+          if (text === target) {
+            matchingIndexes.push(index);
+            break;
+          }
+        }
+      }
+      return matchingIndexes;
+    },
+    value,
+  );
+  if (normalizedMatchIndexes.length !== 1) {
     throw new WorkflowError(
       "UI_DRIFT",
       `DAT ${fieldName} options are missing or ambiguous for the approved value.`,
       "SL-060",
     );
   }
-  await primaryMatches.click();
+  await visibleOptions.nth(normalizedMatchIndexes[0]).click();
 }
 
 async function selectCity(
