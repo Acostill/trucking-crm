@@ -3,7 +3,7 @@
   "status": "blocked",
   "verdict": "BLOCKED",
   "release_reason": "OPEN_RELEASE_DEFECT_AND_PENDING_LIVE_RELIABILITY",
-  "tested_version": "origin/main 1ea3e4ed4eefe6f0fb235ae5476338e89eff4961 plus the working-tree 2026-09-02 DAT Equipment Type repair; automation/src/searchLoads.ts SHA-256 019d6129c39a03276e30fc08260058573c9d9a401157a81538e4ab5b940c64c1",
+  "tested_version": "origin/main 1ea3e4e + this repair commit, including the live-DOM chip-readback follow-up; automation/src/searchLoads.ts SHA-256 3b0fa57bcbd95e1617933ba7c78fe23486c64f96af3f94c5d211f56cf6dd8a09",
   "historical_live_sources": "2026-09-01 attempt 001 used Render CRM/API source db30a19 and Railway DAT worker source d6a1950",
   "environment": "One explicitly authorized fictional production attempt used the client-authorized CRM on Render, DAT One, and the Railway worker. The 2026-09-02 equipment repair was validated locally on macOS 26.5.1 arm64 with Node.js v25.8.1, npm 11.11.0, Playwright 1.62.0, and headless Chromium synthetic fixtures. No 2026-09-02 live DAT search or deployment occurred.",
   "dataset_class": "One explicitly approved fictional immutable production QA snapshot from attempt 001 plus synthetic request and DOM fixture data and redacted approved discovery evidence. QA evidence retains no lane values, rates, contact data, credentials, authentication artifacts, screenshots, or raw browser evidence from the production attempt.",
@@ -20,13 +20,15 @@
   "session_expiry_passed": false,
   "human_takeover_passed": false,
   "safe_pre_submit_boundary_observed": true,
+  "authorized_live_no_search_checks": 1,
   "blocking_defects": [
     "FCT-SL-004: production delayed-auth defect. A builder repair has passed deterministic verification but remains open until independent controlled and live retest proves AUTH_REQUIRED / needs_auth behavior and no submission"
   ],
   "resolved_defects": [
     "FCT-SL-001: CRM approval is disabled when any visible fingerprinted Search Loads field differs from the saved shipment snapshot",
     "FCT-SL-002: server rejects a parsed total that does not equal the displayed total-dollar Rate and validates duplicate/tie integrity",
-    "FCT-SL-003: impossible calendar dates are rejected before browser use"
+    "FCT-SL-003: impossible calendar dates are rejected before browser use",
+    "FCT-SL-005: known matchipremove icon text is excluded from an otherwise exact selected-chip label comparison; independently verified with realistic DOM, deployment confirmation pending"
   ],
   "live_attempt_001": {
     "qa_record": "QA TEST FCT DAT CLOUD 001",
@@ -64,7 +66,9 @@
     "independent_equipment_contract_tests": {
       "passed": 6,
       "failed": 0,
-      "search_activations": 0
+      "search_activations": 0,
+      "realistic_cancel_icon_exclusion": "passed",
+      "wrong_extra_label_rejection": "passed"
     },
     "server_typecheck_2026_09_01": "passed",
     "post_rebase_focused_server_contracts": {
@@ -100,6 +104,8 @@
     "missing, wrong, and multiple selected-chip outcomes fail as FORM_VALUE_REJECTED before SEARCH",
     "unsafe or unsuccessful chip removal fails closed before SEARCH",
     "decorative initials do not select Vans Specialized or another wrong option",
+    "known mat-icon[matchipremove] text cancel is removed only from a cloned chip before exact selected-label comparison",
+    "additional non-decoration selected-chip text such as Reefers Extra is rejected",
     "recovered authentication, session-recovery, diagnostics, CRM transport, callback-idempotency, and worker-health source matches the recorded Railway source hashes"
   ],
   "required_retest_evidence": [
@@ -111,7 +117,7 @@
   "pending_live_cases": [
     "Independently controlled/live retest the ready FCT-SL-004 builder repair",
     "Five consecutive isolated representative live Search Loads passes with one explicit approval per search",
-    "Authenticated staged SL-060 Reefer chip readback and enabled SEARCH verification without activating SEARCH",
+    "Post-fix deployed SL-060 chip readback and enabled SEARCH verification without activating SEARCH",
     "Live or safely controlled session expiry and human takeover",
     "Permission/subscription change and popup/frame drift",
     "Slow pre-submit and post-submit responses",
@@ -141,7 +147,9 @@
     "discovery/evidence-manifest.json"
   ],
   "tested_source_sha256": {
-    "automation/src/searchLoads.ts": "019d6129c39a03276e30fc08260058573c9d9a401157a81538e4ab5b940c64c1",
+    "automation/src/searchLoads.ts": "3b0fa57bcbd95e1617933ba7c78fe23486c64f96af3f94c5d211f56cf6dd8a09",
+    "automation/tests/searchLoads.test.ts": "9a855d7e94fc0583cf36f6f9d1f24af34e52f6cef64a2217908b5786b0a131dc",
+    "qa/runs/2026-09-02-dat-equipment-repair/equipment-contract.qa.test.ts": "c05eacf19f058168b43a670cb87510791b9514146175d82b590a1be3b9579f36",
     "automation/src/rateview.ts": "b8c764d32f45400c856effb39c158755130be796615876205ccbab87c35396a6",
     "automation/src/runner.ts": "cf286c14b0b0dcb04f513d44ae65c238cea58a900a4933f03845e434756ed475",
     "automation/src/worker.ts": "725160c4f6e12b668811f0dddb6ce609ecd2c6261b468fffcd3b0c929c356614",
@@ -153,5 +161,5 @@
     "automation/src/validation.ts": "b1707c8c114f51b582bf6b85de9372bc062b787ca9c5c208b9845bc9fd578482",
     "server/services/datRateViewJobs.ts": "dfa058a7f1e2103e9604008a12838c1c5626ed56378e91b2d9af4454a71f0c07"
   },
-  "updated_at": "2026-09-02T11:40:45-05:00"
+  "updated_at": "2026-09-02T11:55:07-05:00"
 }

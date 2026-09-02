@@ -62,6 +62,17 @@ function clean(value: string | null | undefined): string | null {
   return normalized ? normalized.slice(0, 1000) : null;
 }
 
+async function selectedEquipmentChipLabel(chip: Locator): Promise<string | null> {
+  const label = await chip.evaluate((element) => {
+    const clone = element.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("[matchipremove]").forEach((decoration) => {
+      decoration.remove();
+    });
+    return clone.innerText || clone.textContent || "";
+  });
+  return clean(label);
+}
+
 export function searchLoadsEquipmentUiLabel(
   equipmentType: SearchLoadsRequest["equipmentType"],
 ): string {
@@ -353,7 +364,7 @@ export async function selectSearchLoadsEquipment(
       "SL-060",
     );
   }
-  const selectedLabel = clean(await selectedChips.first().innerText());
+  const selectedLabel = await selectedEquipmentChipLabel(selectedChips.first());
   if (selectedLabel !== uiLabel) {
     throw new WorkflowError(
       "FORM_VALUE_REJECTED",

@@ -49,6 +49,18 @@ The original builder checks above were run before the repair was rebased. Final 
 
 These post-rebase results supersede the narrower original `28/28` automation count for final merged-source reporting while preserving it as historical builder evidence.
 
+## Live-DOM chip-readback follow-up
+
+An authorized deployed no-search check reached authenticated `one.dat.com` and selected the intended option, then failed its chip readback because the live retained DOM contributed known Material removal-icon text: `mat-chip-ripple + Vans (Standard) + mat-icon[matchipremove][aria-hidden=true] cancel`. `SEARCH` was not activated.
+
+The follow-up clones the selected chip, removes only `[matchipremove]` descendants from the clone, normalizes the remaining text, and still requires exact equality with the mapped label. Current tested source SHA-256 is `3b0fa57bcbd95e1617933ba7c78fe23486c64f96af3f94c5d211f56cf6dd8a09`.
+
+Fresh verification after this follow-up:
+
+- automation typecheck passed and automation tests passed `33/33`;
+- independent realistic-DOM Equipment Type QA passed `6/6`, including raw `cancel` icon text exclusion and rejection of an additional non-decoration label (`Reefers Extra`), with zero `SEARCH` activations;
+- focused server contracts passed `3/3`: DAT Search Loads, DAT RateView, and worker state machine.
+
 ## Remaining QA
 
 - In an authorized staged session, exercise `SL-060` through exact Reefer chip readback and enabled `SEARCH` without pressing `SEARCH`.

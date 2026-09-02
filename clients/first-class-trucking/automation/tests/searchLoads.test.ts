@@ -109,7 +109,9 @@ const equipmentCases: Array<{
   { requestLabel: "Reefers (Standard)", uiLabel: "Reefers" },
 ];
 
-function equipmentFixture(mode: "normal" | "duplicate-chip" | "ambiguous-option" = "normal"): string {
+function equipmentFixture(
+  mode: "normal" | "duplicate-chip" | "ambiguous-option" | "wrong-label" = "normal",
+): string {
   const duplicateReefer = mode === "ambiguous-option"
     ? '<mat-option role="option"><span aria-hidden="true">R</span><span>Reefers</span></mat-option>'
     : "";
@@ -117,8 +119,8 @@ function equipmentFixture(mode: "normal" | "duplicate-chip" | "ambiguous-option"
     <mat-form-field>
       <span>Equipment Type*</span>
       <mat-chip-list role="listbox">
-        <mat-chip role="option"><span>Vans (Standard)</span><button matchipremove aria-label="Remove equipment"></button></mat-chip>
-        <mat-chip role="option"><span>Flatbeds</span><button matchipremove aria-label="Remove equipment"></button></mat-chip>
+        <mat-chip role="option"><div class="mat-chip-ripple"></div> Vans (Standard) <mat-icon matchipremove aria-hidden="true">cancel</mat-icon></mat-chip>
+        <mat-chip role="option"><div class="mat-chip-ripple"></div> Flatbeds <mat-icon matchipremove aria-hidden="true">cancel</mat-icon></mat-chip>
       </mat-chip-list>
       <div class="summary-element" contenteditable="true">Equipment</div>
       <input data-test="equipment-type-dropdown" role="combobox" placeholder="Equipment" style="display:none" />
@@ -139,12 +141,15 @@ function equipmentFixture(mode: "normal" | "duplicate-chip" | "ambiguous-option"
       const addChip = (label) => {
         const chip = document.createElement('mat-chip');
         chip.setAttribute('role', 'option');
-        const text = document.createElement('span');
-        text.textContent = label;
-        const remove = document.createElement('button');
+        const ripple = document.createElement('div');
+        ripple.className = 'mat-chip-ripple';
+        const selectedLabel = ${JSON.stringify(mode)} === 'wrong-label' ? label + ' Extra' : label;
+        const text = document.createTextNode(' ' + selectedLabel + ' ');
+        const remove = document.createElement('mat-icon');
         remove.setAttribute('matchipremove', '');
-        remove.setAttribute('aria-label', 'Remove equipment');
-        chip.append(text, remove);
+        remove.setAttribute('aria-hidden', 'true');
+        remove.textContent = 'cancel';
+        chip.append(ripple, text, remove);
         list.append(chip);
         wireRemove(chip);
       };
@@ -176,8 +181,9 @@ test("clears stale equipment and retains exactly one mapped chip for all approve
       await page.setContent(equipmentFixture());
       await selectSearchLoadsEquipment(page, requestLabel, 2000);
       assert.deepEqual(
-        await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts(),
-        [uiLabel],
+        (await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts())
+          .map((value) => value.replace(/\s+/g, " ").trim()),
+        [`${uiLabel} cancel`],
       );
       assert.equal(await page.locator("body").getAttribute("data-search-clicks"), null);
       await page.close();
@@ -207,6 +213,15 @@ test("fails closed when option identity is ambiguous or selected-chip readback i
     );
     assert.equal(await multiple.locator("body").getAttribute("data-search-clicks"), null);
     await multiple.close();
+
+    const wrongLabel = await browser.newPage();
+    await wrongLabel.setContent(equipmentFixture("wrong-label"));
+    await assert.rejects(
+      selectSearchLoadsEquipment(wrongLabel, "Reefers (Standard)", 2000),
+      (error: unknown) => error instanceof WorkflowError && error.category === "FORM_VALUE_REJECTED",
+    );
+    assert.equal(await wrongLabel.locator("body").getAttribute("data-search-clicks"), null);
+    await wrongLabel.close();
   } finally {
     await browser.close();
   }

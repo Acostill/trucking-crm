@@ -25,6 +25,7 @@ type FixtureMode =
   | "stuck-remove"
   | "no-chip"
   | "wrong-chip"
+  | "wrong-extra-label"
   | "multiple-chip";
 
 const mappings: Array<{
@@ -68,8 +69,8 @@ function fixture(mode: FixtureMode): string {
     <mat-form-field>
       <span>Equipment Type*</span>
       <mat-chip-list role="listbox">
-        <mat-chip role="option"><span>Vans (Standard)</span><button ${removeAttribute} aria-label="Remove equipment"></button></mat-chip>
-        <mat-chip role="option"><span>Flatbeds</span><button ${removeAttribute} aria-label="Remove equipment"></button></mat-chip>
+        <mat-chip role="option"><div class="mat-chip-ripple"></div> Vans (Standard) <mat-icon ${removeAttribute} aria-hidden="true">cancel</mat-icon></mat-chip>
+        <mat-chip role="option"><div class="mat-chip-ripple"></div> Flatbeds <mat-icon ${removeAttribute} aria-hidden="true">cancel</mat-icon></mat-chip>
       </mat-chip-list>
       <div class="summary-element" contenteditable="true">Equipment</div>
       <input data-test="equipment-type-dropdown" role="combobox" placeholder="Equipment" style="display:none" />
@@ -95,11 +96,19 @@ function fixture(mode: FixtureMode): string {
       const addChip = (label) => {
         const chip = document.createElement('mat-chip');
         chip.setAttribute('role', 'option');
-        const text = document.createElement('span');
-        text.textContent = label;
-        const remove = document.createElement('button');
+        const ripple = document.createElement('div');
+        ripple.className = 'mat-chip-ripple';
+        const selectedLabel = mode === 'wrong-chip'
+          ? 'Flatbeds'
+          : mode === 'wrong-extra-label'
+            ? label + ' Extra'
+            : label;
+        const text = document.createTextNode(' ' + selectedLabel + ' ');
+        const remove = document.createElement('mat-icon');
         remove.setAttribute('matchipremove', '');
-        chip.append(text, remove);
+        remove.setAttribute('aria-hidden', 'true');
+        remove.textContent = 'cancel';
+        chip.append(ripple, text, remove);
         list.append(chip);
         wireRemove(chip);
       };
@@ -110,7 +119,7 @@ function fixture(mode: FixtureMode): string {
       document.querySelectorAll('mat-option').forEach((option) => option.addEventListener('click', () => {
         const intended = option.querySelector('.primary').textContent.trim();
         if (mode === 'no-chip') return;
-        addChip(mode === 'wrong-chip' ? 'Flatbeds' : intended);
+        addChip(intended);
         if (mode === 'multiple-chip') addChip('Flatbeds');
       }));
       document.querySelector('#search').addEventListener('click', () => {
@@ -158,8 +167,9 @@ test("all mappings clear every stale chip and select one exact current DAT label
       await page.setContent(fixture("normal"));
       await selectSearchLoadsEquipment(page, requestLabel, 1000);
       assert.deepEqual(
-        await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts(),
-        [uiLabel],
+        (await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts())
+          .map((value) => value.replace(/\s+/g, " ").trim()),
+        [`${uiLabel} cancel`],
       );
       assert.equal(await page.locator("body").getAttribute("data-search-clicks"), null);
       await page.close();
@@ -176,8 +186,9 @@ test("decorative initials do not select Vans Specialized or another equipment op
     await page.setContent(fixture("normal"));
     await selectSearchLoadsEquipment(page, "Vans (Standard)", 1000);
     assert.deepEqual(
-      await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts(),
-      ["Vans (Standard)"],
+      (await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts())
+        .map((value) => value.replace(/\s+/g, " ").trim()),
+      ["Vans (Standard) cancel"],
     );
     assert.equal(await page.locator("body").getAttribute("data-search-clicks"), null);
   } finally {
@@ -195,8 +206,9 @@ test("unsafe or unsuccessful stale-chip removal fails closed before SEARCH", asy
   await expectClosedFailure("stuck-remove", "FORM_VALUE_REJECTED");
 });
 
-test("empty, wrong, and multiple selected-chip states fail closed before SEARCH", async () => {
+test("empty, wrong, extra-label, and multiple selected-chip states fail closed before SEARCH", async () => {
   await expectClosedFailure("no-chip", "FORM_VALUE_REJECTED");
   await expectClosedFailure("wrong-chip", "FORM_VALUE_REJECTED");
+  await expectClosedFailure("wrong-extra-label", "FORM_VALUE_REJECTED");
   await expectClosedFailure("multiple-chip", "FORM_VALUE_REJECTED");
 });
