@@ -3,6 +3,7 @@ import { mergeDatCarrierOptions } from '../services/carrierQuoteOptions';
 import {
   DAT_SEARCH_LOADS_WORKFLOW_ID,
   buildDatSearchLoadsRequest,
+  isDatSearchPickupDateCurrentOrFuture,
   mapDatSearchLoadsResult,
   validateDatSearchLoadsResult
 } from '../services/datRateViewJobs';
@@ -33,6 +34,16 @@ function offer(rank: number, totalUsd: number) {
 }
 
 function run() {
+  const validationNow = new Date('2026-09-02T15:00:00Z');
+  assert.strictEqual(
+    isDatSearchPickupDateCurrentOrFuture('2026-09-01', validationNow),
+    false
+  );
+  assert.strictEqual(
+    isDatSearchPickupDateCurrentOrFuture('2026-09-02', validationNow),
+    true
+  );
+
   const candidate = buildDatSearchLoadsRequest('email-quote-search-test', {
     pickup: {
       location: { city: 'Portland', state: 'OR' },

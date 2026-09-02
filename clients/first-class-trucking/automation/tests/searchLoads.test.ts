@@ -277,6 +277,33 @@ test("selects one normalized exact primary option when CRM and DAT casing differ
   }
 });
 
+test("waits for the approved city while DAT replaces a stale autocomplete option", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <div id="options">
+        <div role="option"><span aria-hidden="true">S</span><span>Selma, AL</span></div>
+      </div>
+      <script>
+        setTimeout(() => {
+          const option = document.createElement('div');
+          option.setAttribute('role', 'option');
+          option.innerHTML = '<span aria-hidden="true">S</span><span>Selma, CA</span>';
+          option.addEventListener('click', () => {
+            document.body.dataset.selected = option.textContent.trim();
+          });
+          document.querySelector('#options').replaceChildren(option);
+        }, 150);
+      </script>
+    `);
+    await selectExactSearchLoadsOption(page, "Selma, CA", 2000, "Origin");
+    assert.equal(await page.locator("body").getAttribute("data-selected"), "SSelma, CA");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("fails closed when an exact primary option label is ambiguous", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

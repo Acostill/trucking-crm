@@ -167,7 +167,7 @@ export async function runSearchLoads(
   input: Partial<SearchLoadsRequest>,
 ): Promise<RunSearchLoadsOutcome> {
   const config = loadConfig();
-  const request = validateSearchLoadsRequest(input);
+  const request = validateSearchLoadsRequest(input, new Date(), config.timezone);
   if (request.workflowId !== SEARCH_LOADS_WORKFLOW_ID || !request.approveSearch) {
     throw new WorkflowError(
       "SEARCH_APPROVAL_REQUIRED",

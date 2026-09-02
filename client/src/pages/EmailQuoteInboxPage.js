@@ -76,6 +76,19 @@ const TRUCK_TYPE_OPTIONS = [
   'Reefer Straight Truck'
 ];
 
+function calendarDateInTimezone(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(function(part) {
+    return [part.type, part.value];
+  }));
+  return values.year + '-' + values.month + '-' + values.day;
+}
+
 const PREVIEW_QUOTES = [
   {
     id: 'email-quote-preview-1',
@@ -1003,6 +1016,9 @@ export default function EmailQuoteInboxPage() {
   const datLoadsCompleted = datLoadsOption && datLoadsOption.status === 'completed';
   const datEquipmentSaved = Boolean(editor.datEquipmentType) &&
     editor.datEquipmentType === shipment.datEquipmentType;
+  const datSearchToday = calendarDateInTimezone(new Date(), 'America/New_York');
+  const datSearchPickupDateCurrent = Boolean(editor.pickupDate) &&
+    editor.pickupDate >= datSearchToday;
   const savedEditor = shipmentToEditor(shipment);
   const searchLoadsSnapshotSaved = [
     'pickupCity',
@@ -1020,7 +1036,7 @@ export default function EmailQuoteInboxPage() {
   const datApprovalDisabled = runningDat || datBusy || datCompleted ||
     !datEquipmentSaved || (datStatusOption && datStatusOption.status === 'disabled');
   const datLoadsApprovalDisabled = runningDatLoads || datLoadsBusy || datLoadsCompleted ||
-    !datEquipmentSaved || !editor.pickupDate || !searchLoadsSnapshotSaved ||
+    !datEquipmentSaved || !datSearchPickupDateCurrent || !searchLoadsSnapshotSaved ||
     (datLoadsOption && datLoadsOption.status === 'disabled');
   const carrierCostOptions = carrierQuotes.filter(function(option) {
     return option.key !== 'datLoadOffers';
@@ -1141,7 +1157,7 @@ export default function EmailQuoteInboxPage() {
                         <label>City<input value={editor.pickupCity} onChange={function(e) { setEditor({ ...editor, pickupCity: e.target.value }); }} /></label>
                         <label>State<input maxLength="2" value={editor.pickupState} onChange={function(e) { setEditor({ ...editor, pickupState: e.target.value.toUpperCase() }); }} /></label>
                         <label>ZIP<input value={editor.pickupZip} onChange={function(e) { setEditor({ ...editor, pickupZip: e.target.value }); }} /></label>
-                        <label><span><CalendarDays size={13} /> Pickup date</span><input type="date" value={editor.pickupDate} onChange={function(e) { setEditor({ ...editor, pickupDate: e.target.value }); }} /></label>
+                        <label><span><CalendarDays size={13} /> Pickup date</span><input type="date" min={datSearchToday} value={editor.pickupDate} onChange={function(e) { setEditor({ ...editor, pickupDate: e.target.value }); }} /></label>
                       </div>
                     </div>
 
@@ -1296,7 +1312,7 @@ export default function EmailQuoteInboxPage() {
                         className="eq-secondary-button eq-dat-button"
                         onClick={approveDatSearchLoads}
                         disabled={datLoadsApprovalDisabled}
-                        title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !editor.pickupDate ? 'Add and save a pickup date first' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and DAT equipment before approving Search Loads' : ''}
+                        title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !editor.pickupDate ? 'Add and save a pickup date first' : !datSearchPickupDateCurrent ? 'Pickup date must be today or later' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and DAT equipment before approving Search Loads' : ''}
                       >
                         <RefreshCw size={14} className={(runningDatLoads || datLoadsBusy) ? 'spinning' : ''} />
                         {datLoadsCompleted ? 'Search Loads complete' : datLoadsBusy ? 'Search Loads running' : 'Approve DAT Search Loads'}

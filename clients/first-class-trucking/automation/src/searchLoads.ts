@@ -225,64 +225,84 @@ export async function selectExactSearchLoadsOption(
   fieldName = "field",
 ): Promise<void> {
   const visibleOptions = page.locator('[role="option"]:visible');
-  try {
-    await visibleOptions.first().waitFor({ state: "visible", timeout: timeoutMs });
-  } catch {
-    throw new WorkflowError(
-      "UI_DRIFT",
-      `DAT did not display a ${fieldName} option for the approved value.`,
-      "SL-060",
-    );
-  }
-
   const exactAccessible = page
     .getByRole("option", { name: value, exact: true })
     .filter({ visible: true });
-  if (await exactAccessible.count() === 1) {
-    await exactAccessible.click();
-    return;
-  }
-
-  // Current DAT Material options can prepend decorative text to the option's
-  // accessible name. Match the exact primary visible label inside one visible
-  // option, while still failing closed on a missing or ambiguous match.
   const exactPrimaryLabel = page.getByText(value, { exact: true });
   const primaryMatches = visibleOptions.filter({ has: exactPrimaryLabel });
-  if (await primaryMatches.count() === 1) {
-    await primaryMatches.click();
-    return;
-  }
+  const deadline = Date.now() + timeoutMs;
+  let sawAmbiguousMatch = false;
 
-  const normalizedMatchIndexes = await visibleOptions.evaluateAll(
-    (options, expected) => {
-      const target = expected.replace(/\s+/g, " ").trim().toLowerCase();
-      const matchingIndexes: number[] = [];
-      for (let index = 0; index < options.length; index += 1) {
-        const option = options[index];
-        const candidates = [option, ...Array.from(option.querySelectorAll("*"))];
-        for (const candidate of candidates) {
-          const text = ((candidate as HTMLElement).innerText || "")
-            .replace(/\s+/g, " ")
-            .trim()
-            .toLowerCase();
-          if (text === target) {
-            matchingIndexes.push(index);
-            break;
+  // DAT can briefly expose a stale autocomplete option while the requested
+  // city is still loading. Wait for the approved exact value itself instead
+  // of treating the first visible option as the final result set.
+  do {
+    const accessibleCount = await exactAccessible.count();
+    if (accessibleCount > 1) {
+      sawAmbiguousMatch = true;
+      await page.waitForTimeout(100);
+      continue;
+    }
+    if (accessibleCount === 1) {
+      await exactAccessible.click();
+      return;
+    }
+
+    // Current DAT Material options can prepend decorative text to the
+    // accessible name. Match the exact primary visible label inside one
+    // option, while still failing closed on ambiguity.
+    const primaryCount = await primaryMatches.count();
+    if (primaryCount > 1) {
+      sawAmbiguousMatch = true;
+      await page.waitForTimeout(100);
+      continue;
+    }
+    if (primaryCount === 1) {
+      await primaryMatches.click();
+      return;
+    }
+
+    const normalizedMatchIndexes = await visibleOptions.evaluateAll(
+      (options, expected) => {
+        const target = expected.replace(/\s+/g, " ").trim().toLowerCase();
+        const matchingIndexes: number[] = [];
+        for (let index = 0; index < options.length; index += 1) {
+          const option = options[index];
+          const candidates = [option, ...Array.from(option.querySelectorAll("*"))];
+          for (const candidate of candidates) {
+            const text = ((candidate as HTMLElement).innerText || "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .toLowerCase();
+            if (text === target) {
+              matchingIndexes.push(index);
+              break;
+            }
           }
         }
-      }
-      return matchingIndexes;
-    },
-    value,
-  );
-  if (normalizedMatchIndexes.length !== 1) {
-    throw new WorkflowError(
-      "UI_DRIFT",
-      `DAT ${fieldName} options are missing or ambiguous for the approved value.`,
-      "SL-060",
+        return matchingIndexes;
+      },
+      value,
     );
-  }
-  await visibleOptions.nth(normalizedMatchIndexes[0]).click();
+    if (normalizedMatchIndexes.length > 1) {
+      sawAmbiguousMatch = true;
+      await page.waitForTimeout(100);
+      continue;
+    }
+    if (normalizedMatchIndexes.length === 1) {
+      await visibleOptions.nth(normalizedMatchIndexes[0]).click();
+      return;
+    }
+    await page.waitForTimeout(100);
+  } while (Date.now() < deadline);
+
+  throw new WorkflowError(
+    "UI_DRIFT",
+    sawAmbiguousMatch
+      ? `DAT ${fieldName} options remained ambiguous for the approved value.`
+      : `DAT did not display a ${fieldName} option for the approved value.`,
+    "SL-060",
+  );
 }
 
 async function selectCity(

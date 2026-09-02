@@ -199,6 +199,25 @@ function pickupCalendarDate(shipment: UnifiedQuoteRequest): string {
     : match[1];
 }
 
+export function isDatSearchPickupDateCurrentOrFuture(
+  pickupDate: string,
+  now = new Date(),
+  timezone = 'America/New_York'
+): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) return false;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map(function(part) {
+    return [part.type, part.value];
+  }));
+  const today = `${values.year}-${values.month}-${values.day}`;
+  return pickupDate >= today;
+}
+
 export function buildDatSearchLoadsRequest(
   emailQuoteRequestId: string,
   shipment: UnifiedQuoteRequest
@@ -808,6 +827,12 @@ export async function requestDatSearchLoadsLookup(
       throw err;
     }
     const shipment = jsonValue(quote.shipment_request, {});
+    const savedPickupDate = pickupCalendarDate(shipment);
+    if (savedPickupDate && !isDatSearchPickupDateCurrentOrFuture(savedPickupDate)) {
+      const err: any = new Error('Search Loads pickup date cannot be in the past. Update and save the shipment first');
+      err.status = 400;
+      throw err;
+    }
     const candidate = buildDatSearchLoadsRequest(emailQuoteRequestId, shipment);
     if (!candidate) {
       const err: any = new Error('Search Loads requires saved origin, destination, pickup date, and DAT equipment');

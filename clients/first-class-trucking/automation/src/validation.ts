@@ -81,7 +81,19 @@ function isValidCalendarDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-export function validateSearchLoadsRequest(input: Partial<SearchLoadsRequest>): SearchLoadsRequest {
+export function isCurrentOrFutureCalendarDate(
+  value: string,
+  now = new Date(),
+  timezone = "America/New_York",
+): boolean {
+  return isValidCalendarDate(value) && value >= calendarDay(now, timezone);
+}
+
+export function validateSearchLoadsRequest(
+  input: Partial<SearchLoadsRequest>,
+  now = new Date(),
+  timezone = "America/New_York",
+): SearchLoadsRequest {
   const equipmentType = normalizeText(input.equipmentType || "") as SearchLoadsEquipmentType;
   const request: SearchLoadsRequest = {
     workflowId: SEARCH_LOADS_WORKFLOW_ID,
@@ -104,7 +116,7 @@ export function validateSearchLoadsRequest(input: Partial<SearchLoadsRequest>): 
     input.schemaVersion !== SEARCH_LOADS_SCHEMA_VERSION ||
     !request.requestId || !request.shipmentRecordId || !request.origin || !request.destination ||
     !/^[a-f0-9]{64}$/.test(request.searchFingerprint) ||
-    !isValidCalendarDate(request.pickupDate) ||
+    !isCurrentOrFutureCalendarDate(request.pickupDate, now, timezone) ||
     !SEARCH_EQUIPMENT.includes(equipmentType) ||
     request.originDeadheadMiles !== 150 || request.destinationDeadheadMiles !== 150 ||
     request.loadType !== "Full & Partial" || request.includeSimilarResults !== false
