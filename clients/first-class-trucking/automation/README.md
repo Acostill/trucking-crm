@@ -90,6 +90,11 @@ the exact lookup again. If DAT may have accepted a search but the result could
 not be verified, the job becomes `uncertain` and cannot be automatically
 resubmitted.
 
+Search Loads request and result identity values remain `Vans (Standard)`,
+`Flatbeds (Standard)`, and `Reefers (Standard)`. The browser layer alone maps
+those values to DAT's current selected-chip labels: `Vans (Standard)`,
+`Flatbeds`, and `Reefers`.
+
 ## 5. Run the worker on Railway
 
 The Railway deployment uses a dedicated Linux browser profile on a persistent
@@ -138,6 +143,8 @@ or access arrangement; do not attempt to bypass the control.
 - The local ledger at `runtime/ledger.json` prevents duplicate or uncertain resubmissions, stores completed results for reuse, and records daily usage for audit. It does not impose a daily lookup cap.
 - A completed duplicate returns its stored result without opening DAT.
 - A submitted or uncertain request never resubmits automatically; a human must reconcile it.
+- CRM claim/start/fail/complete calls use bounded retries only because those endpoints are server-idempotent. Browser search activation is never transport-retried.
+- `/health` reports readiness from the last successful CRM poll and returns 503 when polling is stale. An active browser job remains ready so a health restart cannot interrupt a possible submission.
 - Logs contain IDs, workflow steps, status, duration, and safe categories only—not lanes, rates, or authentication data.
 - RateView screenshots mask lane fields and complete rate cards. Search Loads stores only a safe pre-submit status record; no Search Loads page or result screenshot is retained. Artifacts are automatically pruned after 30 days.
 - Traces are off by default because they may contain confidential data. Enable them only under an approved data-handling exception.

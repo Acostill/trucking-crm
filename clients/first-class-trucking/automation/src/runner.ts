@@ -215,7 +215,7 @@ export async function runSearchLoads(
     const controls = await populateSearchLoadsForm(
       opened.page,
       request,
-      config.resultTimeoutMs,
+      config,
     );
     await captureSearchLoadsPreSubmitEvidence(opened.page, controls, runDirectory);
     const submittedToday = await ledger.markSubmitted(

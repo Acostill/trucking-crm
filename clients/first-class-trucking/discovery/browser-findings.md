@@ -110,3 +110,37 @@ No RateView UI facts or selectors should be inferred before post-login discovery
 - The previously observed comments structure remains `dat-notes .notes-contents.multiline`. A fresh row did not expose that details panel through the safe observed row controls, so v1 treats comments as optional: sanitize the panel when it is actually displayed; otherwise return `comments: null` with `comment_status: not_displayed`. A phone/email-like comment is omitted, not partially returned.
 - No screenshot or raw result payload was retained because the live table contained commercially confidential rates and contact information. Only counts, state transitions, selector contracts, and timestamps are recorded here.
 - No Book/Bid, contact, phone, email, message, post, purchase, save, export, download, or account action was activated.
+
+## Equipment-control incident re-discovery: 2026-09-02 America/Bogota
+
+- Status: `BLOCKED` at the human authentication boundary.
+- Authorized scope: re-observe the current DAT One Search Loads Equipment Type control, popup structure, option text, selected-value readback, and stable locator candidates for Van, Flatbed, and Reefer without pressing `SEARCH` or performing any consequential action.
+- Browser selection: Chrome was selected for the existing client-authorized signed-in-session requirement. No open DAT tab was available. A fresh controlled tab navigated directly to the approved `https://one.dat.com/search-loads` route to test whether the existing Chrome profile still held an authorized DAT session.
+- `SL-030` observation: DAT initially displayed `Loading DAT One...`, then redirected to the token-free login pattern `https://login.dat.com/u/login/identifier?...`. The public authentication page visibly identified itself with heading `Log In` and supporting text `To continue to your DAT account`.
+- Authentication boundary: the authenticated `SL-040` postcondition was not met. Discovery stopped immediately. No login field value, credential, MFA, CAPTCHA, token, cookie, password-manager content, browser storage, or authentication artifact was inspected, entered, captured, or stored.
+- Equipment-control evidence: unavailable in this attempt. The Search Loads form, Equipment Type control, popup structure, option roles/names, selected-value readback, and current account availability of Van, Flatbed, and Reefer were not observable behind the login boundary. No prior label or locator is being carried forward as a current fact.
+- Screenshots: none captured at the authentication boundary to avoid retaining authentication/autofill information. `discovery/screenshots/` is unchanged for this attempt.
+- Consequential/search boundary: `SEARCH` was never visible or activated. No search submission, booking, contact reveal, bid, message, post, purchase, save, export/download, deletion, account change, or other consequential action occurred.
+- Required human takeover: an authorized human must complete DAT login and any SSO, MFA, CAPTCHA, or shared-session handling in the retained Chrome tab. Re-discovery must then resume on the authenticated `https://one.dat.com/search-loads` form using blank or fictional non-sensitive state, still without pressing `SEARCH`.
+
+### Authenticated Railway-profile equipment observation
+
+- Status: `READY_FOR_DISCOVERY_REVIEW`; the earlier Chrome login blocker was resolved through the authorized production Railway persistent verified DAT browser profile at `/data/dat-profile`.
+- Evidence source and route: direct authenticated Pod Lead observation on 2026-09-02 at `https://one.dat.com/search-loads`. The browser profile itself, credentials, cookies, tokens, storage state, and commercially confidential result values were not copied into discovery artifacts.
+- Control structure: Equipment is a stateful Material chip autocomplete inside a `mat-form-field` visibly labeled `Equipment Type*`. Its visible activation surface is `.summary-element[contenteditable="true"]`. Activating that summary reveals `input[data-test="equipment-type-dropdown"]`, observed with accessible role `combobox` and placeholder `Equipment`.
+- Selected-value structure: selected equipment values are `mat-chip[role="option"]` descendants of `mat-chip-list[role="listbox"]`. Before inspection the sole selected chip was `Vans (Standard)`. After removal and option inspection, `Vans (Standard)` was restored and the selected-chip readback was verified as exactly one chip with normalized text `Vans (Standard)`.
+- Popup/options structure: the open Material autocomplete exposes `mat-option[role="option"]` elements. Option text includes decorative initials, so business matching must use the option's primary label and must not require the whole rendered/accessibility text to equal the business value.
+- Current account option inventory:
+  - Van: filtering `Van` exposed primary labels `Vans (Standard)` and `Vans (Specialized)`, with decorative `V` and `S` text. V1 must select `Vans (Standard)` explicitly.
+  - Flatbed: with the filter empty and Van selected, the available primary label was `Flatbeds`.
+  - Reefer: filtering `Reef` exposed the primary label `Reefers`, with decorative `R`. The current option is not named `Reefers (Standard)`.
+- Availability result: the account still exposes all three approved categories. The current mappings are Van -> `Vans (Standard)`, Flatbed -> `Flatbeds`, and Reefer -> `Reefers`. Because the control is multiselect/stateful, the already selected `Vans (Standard)` option was absent from the available-option list while its chip remained selected.
+- Recommended stable locator/readback candidates:
+  - Equipment field root: `locator('mat-form-field').filter({ has: locator('input[data-test="equipment-type-dropdown"]') })`.
+  - Visible activation surface, scoped to that field: `equipmentField.locator('.summary-element[contenteditable="true"]')`.
+  - Revealed filter input: `equipmentField.locator('input[data-test="equipment-type-dropdown"]')`; wait for visible after activating the summary, then verify role `combobox` and placeholder `Equipment`.
+  - Available choices after the relevant filter: `locator('mat-option[role="option"]')`, narrowed by the exact primary label `Vans (Standard)`, `Flatbeds`, or `Reefers`; verify uniqueness before activation. Do not use an exact whole accessible-name match because decorative initials are present.
+  - Selected values: `equipmentField.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]')`; normalize chip text, require exactly one selected chip for v1, and compare it with the mapped DAT label.
+- Readiness and failure signals: after summary activation, the data-test input must become visible; after filtering, exactly one intended primary-label choice must be identifiable; after selection, the chip-list readback must contain exactly the intended mapped label and no additional chip. Missing/ambiguous options or a readback mismatch are `UI_DRIFT`; do not fall back to `Reefers (Standard)` or choose `Vans (Specialized)`.
+- Screenshot/redaction decision: the authenticated page displayed commercial result rows, so no screenshot was retained. `discovery/screenshots/` remains unchanged.
+- Consequential/search boundary: `SEARCH` was not activated. No new search, booking, contact reveal, bid, message, post, purchase, save, export/download, deletion, account change, or other consequential action occurred.

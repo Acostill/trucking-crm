@@ -81,6 +81,10 @@ async function processJob(
     const category = error instanceof WorkflowError
       ? error.category
       : "UNEXPECTED_ERROR";
+    const stepId = error instanceof WorkflowError ? error.stepId : "UNKNOWN";
+    const errorMessage = (error instanceof Error ? error.message : "DAT lookup failed")
+      .replace(/\s+/g, " ")
+      .slice(0, 2000);
     const submissionState = error && typeof error === "object"
       ? (error as { datSubmissionState?: string }).datSubmissionState
       : undefined;
@@ -93,9 +97,15 @@ async function processJob(
       workerId: config.workerId,
       state,
       category,
-      message: error instanceof Error ? error.message : "DAT lookup failed",
+      message: errorMessage,
     }, "idempotent", "fail");
-    process.stderr.write(`${JSON.stringify({ jobId: job.id, status: state, category })}\n`);
+    process.stderr.write(`${JSON.stringify({
+      jobId: job.id,
+      status: state,
+      category,
+      stepId,
+      message: errorMessage,
+    })}\n`);
     return;
   }
   // Result delivery is intentionally outside the browser-work catch block.

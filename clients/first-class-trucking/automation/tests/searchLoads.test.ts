@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { chromium } from "@playwright/test";
 import {
   parseDisplayedTotal,
   rankSearchLoadCandidates,
   sanitizeNonContactText,
+  searchLoadsEquipmentUiLabel,
+  selectSearchLoadsEquipment,
   type RawSearchLoadCandidate,
 } from "../src/searchLoads.ts";
+import { WorkflowError, type SearchLoadsRequest } from "../src/types.ts";
 
 function candidate(
   id: string,
@@ -94,4 +98,116 @@ test("returns explicit empty and no-qualifying outcomes", () => {
     ]).outcome,
     "no_qualifying_offers",
   );
+});
+
+const equipmentCases: Array<{
+  requestLabel: SearchLoadsRequest["equipmentType"];
+  uiLabel: string;
+}> = [
+  { requestLabel: "Vans (Standard)", uiLabel: "Vans (Standard)" },
+  { requestLabel: "Flatbeds (Standard)", uiLabel: "Flatbeds" },
+  { requestLabel: "Reefers (Standard)", uiLabel: "Reefers" },
+];
+
+function equipmentFixture(mode: "normal" | "duplicate-chip" | "ambiguous-option" = "normal"): string {
+  const duplicateReefer = mode === "ambiguous-option"
+    ? '<mat-option role="option"><span aria-hidden="true">R</span><span>Reefers</span></mat-option>'
+    : "";
+  return `
+    <mat-form-field>
+      <span>Equipment Type*</span>
+      <mat-chip-list role="listbox">
+        <mat-chip role="option"><span>Vans (Standard)</span><button matchipremove aria-label="Remove equipment"></button></mat-chip>
+        <mat-chip role="option"><span>Flatbeds</span><button matchipremove aria-label="Remove equipment"></button></mat-chip>
+      </mat-chip-list>
+      <div class="summary-element" contenteditable="true">Equipment</div>
+      <input data-test="equipment-type-dropdown" role="combobox" placeholder="Equipment" style="display:none" />
+    </mat-form-field>
+    <div id="options">
+      <mat-option role="option"><span aria-hidden="true">V</span><span>Vans (Standard)</span></mat-option>
+      <mat-option role="option"><span aria-hidden="true">S</span><span>Vans (Specialized)</span></mat-option>
+      <mat-option role="option"><span aria-hidden="true">F</span><span>Flatbeds</span></mat-option>
+      <mat-option role="option"><span aria-hidden="true">R</span><span>Reefers</span></mat-option>
+      ${duplicateReefer}
+    </div>
+    <button id="search">SEARCH</button>
+    <script>
+      const field = document.querySelector('mat-form-field');
+      const list = field.querySelector('mat-chip-list');
+      const input = field.querySelector('input');
+      const wireRemove = (chip) => chip.querySelector('[matchipremove]').addEventListener('click', () => chip.remove());
+      const addChip = (label) => {
+        const chip = document.createElement('mat-chip');
+        chip.setAttribute('role', 'option');
+        const text = document.createElement('span');
+        text.textContent = label;
+        const remove = document.createElement('button');
+        remove.setAttribute('matchipremove', '');
+        remove.setAttribute('aria-label', 'Remove equipment');
+        chip.append(text, remove);
+        list.append(chip);
+        wireRemove(chip);
+      };
+      list.querySelectorAll('mat-chip').forEach(wireRemove);
+      field.querySelector('.summary-element').addEventListener('click', () => { input.style.display = 'block'; });
+      document.querySelectorAll('mat-option').forEach((option) => option.addEventListener('click', () => {
+        addChip(option.querySelector('span:last-child').textContent.trim());
+        if (${JSON.stringify(mode)} === 'duplicate-chip') addChip('Flatbeds');
+      }));
+      document.querySelector('#search').addEventListener('click', () => {
+        document.body.dataset.searchClicks = String(Number(document.body.dataset.searchClicks || '0') + 1);
+      });
+    </script>
+  `;
+}
+
+test("maps all approved request labels to the current DAT UI labels", () => {
+  assert.deepEqual(
+    equipmentCases.map(({ requestLabel }) => searchLoadsEquipmentUiLabel(requestLabel)),
+    equipmentCases.map(({ uiLabel }) => uiLabel),
+  );
+});
+
+test("clears stale equipment and retains exactly one mapped chip for all approved values", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const { requestLabel, uiLabel } of equipmentCases) {
+      const page = await browser.newPage();
+      await page.setContent(equipmentFixture());
+      await selectSearchLoadsEquipment(page, requestLabel, 2000);
+      assert.deepEqual(
+        await page.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]').allInnerTexts(),
+        [uiLabel],
+      );
+      assert.equal(await page.locator("body").getAttribute("data-search-clicks"), null);
+      await page.close();
+    }
+  } finally {
+    await browser.close();
+  }
+});
+
+test("fails closed when option identity is ambiguous or selected-chip readback is not sole", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const ambiguous = await browser.newPage();
+    await ambiguous.setContent(equipmentFixture("ambiguous-option"));
+    await assert.rejects(
+      selectSearchLoadsEquipment(ambiguous, "Reefers (Standard)", 2000),
+      (error: unknown) => error instanceof WorkflowError && error.category === "UI_DRIFT",
+    );
+    assert.equal(await ambiguous.locator("body").getAttribute("data-search-clicks"), null);
+    await ambiguous.close();
+
+    const multiple = await browser.newPage();
+    await multiple.setContent(equipmentFixture("duplicate-chip"));
+    await assert.rejects(
+      selectSearchLoadsEquipment(multiple, "Reefers (Standard)", 2000),
+      (error: unknown) => error instanceof WorkflowError && error.category === "FORM_VALUE_REJECTED",
+    );
+    assert.equal(await multiple.locator("body").getAttribute("data-search-clicks"), null);
+    await multiple.close();
+  } finally {
+    await browser.close();
+  }
 });

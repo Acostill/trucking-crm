@@ -145,27 +145,50 @@ export async function waitForAuthenticatedTarget(
   }
 }
 
-async function waitForDatOne(page: Page, config: AppConfig): Promise<void> {
-  const loading = page.getByText("Loading DAT One...", { exact: true });
-  if (await loading.isVisible().catch(() => false)) {
-    await loading.waitFor({ state: "hidden", timeout: config.resultTimeoutMs });
-  }
-
+export async function resolveSharedSessionConflict(
+  page: Page,
+  config: AppConfig,
+  target: DatTarget,
+  allowActivation = true,
+): Promise<boolean> {
   const loginAnyway = page.getByRole("button", {
     name: "LOGIN ANYWAY",
     exact: true,
   });
-  if (await loginAnyway.isVisible().catch(() => false)) {
-    if (!config.sharedSessionLoginAnyway) {
-      throw new WorkflowError(
-        "SHARED_SESSION_CONFLICT",
-        "Another DAT device is active. Human approval is required before logging it out.",
-        "RV-040",
-      );
-    }
-    await loginAnyway.click();
-    await expect(loginAnyway).toBeHidden({ timeout: config.resultTimeoutMs });
+  const count = await loginAnyway.count();
+  if (count === 0) return false;
+  if (count !== 1) {
+    throw new WorkflowError(
+      "UI_DRIFT",
+      "DAT displayed an ambiguous shared-session takeover control.",
+      target === "search-loads" ? "SL-040" : "RV-040",
+    );
   }
+  if (!await loginAnyway.isVisible().catch(() => false)) return false;
+  if (!config.sharedSessionLoginAnyway || !allowActivation) {
+    throw new WorkflowError(
+      "SHARED_SESSION_CONFLICT",
+      allowActivation
+        ? "Another DAT device is active. Human approval is required before logging it out."
+        : "The DAT shared-session conflict reappeared after one takeover attempt.",
+      target === "search-loads" ? "SL-040" : "RV-040",
+    );
+  }
+  await loginAnyway.click();
+  await loginAnyway.waitFor({ state: "hidden", timeout: config.resultTimeoutMs });
+  return true;
+}
+
+async function waitForDatOne(
+  page: Page,
+  config: AppConfig,
+  target: DatTarget,
+): Promise<void> {
+  const loading = page.getByText("Loading DAT One...", { exact: true });
+  if (await loading.isVisible().catch(() => false)) {
+    await loading.waitFor({ state: "hidden", timeout: config.resultTimeoutMs });
+  }
+  await resolveSharedSessionConflict(page, config, target);
 }
 
 export async function openAuthenticatedTools(
@@ -194,7 +217,7 @@ export async function openAuthenticatedTools(
   while (true) {
     try {
       assertApprovedDatOneUrl(page, target);
-      await waitForDatOne(page, config);
+      await waitForDatOne(page, config, target);
       // Authentication setup must prove the same stable authenticated landmark
       // as a workflow run; a transient one.dat.com URL alone is insufficient.
       await waitForAuthenticatedTarget(page, target, config.resultTimeoutMs);

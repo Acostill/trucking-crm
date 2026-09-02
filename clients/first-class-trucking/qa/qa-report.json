@@ -3,9 +3,10 @@
   "status": "blocked",
   "verdict": "BLOCKED",
   "release_reason": "OPEN_RELEASE_DEFECT_AND_PENDING_LIVE_RELIABILITY",
-  "tested_version": "workflow fct-dat-search-loads-offers-v1; specification 0.6-approved-search-loads-v1; Render CRM/API source db30a19; Railway DAT worker source d6a1950",
-  "environment": "Client-authorized production CRM on Render, production DAT One, and production Railway worker. Prior deterministic validation used local macOS Node.js and synthetic data.",
-  "dataset_class": "One explicitly approved fictional immutable production QA snapshot plus prior synthetic/local deterministic data. QA evidence retains no lane values, rates, contact data, credentials, authentication artifacts, screenshots, or raw browser evidence from the production attempt.",
+  "tested_version": "origin/main 1ea3e4ed4eefe6f0fb235ae5476338e89eff4961 plus the working-tree 2026-09-02 DAT Equipment Type repair; automation/src/searchLoads.ts SHA-256 019d6129c39a03276e30fc08260058573c9d9a401157a81538e4ab5b940c64c1",
+  "historical_live_sources": "2026-09-01 attempt 001 used Render CRM/API source db30a19 and Railway DAT worker source d6a1950",
+  "environment": "One explicitly authorized fictional production attempt used the client-authorized CRM on Render, DAT One, and the Railway worker. The 2026-09-02 equipment repair was validated locally on macOS 26.5.1 arm64 with Node.js v25.8.1, npm 11.11.0, Playwright 1.62.0, and headless Chromium synthetic fixtures. No 2026-09-02 live DAT search or deployment occurred.",
+  "dataset_class": "One explicitly approved fictional immutable production QA snapshot from attempt 001 plus synthetic request and DOM fixture data and redacted approved discovery evidence. QA evidence retains no lane values, rates, contact data, credentials, authentication artifacts, screenshots, or raw browser evidence from the production attempt.",
   "consecutive_pass_target": 5,
   "consecutive_passes_achieved": 0,
   "authorized_live_attempts": 1,
@@ -49,9 +50,10 @@
     "pass_credit": 0
   },
   "deterministic_results": {
+    "post_rebase_automation_check": "passed on origin/main plus the equipment repair",
     "automation_typecheck": "passed",
     "automation_tests": {
-      "passed": 30,
+      "passed": 33,
       "failed": 0
     },
     "delayed_auth_and_unknown_domain_readiness_tests": {
@@ -59,21 +61,46 @@
       "failed": 0
     },
     "fct_sl_004_builder_repair": "ready for independent controlled and live retest; defect remains open",
-    "server_typecheck": "passed",
+    "independent_equipment_contract_tests": {
+      "passed": 6,
+      "failed": 0,
+      "search_activations": 0
+    },
+    "server_typecheck_2026_09_01": "passed",
+    "post_rebase_focused_server_contracts": {
+      "passed": 3,
+      "failed": 0
+    },
     "server_worker_state_machine": "passed",
     "server_search_loads_contract": "passed",
-    "server_rateview_regression": "passed",
-    "server_truck_assignment_regression": "passed",
-    "client_optimized_build": "passed",
-    "render_production_build_and_health": "passed",
-    "railway_worker_health": "passed before live attempt"
+    "server_rateview_contract": "passed",
+    "server_truck_assignment_regression_2026_09_01": "passed",
+    "client_optimized_build_2026_09_01": "passed",
+    "client_optimized_build_2026_09_02_equipment_repair": "not run because the equipment repair did not change a client or server contract file",
+    "render_production_build_and_health_2026_09_01": "passed",
+    "railway_worker_health_before_live_attempt_001": "passed",
+    "recovered_railway_hashes": {
+      "matched": 7,
+      "mismatched": 0
+    },
+    "secret_profile_scan": "passed; no matching private-key, common token, storage-state, cookie, or browser-profile artifact",
+    "client_workspace_validation": "passed with existing nonblocking open-item warnings"
   },
   "validated_controls": [
-    "CRM single-search approval was tied to one immutable fictional snapshot",
-    "worker claim and start completed through the production CRM queue",
-    "the pre-submit failure emitted no SL-080 / SUBMITTED_ONCE event",
+    "CRM single-search approval was tied to one immutable fictional snapshot in live attempt 001",
+    "worker claim and start completed through the production CRM queue in live attempt 001",
+    "the attempt 001 pre-submit failure emitted no SL-080 / SUBMITTED_ONCE event",
     "submission accounting remained zero and the CRM safely returned control without an automatic retry",
-    "no prohibited DAT action was observed"
+    "no prohibited DAT action was observed in live attempt 001",
+    "browser-only equipment mapping preserves legacy request fingerprint and result identities",
+    "Vans (Standard) maps to Vans (Standard), Flatbeds (Standard) maps to Flatbeds, and Reefers (Standard) maps to Reefers",
+    "all stale selected equipment chips are removed before selecting the intended option",
+    "exactly one primary-label option and exactly one matching selected chip are required",
+    "missing and ambiguous options fail as UI_DRIFT before SEARCH",
+    "missing, wrong, and multiple selected-chip outcomes fail as FORM_VALUE_REJECTED before SEARCH",
+    "unsafe or unsuccessful chip removal fails closed before SEARCH",
+    "decorative initials do not select Vans Specialized or another wrong option",
+    "recovered authentication, session-recovery, diagnostics, CRM transport, callback-idempotency, and worker-health source matches the recorded Railway source hashes"
   ],
   "required_retest_evidence": [
     "Controlled delayed login redirect is classified as AUTH_REQUIRED at SL-030/SL-040 and delivered to the CRM as needs_auth",
@@ -84,6 +111,7 @@
   "pending_live_cases": [
     "Independently controlled/live retest the ready FCT-SL-004 builder repair",
     "Five consecutive isolated representative live Search Loads passes with one explicit approval per search",
+    "Authenticated staged SL-060 Reefer chip readback and enabled SEARCH verification without activating SEARCH",
     "Live or safely controlled session expiry and human takeover",
     "Permission/subscription change and popup/frame drift",
     "Slow pre-submit and post-submit responses",
@@ -99,11 +127,31 @@
     "qa/runs/2026-09-01-live-search-001/summary.md",
     "qa/runs/2026-09-01-worker-hardening-v1/summary.md",
     "qa/runs/2026-08-13-search-loads-v1/summary.md",
+    "qa/runs/2026-09-02-dat-equipment-repair/qa-summary.md",
+    "qa/runs/2026-09-02-dat-equipment-repair/equipment-contract.qa.test.ts",
+    "qa/runs/2026-09-02-dat-equipment-repair/summary.md",
     "qa/test-matrix.md",
     "qa/defects.md",
+    "automation/tests/rateview.test.ts",
+    "automation/tests/searchLoads.test.ts",
+    "server/scripts/test-dat-search-loads.ts",
+    "server/scripts/test-dat-rateview-integration.ts",
     "discovery/workflow-spec.json",
     "discovery/browser-findings.md",
     "discovery/evidence-manifest.json"
   ],
-  "updated_at": "2026-09-01T16:29:36Z"
+  "tested_source_sha256": {
+    "automation/src/searchLoads.ts": "019d6129c39a03276e30fc08260058573c9d9a401157a81538e4ab5b940c64c1",
+    "automation/src/rateview.ts": "b8c764d32f45400c856effb39c158755130be796615876205ccbab87c35396a6",
+    "automation/src/runner.ts": "cf286c14b0b0dcb04f513d44ae65c238cea58a900a4933f03845e434756ed475",
+    "automation/src/worker.ts": "725160c4f6e12b668811f0dddb6ce609ecd2c6261b468fffcd3b0c929c356614",
+    "automation/src/workerConfig.ts": "1b7da99c84126d6b8fa822524364429e5e0abf99dfb93515223c786c2f671e30",
+    "automation/src/workerHealth.ts": "fcc2feac6de9ca253612b01b6491e2921f4c491ce38a9ff5a81ef6f08f6f9afd",
+    "automation/src/workerTransport.ts": "e7473d605476f8fed2bc56853d85d3c290823e80b9f29a883bf5d2ffb4c6a403",
+    "automation/src/inspectSearchLoadsState.ts": "3cea3c54d36e39e45b59ab4376e5c20c324da4d5393d11a28ecb2b929fd6cdb9",
+    "automation/src/types.ts": "44fd13d4f4b8d2b31e66701de763fc0d32bcdc888240ac93a1edaf6e58e950cb",
+    "automation/src/validation.ts": "b1707c8c114f51b582bf6b85de9372bc062b787ca9c5c208b9845bc9fd578482",
+    "server/services/datRateViewJobs.ts": "dfa058a7f1e2103e9604008a12838c1c5626ed56378e91b2d9af4454a71f0c07"
+  },
+  "updated_at": "2026-09-02T11:40:45-05:00"
 }

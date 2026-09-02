@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "environment": "DAT production (approved read-only RateView and Search Loads scope; visible Chrome browser reserved for manual authentication)",
-  "captured_at": "2026-08-13T12:34:45-04:00",
+  "environment": "DAT production (approved read-only RateView and Search Loads scope; current equipment observation through the authorized Railway persistent verified DAT browser profile)",
+  "captured_at": "2026-09-02",
   "captured_by": "browser_discovery",
-  "status": "DISCOVERY_COMPLETE",
+  "status": "READY_FOR_DISCOVERY_REVIEW",
   "blocker": null,
-  "redaction_status": "The retained RateView screenshot contains fictional lane inputs only. Search Loads structural evidence omits all shipment, company, contact, offer, market-rate, and comment values; no Search Loads screenshot was retained.",
+  "redaction_status": "The retained RateView screenshot contains fictional lane inputs only. Search Loads structural evidence omits all shipment, company, contact, offer, market-rate, and comment values. Both 2026-09-02 equipment-control attempts retained no screenshot or authentication artifact; the authenticated page displayed commercial result rows.",
   "artifacts": [
     {
       "captured_at": "2026-08-11T10:28:32-04:00",
@@ -55,6 +55,35 @@
         ".cdk-virtual-scroll-content-wrapper .row-container",
         ".cell-rate dat-rate .offer",
         "dat-notes .notes-contents.multiline"
+      ]
+    },
+    {
+      "captured_at": "2026-09-02T11:09:33-05:00",
+      "environment": "DAT production",
+      "workflow_step_id": "SL-030,SL-040",
+      "path": "discovery/browser-findings.md",
+      "url_pattern": "https://login.dat.com/u/login/identifier?...",
+      "redaction_status": "Token-bearing query omitted. No screenshot, credential value, MFA/CAPTCHA content, cookie, token, password-manager content, browser storage, or authentication artifact retained.",
+      "observed_result": "Direct navigation to the approved DAT One Search Loads route redirected to the DAT login identifier page. Equipment-control re-discovery stopped at the human authentication boundary before the Search Loads form or SEARCH control was observable.",
+      "locator_candidates": [
+        "Authentication-state signal only: getByRole('heading', { name: 'Log In', exact: true })",
+        "Not applicable to blocked login attempt; resolved by subsequent authenticated Railway-profile evidence"
+      ]
+    },
+    {
+      "captured_at": "2026-09-02",
+      "environment": "DAT production; authorized Railway persistent verified DAT browser profile at /data/dat-profile",
+      "workflow_step_id": "SL-050,SL-060",
+      "path": "discovery/browser-findings.md",
+      "url_pattern": "https://one.dat.com/search-loads",
+      "redaction_status": "No screenshot retained because commercial result rows were visible. No shipment, company, contact, offer, rate, comment, credential, cookie, token, browser-profile content, or storage state was copied into this artifact.",
+      "observed_result": "Equipment Type is a stateful Material chip autocomplete. The account exposes Van as Vans (Standard), Flatbed as Flatbeds, and Reefer as Reefers; Reefer is not Reefers (Standard). Vans (Standard) was restored and verified as the sole selected chip. SEARCH and all consequential controls remained untouched.",
+      "locator_candidates": [
+        "locator('mat-form-field').filter({ has: locator('input[data-test=\"equipment-type-dropdown\"]') })",
+        "equipmentField.locator('.summary-element[contenteditable=\"true\"]')",
+        "equipmentField.locator('input[data-test=\"equipment-type-dropdown\"]')",
+        "locator('mat-option[role=\"option\"]') narrowed by exact primary label Vans (Standard), Flatbeds, or Reefers",
+        "equipmentField.locator('mat-chip-list[role=\"listbox\"] mat-chip[role=\"option\"]')"
       ]
     }
   ]

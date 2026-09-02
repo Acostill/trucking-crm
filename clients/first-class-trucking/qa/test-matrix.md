@@ -1,8 +1,29 @@
 # Stage 3 QA test matrix
 
-Status: `BLOCKED / OPEN_RELEASE_DEFECT_AND_PENDING_LIVE_RELIABILITY` for release. Search Loads v1 deterministic checks passed on 2026-08-13, including independent retest of three repaired defects. One production QA attempt was explicitly authorized on 2026-09-01 but failed before submission on a delayed authentication redirect. No DAT search was executed or credit consumed, the live pass target remains 0/5, and `FCT-SL-004` is open.
+Status: `BLOCKED / OPEN_RELEASE_DEFECT_AND_PENDING_LIVE_RELIABILITY` for release. One explicitly approved production QA attempt on 2026-09-01 failed before submission on a delayed authentication redirect; it executed no DAT search, consumed no credit, earned no live pass, and left `FCT-SL-004` open. The 2026-09-02 DAT Equipment Type repair passed deterministic and independent DOM-fixture QA, but it does not close `FCT-SL-004` or advance the live target from 0/5.
 
 Approved source: `discovery/workflow-spec.json`, workflow `fct-dat-search-loads-offers-v1` within specification version `0.6-approved-search-loads-v1`. Client facts and constraints are taken from the approved `intake/client-profile.json` and `intake/decisions.md`; observed UI facts come from `discovery/browser-findings.md`, `discovery/evidence-manifest.json`, and `discovery/search-loads-structure-redacted.json`.
+
+## 2026-09-02 Equipment Type repair validation
+
+Tested working tree: `origin/main 1ea3e4ed4eefe6f0fb235ae5476338e89eff4961` plus the working-tree 2026-09-02 maintenance repair whose tested `automation/src/searchLoads.ts` SHA-256 is `019d6129c39a03276e30fc08260058573c9d9a401157a81538e4ab5b940c64c1`.
+
+| Test ID | Requirement / risk | Independent method | Result | Release status |
+|---|---|---|---|---|
+| SL-EQ-QA-001 | Preserve legacy request, fingerprint, and result identity while mapping only the DAT UI label | Validated all three legacy request values through `validateSearchLoadsRequest`, fingerprint reuse, UI mapping review, result-construction review, and unchanged server contracts | Passed | Deterministic repair evidence |
+| SL-EQ-QA-002 | Map `Vans (Standard)` -> `Vans (Standard)`, `Flatbeds (Standard)` -> `Flatbeds`, and `Reefers (Standard)` -> `Reefers` | Independent Chromium DOM fixture for every mapping | Passed, 3/3 mappings | Deterministic repair evidence |
+| SL-EQ-QA-003 | Remove every stale selected chip before selection | Seeded two stale chips for each approved equipment value and asserted exactly one final mapped chip | Passed, 3/3 cases | Deterministic repair evidence |
+| SL-EQ-QA-004 | Require exactly one exact primary-label option; missing or ambiguous choices fail before `SEARCH` | Injected zero and two matching `mat-option[role="option"]` elements | Passed, 2/2 failure states; `UI_DRIFT` at `SL-060`; zero `SEARCH` activations | Deterministic repair evidence |
+| SL-EQ-QA-005 | Decorative initials must not select `Vans (Specialized)` or another option | Options included observed-style decorative `V`, `S`, `F`, and `R` spans plus distinct primary labels | Passed; sole chip was `Vans (Standard)`; zero `SEARCH` activations | Deterministic repair evidence |
+| SL-EQ-QA-006 | Require exactly one selected chip matching the mapped label | Injected no-chip, wrong-chip, and multiple-chip outcomes | Passed, 3/3 failure states; `FORM_VALUE_REJECTED` at `SL-060`; zero `SEARCH` activations | Deterministic repair evidence |
+| SL-EQ-QA-007 | Stale-chip removal must be safe and observable | Injected absent removal control and a removal click that did not change chip count | Passed, 2/2 failure states; fail closed at `SL-060`; zero `SEARCH` activations | Deterministic repair evidence |
+| SL-EQ-QA-008 | Preserve recovered Railway reliability source exactly and exclude secret/profile material | Compared seven SHA-256 values with the builder's authenticated read-only reconciliation record; scanned automation files for private keys, common token forms, storage state, cookies, and browser-profile artifacts | Passed, 7/7 hashes; no matching secret/profile artifact | Deterministic provenance evidence |
+| SL-EQ-QA-009 | Merged automation regression | Post-rebase `npm run check` on `origin/main` plus the equipment repair | Passed; typecheck and 33/33 tests | Deterministic regression evidence |
+| SL-EQ-QA-010 | Server request/result identity, worker state transitions, and RateView compatibility | Post-rebase DAT Search Loads, DAT RateView, and worker state-machine focused scripts | Passed, 3/3 contract suites | Deterministic regression evidence |
+| SL-EQ-QA-011 | Client build decision | Checked the working-tree diff for client/server contract changes | Not applicable; no client or server file changed, so the conditional client build was not run | Correctly excluded |
+| SL-EQ-QA-012 | Five isolated consecutive representative live Search Loads passes | Requires five explicit per-search approvals and live DAT submissions | Not run, 0/5 | Release blocker |
+
+Independent evidence: `qa/runs/2026-09-02-dat-equipment-repair/equipment-contract.qa.test.ts` and `qa/runs/2026-09-02-dat-equipment-repair/qa-summary.md`. The initial sandboxed `tsx` launches were unable to create local IPC sockets (`EPERM`); approved reruns passed and this environmental restriction is not a product defect.
 
 ## Search Loads v1 independent execution
 

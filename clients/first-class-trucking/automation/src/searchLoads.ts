@@ -3,6 +3,10 @@ import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { AppConfig } from "./config.ts";
 import {
+  resolveSharedSessionConflict,
+  waitForAuthenticatedTarget,
+} from "./rateview.ts";
+import {
   SEARCH_LOADS_SCHEMA_VERSION,
   SEARCH_LOADS_WORKFLOW_ID,
   type SearchLoadOffer,
@@ -45,9 +49,23 @@ const CONTACT_EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 const CONTACT_PHONE_PATTERN = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}/;
 const CONTACT_LINK_PATTERN = /(?:mailto:|tel:|https?:\/\/\S*(?:contact|phone|call|email))/i;
 
+const SEARCH_LOADS_EQUIPMENT_UI_LABELS: Readonly<
+  Record<SearchLoadsRequest["equipmentType"], string>
+> = {
+  "Vans (Standard)": "Vans (Standard)",
+  "Flatbeds (Standard)": "Flatbeds",
+  "Reefers (Standard)": "Reefers",
+};
+
 function clean(value: string | null | undefined): string | null {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
   return normalized ? normalized.slice(0, 1000) : null;
+}
+
+export function searchLoadsEquipmentUiLabel(
+  equipmentType: SearchLoadsRequest["equipmentType"],
+): string {
+  return SEARCH_LOADS_EQUIPMENT_UI_LABELS[equipmentType];
 }
 
 export function sanitizeNonContactText(value: string | null | undefined): {
@@ -209,8 +227,8 @@ function dateControl(page: Page, kind: "start" | "end"): Locator {
     page.getByRole("combobox", { name: semanticName }),
   );
   const attributes = kind === "start"
-    ? 'input[aria-label*="start" i], input[name*="start" i]'
-    : 'input[aria-label*="end" i], input[name*="end" i]';
+    ? 'input[data-test="date-picker-start"], input[matstartdate], input[aria-label*="start" i], input[name*="start" i], input[placeholder*="start" i]'
+    : 'input[data-test="date-picker-end"], input[matenddate], input[aria-label*="end" i], input[name*="end" i], input[placeholder*="end" i]';
   return semantic.or(page.locator(attributes)).first();
 }
 
@@ -235,19 +253,127 @@ async function fillDate(control: Locator, isoDate: string): Promise<void> {
   }
 }
 
-export async function populateSearchLoadsForm(
+export async function selectSearchLoadsEquipment(
+  page: Page,
+  equipmentType: SearchLoadsRequest["equipmentType"],
+  timeoutMs: number,
+): Promise<void> {
+  const uiLabel = searchLoadsEquipmentUiLabel(equipmentType);
+  const equipmentInput = page.locator('input[data-test="equipment-type-dropdown"]');
+  const field = page.locator("mat-form-field").filter({ has: equipmentInput });
+  const summary = field.locator('.summary-element[contenteditable="true"]');
+  const input = field.locator('input[data-test="equipment-type-dropdown"]');
+  const selectedChips = field.locator(
+    'mat-chip-list[role="listbox"] mat-chip[role="option"]',
+  );
+  if (
+    await field.count() !== 1 ||
+    await summary.count() !== 1 ||
+    await input.count() !== 1 ||
+    !await summary.isVisible().catch(() => false)
+  ) {
+    throw new WorkflowError(
+      "UI_DRIFT",
+      "DAT Search Loads Equipment Type control is not uniquely identifiable.",
+      "SL-060",
+    );
+  }
+
+  await summary.click({ timeout: timeoutMs });
+  await input.waitFor({ state: "visible", timeout: timeoutMs });
+  if (
+    await input.getAttribute("role") !== "combobox" ||
+    await input.getAttribute("placeholder") !== "Equipment"
+  ) {
+    throw new WorkflowError(
+      "UI_DRIFT",
+      "DAT Search Loads Equipment Type input no longer matches the approved contract.",
+      "SL-060",
+    );
+  }
+
+  while (await selectedChips.count() > 0) {
+    const chip = selectedChips.first();
+    const remove = chip.locator("[matchipremove]");
+    if (await remove.count() !== 1 || !await remove.isVisible().catch(() => false)) {
+      throw new WorkflowError(
+        "UI_DRIFT",
+        "DAT Search Loads selected equipment chip cannot be removed safely.",
+        "SL-060",
+      );
+    }
+    const before = await selectedChips.count();
+    await remove.click({ timeout: timeoutMs });
+    try {
+      await expect(selectedChips).toHaveCount(before - 1, { timeout: timeoutMs });
+    } catch {
+      throw new WorkflowError(
+        "FORM_VALUE_REJECTED",
+        "DAT did not remove a stale selected Equipment Type value.",
+        "SL-060",
+      );
+    }
+  }
+
+  await input.fill(uiLabel);
+  const exactPrimaryLabel = page.getByText(uiLabel, { exact: true });
+  const option = page.locator('mat-option[role="option"]').filter({
+    has: exactPrimaryLabel,
+  });
+  try {
+    await option.first().waitFor({ state: "visible", timeout: timeoutMs });
+  } catch {
+    throw new WorkflowError(
+      "UI_DRIFT",
+      "DAT Search Loads Equipment Type option is missing or ambiguous.",
+      "SL-060",
+    );
+  }
+  if (await option.count() !== 1) {
+    throw new WorkflowError(
+      "UI_DRIFT",
+      "DAT Search Loads Equipment Type option is missing or ambiguous.",
+      "SL-060",
+    );
+  }
+  await option.click({ timeout: timeoutMs });
+  try {
+    await selectedChips.first().waitFor({ state: "visible", timeout: timeoutMs });
+  } catch {
+    throw new WorkflowError(
+      "FORM_VALUE_REJECTED",
+      "DAT did not retain exactly one approved Equipment Type value.",
+      "SL-060",
+    );
+  }
+  if (await selectedChips.count() !== 1) {
+    throw new WorkflowError(
+      "FORM_VALUE_REJECTED",
+      "DAT did not retain exactly one approved Equipment Type value.",
+      "SL-060",
+    );
+  }
+  const selectedLabel = clean(await selectedChips.first().innerText());
+  if (selectedLabel !== uiLabel) {
+    throw new WorkflowError(
+      "FORM_VALUE_REJECTED",
+      "DAT did not retain exactly one approved Equipment Type value.",
+      "SL-060",
+    );
+  }
+}
+
+async function populateSearchLoadsFormOnce(
   page: Page,
   request: SearchLoadsRequest,
   timeoutMs: number,
 ): Promise<SearchControls> {
   const origin = page.getByRole("combobox", { name: "Origin", exact: true });
   const destination = page.getByRole("combobox", { name: "Destination", exact: true });
-  const equipment = page.getByRole("combobox", { name: /^Equipment Type/i });
   const loadType = page.getByRole("combobox", { name: /^Load Type/i });
   const search = page.getByRole("button", { name: "SEARCH", exact: true });
   await expect(origin).toHaveCount(1);
   await expect(destination).toHaveCount(1);
-  await expect(equipment).toHaveCount(1);
   await expect(loadType).toHaveCount(1);
   await expect(search).toHaveCount(1);
 
@@ -256,8 +382,7 @@ export async function populateSearchLoadsForm(
   await fillNamedControl(page, /^DH-O$/i, String(request.originDeadheadMiles));
   await fillNamedControl(page, /^DH-D$/i, String(request.destinationDeadheadMiles));
 
-  await equipment.click();
-  await exactOption(page, request.equipmentType, timeoutMs);
+  await selectSearchLoadsEquipment(page, request.equipmentType, timeoutMs);
   await loadType.click();
   await exactOption(page, request.loadType, timeoutMs);
 
@@ -272,6 +397,108 @@ export async function populateSearchLoadsForm(
   }
   await expect(search).toBeEnabled({ timeout: timeoutMs });
   return { origin, destination, search, startDate, endDate };
+}
+
+export async function populateSearchLoadsForm(
+  page: Page,
+  request: SearchLoadsRequest,
+  config: AppConfig,
+): Promise<SearchControls> {
+  let sharedSessionConflictResolved = false;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const resolvedBeforeStaging = await resolveSharedSessionConflict(
+      page,
+      config,
+      "search-loads",
+      !sharedSessionConflictResolved,
+    );
+    if (resolvedBeforeStaging) {
+      sharedSessionConflictResolved = true;
+      await waitForAuthenticatedTarget(
+        page,
+        "search-loads",
+        config.resultTimeoutMs,
+      );
+    }
+    try {
+      return await populateSearchLoadsFormOnce(
+        page,
+        request,
+        config.resultTimeoutMs,
+      );
+    } catch (error) {
+      const recovered = await resolveSharedSessionConflict(
+        page,
+        config,
+        "search-loads",
+        !sharedSessionConflictResolved,
+      );
+      if (recovered && attempt === 0) {
+        sharedSessionConflictResolved = true;
+        await waitForAuthenticatedTarget(
+          page,
+          "search-loads",
+          config.resultTimeoutMs,
+        );
+        continue;
+      }
+      if (error instanceof WorkflowError) throw error;
+      try {
+        await waitForAuthenticatedTarget(
+          page,
+          "search-loads",
+          Math.min(config.resultTimeoutMs, 1500),
+        );
+      } catch (identityError) {
+        if (identityError instanceof WorkflowError) throw identityError;
+      }
+      const dateInputDiagnostics = await page.locator("input").evaluateAll((elements) =>
+        elements.map((element) => {
+          const input = element as HTMLInputElement;
+          const container = input.closest(
+            "mat-form-field, mat-date-range-input, dat-date-range, [class*='date' i]",
+          );
+          const metadata = {
+            type: input.getAttribute("type"),
+            ariaLabel: input.getAttribute("aria-label"),
+            name: input.getAttribute("name"),
+            placeholder: input.getAttribute("placeholder"),
+            dataTest: input.getAttribute("data-test"),
+            matStartDate: input.hasAttribute("matstartdate"),
+            matEndDate: input.hasAttribute("matenddate"),
+            containerText: container?.textContent?.replace(/\s+/g, " ").trim().slice(0, 80) || null,
+          };
+          const candidateText = [
+            metadata.type,
+            metadata.ariaLabel,
+            metadata.name,
+            metadata.placeholder,
+            metadata.dataTest,
+            metadata.containerText,
+          ].filter(Boolean).join(" ").toLowerCase();
+          return { metadata, candidateText };
+        }).filter(({ metadata, candidateText }) =>
+          metadata.matStartDate || metadata.matEndDate ||
+          /date|start|end|mm\/dd|yyyy/.test(candidateText),
+        ).map(({ metadata }) => metadata).slice(0, 8),
+      ).catch(() => []);
+      const cause = (error instanceof Error ? error.message : "Unknown browser failure")
+        .replace(CONTACT_EMAIL_PATTERN, "[redacted-email]")
+        .replace(CONTACT_PHONE_PATTERN, "[redacted-phone]")
+        .replace(/\s+/g, " ")
+        .slice(0, 450);
+      throw new WorkflowError(
+        "UI_DRIFT",
+        `DAT Search Loads form controls no longer match the approved semantic contract. Date inputs: ${JSON.stringify(dateInputDiagnostics)}. Cause: ${cause}`,
+        "SL-060",
+      );
+    }
+  }
+  throw new WorkflowError(
+    "SHARED_SESSION_CONFLICT",
+    "DAT shared-session takeover did not return a stable Search Loads form.",
+    "SL-040",
+  );
 }
 
 export async function captureSearchLoadsPreSubmitEvidence(
@@ -352,9 +579,11 @@ async function extractVisibleRow(row: Locator, sourceOrder: number): Promise<Raw
 }
 
 async function directResultCount(page: Page, timeoutMs: number): Promise<number> {
-  const summary = page.getByText(/^\d+\s+Results?$/i).first();
+  const currentCounter = page.locator('[data-test="results-counter"]');
+  const legacyCounter = page.getByText(/^\d+\s+Results?$/i);
+  const summary = currentCounter.or(legacyCounter).first();
   await summary.waitFor({ state: "visible", timeout: timeoutMs });
-  const match = clean(await summary.textContent())?.match(/^(\d+)\s+Results?$/i);
+  const match = clean(await summary.textContent())?.match(/\b(\d[\d,]*)\b/);
   if (!match) {
     throw new WorkflowError(
       "RESULT_SCOPE_UNVERIFIED",
@@ -362,11 +591,13 @@ async function directResultCount(page: Page, timeoutMs: number): Promise<number>
       "SL-090",
     );
   }
-  return Number(match[1]);
+  return Number(match[1].replace(/,/g, ""));
 }
 
 async function chooseHighestRateSort(page: Page, timeoutMs: number): Promise<void> {
-  const sort = page.getByRole("button", { name: /(?:Age - Newest|Sort by)/i }).first();
+  const sort = page.locator('[data-test="sort-by-button"]').or(
+    page.getByRole("button", { name: /(?:Age - Newest|Sort by)/i }),
+  ).first();
   await sort.waitFor({ state: "visible", timeout: timeoutMs });
   await sort.click();
   const highest = page.getByRole("menuitem", { name: "Rate - Highest", exact: true }).or(
@@ -374,7 +605,34 @@ async function chooseHighestRateSort(page: Page, timeoutMs: number): Promise<voi
   );
   await highest.first().waitFor({ state: "visible", timeout: timeoutMs });
   await highest.first().click();
-  await expect(sort).toContainText("Rate - Highest", { timeout: timeoutMs });
+  await expect(sort).toContainText(/Rate\s*-\s*Highest/i, { timeout: timeoutMs });
+}
+
+export async function inspectExistingSearchLoadsStructure(
+  page: Page,
+  config: AppConfig,
+): Promise<{
+  directResultCount: number;
+  eligibleCount: number;
+  excludedCount: number;
+  offerCount: number;
+  outcome: SearchLoadsResult["outcome"];
+}> {
+  const count = await directResultCount(page, config.resultTimeoutMs);
+  if (count > 0) await chooseHighestRateSort(page, config.resultTimeoutMs);
+  const candidates = await collectCompleteDirectRows(
+    page,
+    count,
+    config.resultTimeoutMs,
+  );
+  const ranked = rankSearchLoadCandidates(candidates);
+  return {
+    directResultCount: ranked.directResultCount,
+    eligibleCount: ranked.eligibleCount,
+    excludedCount: ranked.excludedCount,
+    offerCount: ranked.offers.length,
+    outcome: ranked.outcome,
+  };
 }
 
 async function collectCompleteDirectRows(
