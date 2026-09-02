@@ -117,6 +117,13 @@ function equipmentFixture(
     : "";
   const initialDisplay = mode === "keep-open" ? "block" : "none";
   return `
+    <style>
+      @keyframes unstable-remove-icon {
+        from { transform: translateX(0); }
+        to { transform: translateX(2px); }
+      }
+      [matchipremove] { animation: unstable-remove-icon 20ms infinite alternate; }
+    </style>
     <mat-form-field>
       <span>Equipment Type*</span>
       <mat-chip-list role="listbox" style="display:${initialDisplay}">

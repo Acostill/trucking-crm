@@ -327,7 +327,11 @@ export async function selectSearchLoadsEquipment(
     const before = await selectedChips.count();
     await openEquipmentControl();
     try {
-      await remove.click({ timeout: Math.min(timeoutMs, 500) });
+      // DAT animates this icon for nearly the full lifetime of the short-lived
+      // editor, so Playwright's stability wait can outlast the open control.
+      // The locator is already scoped to one chip and one removal control;
+      // force bypasses only that animation check.
+      await remove.click({ force: true, timeout: Math.min(timeoutMs, 1000) });
     } catch {
       throw new WorkflowError(
         "UI_DRIFT",
