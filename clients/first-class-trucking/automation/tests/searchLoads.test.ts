@@ -5,6 +5,7 @@ import {
   parseDisplayedTotal,
   rankSearchLoadCandidates,
   sanitizeNonContactText,
+  searchLoadsLabelsEqual,
   searchLoadsEquipmentUiLabel,
   selectExactSearchLoadsOption,
   selectSearchLoadsEquipment,
@@ -204,6 +205,13 @@ test("maps all approved request labels to the current DAT UI labels", () => {
     equipmentCases.map(({ requestLabel }) => searchLoadsEquipmentUiLabel(requestLabel)),
     equipmentCases.map(({ uiLabel }) => uiLabel),
   );
+});
+
+test("compares retained DAT location labels by exact normalized business text", () => {
+  assert.equal(searchLoadsLabelsEqual("Newton, KS", "NEWTON, KS"), true);
+  assert.equal(searchLoadsLabelsEqual("  Newton,   KS ", "NEWTON, KS"), true);
+  assert.equal(searchLoadsLabelsEqual("Newton, IA", "NEWTON, KS"), false);
+  assert.equal(searchLoadsLabelsEqual("Newton, KS Metro", "NEWTON, KS"), false);
 });
 
 test("selects one exact primary option label when DAT adds decorative accessible text", async () => {

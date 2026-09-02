@@ -62,6 +62,14 @@ function clean(value: string | null | undefined): string | null {
   return normalized ? normalized.slice(0, 1000) : null;
 }
 
+export function searchLoadsLabelsEqual(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  return String(left || "").replace(/\s+/g, " ").trim().toLowerCase() ===
+    String(right || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 async function selectedEquipmentChipLabel(chip: Locator): Promise<string | null> {
   const label = await chip.evaluate((element) => {
     const clone = element.cloneNode(true) as HTMLElement;
@@ -275,7 +283,14 @@ async function selectCity(
   await field.fill("");
   await field.fill(value);
   await selectExactSearchLoadsOption(page, value, timeoutMs, fieldName);
-  await expect(field).toHaveValue(value, { timeout: timeoutMs });
+  const retained = await field.inputValue();
+  if (!searchLoadsLabelsEqual(retained, value)) {
+    throw new WorkflowError(
+      "FORM_VALUE_REJECTED",
+      `DAT did not retain the approved ${fieldName} value.`,
+      "SL-060",
+    );
+  }
 }
 
 async function fillNamedControl(
