@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 import {
+  parseDirectResultCountText,
   parseDisplayedTotal,
   rankSearchLoadCandidates,
   sanitizeNonContactText,
@@ -49,6 +50,14 @@ test("parses only explicit positive total-dollar rates", () => {
   assert.equal(parseDisplayedTotal("$2.50/mi"), null);
   assert.equal(parseDisplayedTotal("Call"), null);
   assert.equal(parseDisplayedTotal("$0"), null);
+});
+
+test("parses the DAT direct-result counter across adjacent result spans", () => {
+  assert.equal(parseDirectResultCountText("5Results"), 5);
+  assert.equal(parseDirectResultCountText("5\nResults"), 5);
+  assert.equal(parseDirectResultCountText("1,234 Results"), 1234);
+  assert.equal(parseDirectResultCountText("Results"), null);
+  assert.equal(parseDirectResultCountText("5 Results +38 Similar Results"), null);
 });
 
 test("ranks highest total rates, preserves source order for ties, and caps at ten", () => {

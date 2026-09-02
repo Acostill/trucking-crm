@@ -112,6 +112,18 @@ export function parseDisplayedTotal(value: string | null | undefined): number | 
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+export function parseDirectResultCountText(
+  value: string | null | undefined,
+): number | null {
+  // DAT renders the count and label in adjacent spans, so textContent is
+  // currently `5Results` even though the UI displays `5 Results`.
+  const normalized = String(value || "").replace(/\s+/g, "").trim();
+  const match = normalized.match(/^(\d[\d,]*)Results?$/i);
+  if (!match) return null;
+  const parsed = Number(match[1].replace(/,/g, ""));
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
 export function rankSearchLoadCandidates(
   candidates: RawSearchLoadCandidate[],
 ): Pick<SearchLoadsResult,
@@ -701,15 +713,17 @@ async function directResultCount(page: Page, timeoutMs: number): Promise<number>
   const legacyCounter = page.getByText(/^\d+\s+Results?$/i);
   const summary = currentCounter.or(legacyCounter).first();
   await summary.waitFor({ state: "visible", timeout: timeoutMs });
-  const match = clean(await summary.textContent())?.match(/\b(\d[\d,]*)\b/);
-  if (!match) {
-    throw new WorkflowError(
-      "RESULT_SCOPE_UNVERIFIED",
-      "DAT direct-result count could not be verified.",
-      "SL-090",
-    );
-  }
-  return Number(match[1].replace(/,/g, ""));
+  const deadline = Date.now() + timeoutMs;
+  do {
+    const count = parseDirectResultCountText(await summary.textContent());
+    if (count !== null) return count;
+    await page.waitForTimeout(100);
+  } while (Date.now() < deadline);
+  throw new WorkflowError(
+    "RESULT_SCOPE_UNVERIFIED",
+    "DAT direct-result count could not be verified.",
+    "SL-090",
+  );
 }
 
 async function chooseHighestRateSort(page: Page, timeoutMs: number): Promise<void> {
