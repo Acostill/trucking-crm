@@ -30,8 +30,11 @@ Required `server/.env`:
 
 ```
 DATABASE_URL=postgresql://...
+DATABASE_ENVIRONMENT=development
+DATABASE_SAFETY_ENFORCED=false
 PORT=3001
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+PUBLIC_APP_URL=http://localhost:3000
 ```
 
 ## Email quote inbox
@@ -55,6 +58,7 @@ Run the additive database migration once:
 cd server
 npm run db:migrate:email-quotes
 npm run db:migrate:dat-rateview
+npm run db:migrate:phase1-hardening
 ```
 
 Then copy the Gmail and OpenRouter settings from `server/.env.example` into
@@ -105,6 +109,8 @@ documented fallback. Set these server-side variables in Render:
 ```text
 DAT_WORKER_ENABLED=true
 DAT_WORKER_SECRET=<one long random value>
+DATABASE_ENVIRONMENT=production
+PUBLIC_APP_URL=https://your-production-crm.example.com
 ```
 
 Use that same secret only in the Railway worker variables or in
@@ -120,6 +126,14 @@ Build Command: npm ci --include=dev && npm run build
 Start Command: npm start
 Health Check Path: /api/health
 ```
+
+Production refuses to start when `DATABASE_ENVIRONMENT` is missing or is not
+`production`. A local or test server refuses a database labeled `production`
+when `DATABASE_SAFETY_ENFORCED=true`, unless the explicit emergency override is
+set. The Phase 1 migration also permanently labels each database; production
+startup fails if the application label and stored database label do not match.
+Use separate Neon databases or branches for development, staging, and production;
+do not copy the production `DATABASE_URL` into local `.env` files.
 
 For the local fallback:
 

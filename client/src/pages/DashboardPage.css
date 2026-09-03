@@ -144,6 +144,15 @@
   text-transform: uppercase;
 }
 
+.ops-dashboard-integrations {
+  display: grid;
+  gap: 9px;
+}
+
+.ops-dashboard-integrations .ops-dashboard-connection {
+  padding: 12px 13px;
+}
+
 .ops-dashboard-connection {
   display: flex;
   align-items: flex-start;

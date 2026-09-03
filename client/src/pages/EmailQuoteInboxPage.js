@@ -56,6 +56,7 @@ const PREVIEW_USER = {
 };
 
 const PREVIEW_MAILBOX = {
+  state: 'online',
   configured: true,
   enabled: true,
   running: false,
@@ -578,6 +579,7 @@ export default function EmailQuoteInboxPage() {
   const [quotes, setQuotes] = useState([]);
   const [selected, setSelected] = useState(null);
   const [mailbox, setMailbox] = useState(null);
+  const [datHealth, setDatHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [polling, setPolling] = useState(false);
@@ -681,10 +683,11 @@ export default function EmailQuoteInboxPage() {
     setError('');
     try {
       const results = await Promise.all([
-        requestJson('/api/email-quotes/mailbox/status'),
+        requestJson('/api/operations/health'),
         requestJson('/api/email-quotes?limit=75')
       ]);
-      setMailbox(results[0]);
+      setMailbox(results[0] && results[0].gmail ? results[0].gmail : null);
+      setDatHealth(results[0] && results[0].dat ? results[0].dat : null);
       setQuotes(Array.isArray(results[1]) ? results[1] : []);
       const nextId =
         preferredId ||
@@ -708,6 +711,22 @@ export default function EmailQuoteInboxPage() {
     } else if (user) {
       loadWorkspace();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, previewMode]);
+
+  useEffect(function() {
+    if (previewMode || !user) return undefined;
+    const timer = window.setInterval(function() {
+      requestJson('/api/operations/health')
+        .then(function(health) {
+          setMailbox(health && health.gmail ? health.gmail : null);
+          setDatHealth(health && health.dat ? health.dat : null);
+        })
+        .catch(function() {
+          // The main workspace error handling remains responsible for visible request failures.
+        });
+    }, 30000);
+    return function() { window.clearInterval(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, previewMode]);
 
@@ -893,7 +912,7 @@ export default function EmailQuoteInboxPage() {
         method: 'POST'
       });
       applyDetail(detail);
-      setNotice('DAT Search Loads approved. The worker will return up to 10 highest direct rates automatically.');
+      setNotice('DAT Search Loads approved. The worker will return up to 10 highest market offers for pricing context.');
     } catch (requestError) {
       setError(requestError.message || 'Unable to approve DAT Search Loads');
     } finally {
@@ -1041,7 +1060,8 @@ export default function EmailQuoteInboxPage() {
   const carrierCostOptions = carrierQuotes.filter(function(option) {
     return option.key !== 'datLoadOffers';
   });
-  const mailboxReady = mailbox && mailbox.configured && !mailbox.lastError;
+  const mailboxReady = mailbox && ['online', 'checking'].indexOf(mailbox.state) > -1;
+  const datReady = previewMode || (datHealth && ['online', 'working'].indexOf(datHealth.state) > -1);
 
   return (
     <div className="app-layout">
@@ -1076,9 +1096,26 @@ export default function EmailQuoteInboxPage() {
             <div className="eq-mailbox-meta">
               <span>{mailbox && mailbox.lastSuccessAt ? 'Last checked ' + formatDateTime(mailbox.lastSuccessAt) : 'Not checked yet'}</span>
               <span>Forward Air + ExpediteAll</span>
-              <span className="eq-dat-enabled">DAT RateView + Search Loads worker</span>
+              <span className={datReady ? 'eq-dat-enabled' : 'eq-dat-attention'}>
+                {datReady
+                  ? 'DAT worker connected'
+                  : datHealth && datHealth.state === 'needs_auth'
+                    ? 'DAT sign-in required'
+                    : 'DAT worker needs attention'}
+              </span>
             </div>
           </section>
+
+          {!previewMode && datHealth && !datReady && (
+            <div className="eq-message error">
+              <AlertCircle size={16} />
+              {datHealth.state === 'needs_auth'
+                ? 'DAT needs a verified browser sign-in before another lookup can run.'
+                : datHealth.state === 'disabled'
+                  ? 'DAT automation is disabled on the server.'
+                  : 'The DAT worker is not reporting a healthy connection. Check Railway before approving another lookup.'}
+            </div>
+          )}
 
           {error && <div className="eq-message error"><AlertCircle size={16} /> {error}</div>}
           {notice && <div className="eq-message success"><CheckCircle2 size={16} /> {notice}</div>}
@@ -1306,7 +1343,7 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section eq-dat-loads-section">
                     <div className="eq-section-heading">
-                      <div><Truck size={18} /><span><strong>DAT Search Loads — highest rates</strong><small>Read-only direct results, ranked by total Rate. Similar Results and contact information are excluded.</small></span></div>
+                      <div><Truck size={18} /><span><strong>DAT Market Offers — pricing context only</strong><small>Read-only Search Loads comparisons ranked by total Rate. They are not confirmed carrier bids or capacity.</small></span></div>
                       <button
                         type="button"
                         className="eq-secondary-button eq-dat-button"
@@ -1317,6 +1354,11 @@ export default function EmailQuoteInboxPage() {
                         <RefreshCw size={14} className={(runningDatLoads || datLoadsBusy) ? 'spinning' : ''} />
                         {datLoadsCompleted ? 'Search Loads complete' : datLoadsBusy ? 'Search Loads running' : 'Approve DAT Search Loads'}
                       </button>
+                    </div>
+
+                    <div className="eq-dat-market-warning">
+                      <AlertCircle size={15} />
+                      <span><strong>Do not book from this table.</strong> Select only a confirmed carrier cost above after availability and service are verified.</span>
                     </div>
 
                     {!datLoadsOption ? (

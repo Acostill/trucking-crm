@@ -906,6 +906,16 @@ export async function requestDatSearchLoadsLookup(
 
 export async function claimDatRateViewJob(workerId: string): Promise<any | null> {
   return db.transactionWithUser(async function(client) {
+    await client.query(
+      `INSERT INTO public.dat_worker_heartbeats (
+         worker_id, last_seen_at, last_successful_poll_at, updated_at
+       ) VALUES ($1, NOW(), NOW(), NOW())
+       ON CONFLICT (worker_id) DO UPDATE SET
+         last_seen_at = NOW(),
+         last_successful_poll_at = NOW(),
+         updated_at = NOW()`,
+      [workerId]
+    );
     const staleRunning = await client.query(
       `UPDATE public.dat_rateview_jobs
        SET status = 'uncertain', error_category = 'WORKER_HEARTBEAT_LOST',
@@ -994,7 +1004,16 @@ export async function startDatRateViewJob(id: string, workerId: string): Promise
       err.status = 409;
       throw err;
     }
-    if (current.rows[0].status === 'running') return;
+    if (current.rows[0].status === 'running') {
+      await client.query(
+        `UPDATE public.dat_worker_heartbeats
+         SET last_seen_at = NOW(), last_job_at = NOW(), active_job_id = $2,
+             last_error_category = NULL, updated_at = NOW()
+         WHERE worker_id = $1`,
+        [workerId, id]
+      );
+      return;
+    }
     if (current.rows[0].status !== 'claimed') {
       const err: any = new Error('DAT job is not claimed by this worker');
       err.status = 409;
@@ -1012,6 +1031,13 @@ export async function startDatRateViewJob(id: string, workerId: string): Promise
       err.status = 409;
       throw err;
     }
+    await client.query(
+      `UPDATE public.dat_worker_heartbeats
+       SET last_seen_at = NOW(), last_job_at = NOW(), active_job_id = $2,
+           last_error_category = NULL, updated_at = NOW()
+       WHERE worker_id = $1`,
+      [workerId, id]
+    );
     await updateQuoteDatPlaceholder(client, result.rows[0], placeholderForJobStatus('running'));
   });
 }
@@ -1099,7 +1125,16 @@ export async function completeDatRateViewJob(
       }
     }
     if (currentJob.status === 'completed') {
-      if (isDeepStrictEqual(jsonValue(currentJob.result_payload, null), result)) return;
+      if (isDeepStrictEqual(jsonValue(currentJob.result_payload, null), result)) {
+        await client.query(
+          `UPDATE public.dat_worker_heartbeats
+           SET last_seen_at = NOW(), active_job_id = NULL,
+               last_error_category = NULL, updated_at = NOW()
+           WHERE worker_id = $1`,
+          [workerId]
+        );
+        return;
+      }
       const err: any = new Error('DAT job is already completed with a different result');
       err.status = 409;
       throw err;
@@ -1116,6 +1151,13 @@ export async function completeDatRateViewJob(
        WHERE id = $1 AND worker_id = $2 AND status IN ('claimed', 'running')
        RETURNING *`,
       [id, workerId, JSON.stringify(result)]
+    );
+    await client.query(
+      `UPDATE public.dat_worker_heartbeats
+       SET last_seen_at = NOW(), active_job_id = NULL,
+           last_error_category = NULL, updated_at = NOW()
+       WHERE worker_id = $1`,
+      [workerId]
     );
     const quoteResult = await client.query(
       `SELECT shipment_request, carrier_quotes
@@ -1168,7 +1210,16 @@ export async function failDatRateViewJob(
       currentJob.status === state &&
       cleanText(currentJob.error_category) === cleanedCategory &&
       cleanText(currentJob.error_message) === cleanedMessage
-    ) return;
+    ) {
+      await client.query(
+        `UPDATE public.dat_worker_heartbeats
+         SET last_seen_at = NOW(), active_job_id = NULL,
+             last_error_category = $2, updated_at = NOW()
+         WHERE worker_id = $1`,
+        [workerId, cleanedCategory]
+      );
+      return;
+    }
     if (['claimed', 'running'].indexOf(currentJob.status) === -1) {
       const err: any = new Error('DAT job is not active for this worker');
       err.status = 409;
@@ -1187,6 +1238,13 @@ export async function failDatRateViewJob(
       err.status = 409;
       throw err;
     }
+    await client.query(
+      `UPDATE public.dat_worker_heartbeats
+       SET last_seen_at = NOW(), active_job_id = NULL,
+           last_error_category = $2, updated_at = NOW()
+       WHERE worker_id = $1`,
+      [workerId, cleanedCategory]
+    );
     const input = jsonValue(updated.rows[0].input_payload, {});
     const placeholder = input.workflowId === DAT_SEARCH_LOADS_WORKFLOW_ID
       ? searchLoadsPlaceholderForJobStatus(state)
@@ -1200,17 +1258,63 @@ export async function failDatRateViewJob(
 }
 
 export async function getDatWorkerStatus(): Promise<any> {
-  const result = await db.query(
-    `SELECT
-       COUNT(*) FILTER (WHERE status = 'pending')::integer AS pending,
-       COUNT(*) FILTER (WHERE status IN ('claimed', 'running'))::integer AS active,
-       MAX(completed_at) FILTER (WHERE status = 'completed') AS last_completed_at
-     FROM public.dat_rateview_jobs`
-  );
+  const [result, heartbeatResult] = await Promise.all([
+    db.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE status = 'pending')::integer AS pending,
+         COUNT(*) FILTER (WHERE status IN ('claimed', 'running'))::integer AS active,
+         COUNT(*) FILTER (WHERE status = 'needs_auth')::integer AS needs_auth,
+         COUNT(*) FILTER (WHERE status = 'failed')::integer AS failed,
+         COUNT(*) FILTER (WHERE status = 'uncertain')::integer AS uncertain,
+         MAX(completed_at) FILTER (WHERE status = 'completed') AS last_completed_at
+       FROM public.dat_rateview_jobs`
+    ),
+    db.query(
+      `SELECT worker_id, last_seen_at, last_successful_poll_at, last_job_at,
+              active_job_id, last_error_category
+       FROM public.dat_worker_heartbeats
+       ORDER BY last_seen_at DESC
+       LIMIT 1`
+    )
+  ]);
+  const enabled = isDatWorkerEnabled();
+  const configured = Boolean(String(process.env.DAT_WORKER_SECRET || '').trim());
+  const heartbeat = heartbeatResult.rows[0] || null;
+  const staleAfterRaw = Number(process.env.DAT_WORKER_STALE_MS || 90000);
+  const staleAfterMs = Number.isFinite(staleAfterRaw) && staleAfterRaw >= 15000
+    ? staleAfterRaw
+    : 90000;
+  const lastSeenMs = heartbeat && heartbeat.last_seen_at
+    ? new Date(heartbeat.last_seen_at).getTime()
+    : 0;
+  const staleForMs = lastSeenMs ? Math.max(0, Date.now() - lastSeenMs) : null;
+  const needsAuth = Number(result.rows[0].needs_auth || 0);
+  const active = Number(result.rows[0].active || 0);
+  let state = 'online';
+  if (!enabled) state = 'disabled';
+  else if (!configured) state = 'misconfigured';
+  else if (needsAuth > 0 || (heartbeat && heartbeat.last_error_category === 'AUTH_REQUIRED')) state = 'needs_auth';
+  else if (!heartbeat || staleForMs == null || staleForMs > staleAfterMs) state = 'offline';
+  else if (active > 0 || heartbeat.active_job_id) state = 'working';
   return {
-    enabled: isDatWorkerEnabled(),
+    enabled,
+    configured,
+    state,
     pending: Number(result.rows[0].pending || 0),
-    active: Number(result.rows[0].active || 0),
-    lastCompletedAt: result.rows[0].last_completed_at || null
+    active,
+    needsAuth,
+    failed: Number(result.rows[0].failed || 0),
+    uncertain: Number(result.rows[0].uncertain || 0),
+    lastCompletedAt: result.rows[0].last_completed_at || null,
+    worker: heartbeat ? {
+      id: heartbeat.worker_id,
+      lastSeenAt: heartbeat.last_seen_at,
+      lastSuccessfulPollAt: heartbeat.last_successful_poll_at,
+      lastJobAt: heartbeat.last_job_at,
+      activeJob: Boolean(heartbeat.active_job_id),
+      lastErrorCategory: heartbeat.last_error_category,
+      staleForMs,
+      staleAfterMs
+    } : null
   };
 }

@@ -5,6 +5,8 @@ import http from 'http';
 import debugFactory from 'debug';
 import app from '../app';
 import { startGmailQuotePoller } from '../services/emailQuotePoller';
+import { assertEnvironmentSafety } from '../config/environmentSafety';
+import { assertDatabaseIdentity } from '../config/databaseIdentity';
 
 const debug = debugFactory('server:server');
 
@@ -13,9 +15,19 @@ app.set('port', port);
 
 const server = http.createServer(app);
 
-server.listen(port);
 server.on('error', onError);
 server.on('listening', onListening);
+
+async function start() {
+  const environment = assertEnvironmentSafety();
+  if (environment.enforced) await assertDatabaseIdentity();
+  server.listen(port);
+}
+
+start().catch(function(err) {
+  console.error('[Startup]', err && err.message ? err.message : err);
+  process.exit(1);
+});
 
 function normalizePort(val: string) {
   const p = parseInt(val, 10);

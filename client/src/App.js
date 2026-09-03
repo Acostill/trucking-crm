@@ -121,7 +121,7 @@ function DashboardApp() {
 function isCustomerAccount(user) {
   if (!user) return false;
   const roles = Array.isArray(user.roles) ? user.roles : [];
-  const operationsRoles = ['admin', 'manager', 'agent', 'viewer'];
+  const operationsRoles = ['admin', 'manager', 'agent', 'viewer', 'quote_approver'];
   const hasOperationsRole = roles.some(function(role) { return operationsRoles.indexOf(role) > -1; });
   return !hasOperationsRole && (roles.length === 0 || roles.indexOf('customer') > -1);
 }
@@ -166,9 +166,9 @@ function AppRoutes() {
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
       <Route path="/email-paste" element={<OperationsRoute><EmailPastePage /></OperationsRoute>} />
       <Route path="/email-quotes" element={<OperationsRoute allowPreview requiredRole="quote_approver"><EmailQuoteInboxPage /></OperationsRoute>} />
-      <Route path="/admin-portal" element={<OperationsRoute><AdminPortalPage /></OperationsRoute>} />
-      <Route path="/admin-finance" element={<OperationsRoute><AdminFinancePage /></OperationsRoute>} />
-      <Route path="/admin-profit-margin" element={<OperationsRoute><AdminProfitMarginPage /></OperationsRoute>} />
+      <Route path="/admin-portal" element={<OperationsRoute requiredRole="admin"><AdminPortalPage /></OperationsRoute>} />
+      <Route path="/admin-finance" element={<OperationsRoute requiredRole="admin"><AdminFinancePage /></OperationsRoute>} />
+      <Route path="/admin-profit-margin" element={<OperationsRoute requiredRole="admin"><AdminProfitMarginPage /></OperationsRoute>} />
       <Route path="/pipeline" element={<OperationsRoute><PipelinePage /></OperationsRoute>} />
       <Route path="/loads" element={<OperationsRoute><DashboardApp /></OperationsRoute>} />
       <Route path="/map" element={<OperationsRoute><MapPage /></OperationsRoute>} />

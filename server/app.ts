@@ -19,9 +19,23 @@ import openrouterDimensionsRouter from './routes/openrouterDimensions';
 import customerRouter from './routes/customer';
 import emailQuotesRouter from './routes/emailQuotes';
 import datWorkerRouter from './routes/datWorker';
+import operationsRouter from './routes/operations';
 import db from './db';
+import { evaluateEnvironmentSafety } from './config/environmentSafety';
+import { inspectDatabaseIdentity } from './config/databaseIdentity';
 
 const app = express();
+const configuredProxyHops = Number(process.env.TRUST_PROXY_HOPS || '');
+const hostedBehindProxy =
+  process.env.RENDER === 'true' ||
+  Boolean(process.env.RAILWAY_ENVIRONMENT) ||
+  Boolean(process.env.RAILWAY_ENVIRONMENT_NAME) ||
+  Boolean(process.env.RAILWAY_PROJECT_ID);
+if (Number.isInteger(configuredProxyHops) && configuredProxyHops > 0) {
+  app.set('trust proxy', configuredProxyHops);
+} else if (hostedBehindProxy) {
+  app.set('trust proxy', 1);
+}
 // In dev (ts-node-dev) this file runs in place, so __dirname is server/.
 // Compiled, it runs from server/dist/app.js, so __dirname is server/dist —
 // one level deeper. Resolve the actual server/ package directory in both
@@ -80,6 +94,12 @@ app.use(express.static(path.join(ROOT_DIR, 'public')));
 app.get('/api/health', async function(_req: Request, res: Response) {
   try {
     await db.query('SELECT 1');
+    const environment = evaluateEnvironmentSafety();
+    const identity = await inspectDatabaseIdentity();
+    if (environment.enforced && (!environment.safe || !identity.safe)) {
+      res.status(503).json({ status: 'unsafe_configuration' });
+      return;
+    }
     res.json({ status: 'ok' });
   } catch (_err) {
     res.status(503).json({ status: 'unavailable' });
@@ -106,6 +126,7 @@ app.use('/api/quotes', quotesRouter);
 app.use('/api/customer', customerRouter);
 app.use('/api/email-quotes', emailQuotesRouter);
 app.use('/api/dat-worker', datWorkerRouter);
+app.use('/api/operations', operationsRouter);
 app.use('/api/ocr', ocrRouter);
 app.use('/api/extract-dimensions', openaiDimensionsRouter);
 app.use('/api/extract-dimensions-openrouter', openrouterDimensionsRouter);

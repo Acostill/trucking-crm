@@ -1471,6 +1471,12 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         });
         
         if (saveResp.ok) {
+          var savedQuote = await saveResp.json();
+          if (savedQuote && savedQuote.id) {
+            quoteId = savedQuote.id;
+            quoteData.id = savedQuote.id;
+            quoteData.quoteUrl = savedQuote.publicQuoteUrl || (window.location.origin + '/quotes/' + savedQuote.id);
+          }
           console.log('Quote saved to database with ID:', quoteId);
         } else {
           console.warn('Failed to save quote to database:', saveResp.status);
@@ -1500,7 +1506,7 @@ export default function CalculateRatePage({ embedded, initialValues, prefill, on
         formData.append('quote_truck_type', selectedQuote.truckType || '');
         formData.append('quote_transit_time', String(selectedQuote.transitTime || ''));
         formData.append('quote_id', quoteId);
-        formData.append('quote_url', window.location.origin + '/quotes/' + quoteId);
+        formData.append('quote_url', quoteData.quoteUrl || (window.location.origin + '/quotes/' + quoteId));
         formData.append('submitted_at', new Date().toISOString());
         
         const webhookResp = await fetch(webhookUrl, {

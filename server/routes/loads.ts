@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from 'express';
 import db from '../db';
-import { getUserIdFromRequest } from '../utils/auth';
+import { getUserIdFromRequest, requirePermission } from '../utils/auth';
 
 const router = express.Router();
 
@@ -35,6 +35,7 @@ function pickLoad(input: any) {
 function toClientRow(row: any) {
   return {
     id: row.id,
+    sourceQuoteId: row.source_quote_id || null,
     customer: row.customer,
     loadNumber: row.load_number,
     billTo: row.bill_to,
@@ -55,7 +56,7 @@ function toClientRow(row: any) {
   };
 }
 
-router.get('/', async function(_req: Request, res: Response, next: NextFunction) {
+router.get('/', requirePermission('loads.read'), async function(_req: Request, res: Response, next: NextFunction) {
   try {
     const result = await db.query('SELECT * FROM loads ORDER BY created_at DESC');
     const mapped = result.rows.map(toClientRow);
@@ -65,7 +66,7 @@ router.get('/', async function(_req: Request, res: Response, next: NextFunction)
   }
 });
 
-router.post('/', async function(req: Request, res: Response, next: NextFunction) {
+router.post('/', requirePermission('loads.create'), async function(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = await getUserIdFromRequest(req);
     const data = pickLoad(req.body || {});
@@ -110,7 +111,7 @@ router.post('/', async function(req: Request, res: Response, next: NextFunction)
   }
 });
 
-router.put('/:id', async function(req: Request, res: Response, next: NextFunction) {
+router.put('/:id', requirePermission('loads.manage'), async function(req: Request, res: Response, next: NextFunction) {
   try {
     const userId = await getUserIdFromRequest(req);
     const id = Number(req.params.id);
@@ -185,4 +186,3 @@ router.put('/:id', async function(req: Request, res: Response, next: NextFunctio
 });
 
 export default router;
-

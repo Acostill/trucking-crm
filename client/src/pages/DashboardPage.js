@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
+  Activity,
   ArrowRight,
   CheckCircle2,
   ChevronRight,
@@ -97,7 +98,7 @@ export default function DashboardPage() {
   const { user, checking, setUser } = useAuth();
   const [loads, setLoads] = useState([]);
   const [quotes, setQuotes] = useState([]);
-  const [mailbox, setMailbox] = useState(null);
+  const [operationsHealth, setOperationsHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshWarning, setRefreshWarning] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -116,13 +117,15 @@ export default function DashboardPage() {
       return response.json();
     }
 
-    async function loadDashboard() {
-      setLoading(true);
+    async function loadDashboard(showLoading) {
+      if (showLoading) setLoading(true);
       setRefreshWarning('');
-      const requests = [requestJson('/api/loads')];
+      const requests = [
+        requestJson('/api/loads'),
+        requestJson('/api/operations/health')
+      ];
       if (canManageQuotes) {
         requests.push(requestJson('/api/email-quotes?limit=75'));
-        requests.push(requestJson('/api/email-quotes/mailbox/status'));
       }
 
       const results = await Promise.allSettled(requests);
@@ -131,11 +134,11 @@ export default function DashboardPage() {
       if (results[0].status === 'fulfilled' && Array.isArray(results[0].value)) {
         setLoads(results[0].value);
       }
-      if (canManageQuotes && results[1] && results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
-        setQuotes(results[1].value);
+      if (results[1].status === 'fulfilled') {
+        setOperationsHealth(results[1].value);
       }
-      if (canManageQuotes && results[2] && results[2].status === 'fulfilled') {
-        setMailbox(results[2].value);
+      if (canManageQuotes && results[2] && results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
+        setQuotes(results[2].value);
       }
       if (results.some(function(result) { return result.status === 'rejected'; })) {
         setRefreshWarning('Some live counts could not be refreshed. Open the related workspace for the latest status.');
@@ -144,8 +147,12 @@ export default function DashboardPage() {
       setLoading(false);
     }
 
-    loadDashboard();
-    return function() { cancelled = true; };
+    loadDashboard(true);
+    const refreshTimer = window.setInterval(function() { loadDashboard(false); }, 30000);
+    return function() {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+    };
   }, [user, canManageQuotes]);
 
   const summary = useMemo(function() {
@@ -176,8 +183,18 @@ export default function DashboardPage() {
   const actionableQuotes = summary.quoteAttention + summary.quoteWorking + summary.readyToPrice;
   const recentQuotes = quotes.slice(0, 4);
   const recentLoads = loads.slice(0, 4);
-  const mailboxConnected = Boolean(mailbox && mailbox.configured && mailbox.enabled);
-  const mailboxState = mailboxConnected ? 'online' : mailbox ? 'offline' : 'unknown';
+  const mailbox = operationsHealth && operationsHealth.gmail;
+  const datHealth = operationsHealth && operationsHealth.dat;
+  const mailboxState = !mailbox
+    ? 'unknown'
+    : ['online', 'checking'].indexOf(mailbox.state) > -1
+      ? 'online'
+      : 'offline';
+  const datState = !datHealth
+    ? 'unknown'
+    : ['online', 'working'].indexOf(datHealth.state) > -1
+      ? 'online'
+      : 'offline';
   const todayLabel = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -186,6 +203,28 @@ export default function DashboardPage() {
 
   const queueItems = [
     ...(canManageQuotes ? [
+      ...((mailbox && ['online', 'checking', 'starting'].indexOf(mailbox.state) === -1) ? [{
+        key: 'gmail-health',
+        count: 1,
+        title: 'Inbound quote mailbox needs attention',
+        detail: mailbox.lastError || 'Automatic Gmail intake is not currently healthy.',
+        to: '/email-quotes',
+        tone: 'attention',
+        icon: WifiOff
+      }] : []),
+      ...((datHealth && ['online', 'working'].indexOf(datHealth.state) === -1) ? [{
+        key: 'dat-health',
+        count: datHealth.pending || datHealth.needsAuth || 1,
+        title: datHealth.state === 'needs_auth' ? 'DAT sign-in required' : 'DAT worker needs attention',
+        detail: datHealth.state === 'offline'
+          ? 'The worker has stopped checking the approved-job queue.'
+          : datHealth.state === 'disabled'
+            ? 'DAT automation is disabled on the server.'
+            : 'Review the DAT worker before approving another lookup.',
+        to: '/email-quotes',
+        tone: 'attention',
+        icon: Activity
+      }] : []),
       {
         key: 'review',
         count: summary.quoteAttention,
@@ -267,23 +306,32 @@ export default function DashboardPage() {
               <div className="ops-dashboard-hero-status">
                 <span className="ops-dashboard-date">{todayLabel}</span>
                 {canManageQuotes ? (
-                  <div className={'ops-dashboard-connection ' + mailboxState}>
-                    {mailboxState === 'online'
-                      ? <Wifi size={18} aria-hidden="true" />
-                      : mailboxState === 'offline'
-                        ? <WifiOff size={18} aria-hidden="true" />
-                        : <Clock3 size={18} aria-hidden="true" />}
-                    <div>
-                      <strong>{mailboxState === 'online'
-                        ? 'Quote mailbox connected'
-                        : mailboxState === 'offline'
-                          ? 'Quote mailbox needs attention'
-                          : 'Checking quote mailbox'}</strong>
-                      <span>{mailboxState === 'online'
-                        ? (mailbox.connectedAddress || mailbox.mailboxAddress || 'Inbound requests are active')
-                        : mailboxState === 'offline'
-                          ? 'Open Quote Inbox to review the connection.'
-                          : 'Live connection status is loading.'}</span>
+                  <div className="ops-dashboard-integrations">
+                    <div className={'ops-dashboard-connection ' + mailboxState}>
+                      {mailboxState === 'online' ? <Wifi size={18} aria-hidden="true" /> : mailboxState === 'offline' ? <WifiOff size={18} aria-hidden="true" /> : <Clock3 size={18} aria-hidden="true" />}
+                      <div>
+                        <strong>{mailboxState === 'online' ? 'Quote mailbox connected' : mailboxState === 'offline' ? 'Quote mailbox needs attention' : 'Checking quote mailbox'}</strong>
+                        <span>{mailboxState === 'online'
+                          ? (mailbox.connectedAddress || mailbox.mailboxAddress || 'Inbound requests are active')
+                          : mailbox && mailbox.lastError
+                            ? mailbox.lastError
+                            : 'Open Quote Inbox to review the connection.'}</span>
+                      </div>
+                    </div>
+                    <div className={'ops-dashboard-connection ' + datState}>
+                      {datState === 'online' ? <Activity size={18} aria-hidden="true" /> : datState === 'offline' ? <WifiOff size={18} aria-hidden="true" /> : <Clock3 size={18} aria-hidden="true" />}
+                      <div>
+                        <strong>{datState === 'online'
+                          ? (datHealth && datHealth.state === 'working' ? 'DAT worker running a lookup' : 'DAT worker connected')
+                          : datHealth && datHealth.state === 'needs_auth'
+                            ? 'DAT sign-in required'
+                            : datState === 'offline'
+                              ? 'DAT worker needs attention'
+                              : 'Checking DAT worker'}</strong>
+                        <span>{datHealth && datHealth.worker && datHealth.worker.lastSeenAt
+                          ? 'Last seen ' + formatDate(datHealth.worker.lastSeenAt, true)
+                          : 'Waiting for a live worker heartbeat.'}</span>
+                      </div>
                     </div>
                   </div>
                 ) : (

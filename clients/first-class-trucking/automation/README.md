@@ -129,6 +129,11 @@ DAT_CRM_RETRY_429_MAX_DELAY_MS=10000
 DAT_WORKER_READINESS_STALE_MS=60000
 ```
 
+Set `DAT_WORKER_STALE_MS=90000` on the Render API. Every authenticated Railway
+queue poll records a heartbeat in the CRM; the staff dashboard shows the worker
+offline after that window and shows a separate sign-in-required alert after an
+`AUTH_REQUIRED` result.
+
 Attach one persistent volume at `/data`. Use the public Railway domain only
 during the human sign-in window, with a temporary VNC password, then switch the
 service to `worker` and remove or rotate that password. Never enter DAT

@@ -151,6 +151,12 @@
   border-color: #b7dace;
 }
 
+.eq-mailbox-meta .eq-dat-attention {
+  color: #9a4b13;
+  background: #fff4e5;
+  border-color: #efc48d;
+}
+
 .eq-message {
   display: flex;
   align-items: center;
@@ -801,6 +807,25 @@
 .eq-dat-loads-section {
   border-color: #bdd4df;
   background: linear-gradient(180deg, #fcfeff, #f5f9fb);
+}
+
+.eq-dat-market-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  color: #7a4a12;
+  background: #fff8e9;
+  border: 1px solid #efd7a7;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.eq-dat-market-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 
 .eq-dat-loads-state {

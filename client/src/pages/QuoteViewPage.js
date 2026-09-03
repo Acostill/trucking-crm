@@ -19,6 +19,7 @@ function formatNumber(value) {
 
 export default function QuoteViewPage() {
   const { quoteId } = useParams();
+  const publicAccessToken = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token') || '';
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,7 +35,10 @@ export default function QuoteViewPage() {
       }
 
       try {
-        const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}`));
+        const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}`), {
+          credentials: 'include',
+          headers: publicAccessToken ? { 'X-Quote-Access-Token': publicAccessToken } : {}
+        });
 
         if (!resp.ok) {
           if (resp.status === 404) {
@@ -57,7 +61,7 @@ export default function QuoteViewPage() {
     }
 
     fetchQuote();
-  }, [quoteId]);
+  }, [quoteId, publicAccessToken]);
 
   async function handleApprove() {
     if (!quote || !quoteId) return;
@@ -69,7 +73,11 @@ export default function QuoteViewPage() {
     try {
       const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}/approve`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(publicAccessToken ? { 'X-Quote-Access-Token': publicAccessToken } : {})
+        },
         body: JSON.stringify({})
       });
 
@@ -98,7 +106,11 @@ export default function QuoteViewPage() {
     try {
       const resp = await fetch(buildApiUrl(`/api/quotes/${quoteId}/reject`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(publicAccessToken ? { 'X-Quote-Access-Token': publicAccessToken } : {})
+        },
         body: JSON.stringify({})
       });
 
@@ -423,4 +435,3 @@ export default function QuoteViewPage() {
     </div>
   );
 }
-

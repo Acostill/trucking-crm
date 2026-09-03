@@ -23,7 +23,7 @@ function Sidebar(props) {
   const linkSuffix = props && props.linkSuffix ? props.linkSuffix : '';
   const isAdmin = user && Array.isArray(user.roles) && user.roles.indexOf('admin') > -1;
   const userRoles = user && Array.isArray(user.roles) ? user.roles : [];
-  const operationsRoles = ['admin', 'manager', 'agent', 'viewer'];
+  const operationsRoles = ['admin', 'manager', 'agent', 'viewer', 'quote_approver'];
   const hasOperationsRole = userRoles.some(function(role) { return operationsRoles.indexOf(role) > -1; });
   const isCustomer = Boolean(user) && !hasOperationsRole && (userRoles.length === 0 || userRoles.indexOf('customer') > -1);
   const isQuoteApprover = userRoles.indexOf('quote_approver') > -1;

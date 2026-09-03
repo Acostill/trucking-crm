@@ -185,9 +185,16 @@ async function saveQuoteToCrm(q, params) {
 }
 
 /* approving a quote auto-creates a load record in the CRM */
-async function approveQuoteInCrm(id) {
+async function approveQuoteInCrm(quoteRecord) {
   try {
-    await apiFetch(`/api/quotes/${encodeURIComponent(id)}/approve`, { method: "POST" }, 4000);
+    if (!quoteRecord?.id || !quoteRecord?.publicAccessToken) return false;
+    await apiFetch(`/api/quotes/${encodeURIComponent(quoteRecord.id)}/approve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Quote-Access-Token": quoteRecord.publicAccessToken,
+      },
+    }, 4000);
     return true;
   } catch {
     return false;
@@ -282,7 +289,7 @@ export function initQuoteForm() {
   document.getElementById("result-book").addEventListener("click", async () => {
     const btn = document.getElementById("result-book");
     btn.disabled = true;
-    const booked = crmQuote ? await approveQuoteInCrm(crmQuote.id) : false;
+    const booked = crmQuote ? await approveQuoteInCrm(crmQuote) : false;
     btn.innerHTML = booked
       ? "⚡ RATE BOOKED — LOAD CREATED, DISPATCH WILL CONFIRM"
       : "⚡ RATE RESERVED — DISPATCH WILL CONFIRM";

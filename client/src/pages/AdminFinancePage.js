@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
@@ -155,8 +156,16 @@ export default function AdminFinancePage() {
         <div className="app-content finance-page">
           <div className="finance-header">
             <div>
-              <h1 className="finance-title">Finance</h1>
-              <p className="finance-subtitle">Track fees, margins, and commissions across shipments.</p>
+              <h1 className="finance-title">Finance preview</h1>
+              <p className="finance-subtitle">Preview the future accounting workspace layout.</p>
+            </div>
+          </div>
+
+          <div className="finance-demo-banner" role="status">
+            <AlertTriangle size={20} aria-hidden="true" />
+            <div>
+              <strong>Demo data only — not connected to accounting</strong>
+              <span>Do not use these figures for billing, carrier payments, commissions, or financial decisions.</span>
             </div>
           </div>
 
@@ -310,14 +319,9 @@ export default function AdminFinancePage() {
                 </div>
               </div>
             </div>
-
-            <div className="finance-note">
-              * Demo figures shown. This view currently uses dummy data.
-            </div>
           </>
         </div>
       </main>
     </div>
   );
 }
-

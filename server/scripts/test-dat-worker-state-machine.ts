@@ -81,6 +81,9 @@ class FakeClient {
 
   async query(sql: string, params: any[] = []): Promise<any> {
     const statement = sql.replace(/\s+/g, ' ').trim();
+    if (statement.includes('public.dat_worker_heartbeats')) {
+      return { rows: [] };
+    }
     if (statement.includes("SET status = 'uncertain'") && statement.includes('WORKER_HEARTBEAT_LOST')) {
       return { rows: [] };
     }
