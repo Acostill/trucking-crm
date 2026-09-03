@@ -1,529 +1,591 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  ArrowRight, 
-  AlertCircle, 
-  CheckCircle2, 
-  Sparkles, 
-  ClipboardPaste, 
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
   ChevronRight,
-  TrendingUp,
-  TrendingDown,
-  X
+  CircleDollarSign,
+  Clock3,
+  Inbox,
+  Mail,
+  PackageCheck,
+  Send,
+  Truck,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import StatusBadge from '../components/StatusBadge';
-import CalculateRatePage from './CalculateRatePage';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
 import { buildApiUrl } from '../config';
 import MobileMenuButton from '../components/MobileMenuButton';
+import './DashboardPage.css';
+
+const QUOTE_STATUS_LABELS = {
+  received: 'Received',
+  parsing: 'Parsing email',
+  rating: 'Checking carriers',
+  ready: 'Ready to price',
+  needs_review: 'Needs review',
+  failed: 'Action required',
+  priced: 'Ready to send',
+  sent: 'Quote sent'
+};
+
+function normalizedStatus(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function formatDate(value, includeTime) {
+  if (!value) return 'Date pending';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date pending';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(includeTime ? { hour: 'numeric', minute: '2-digit' } : {})
+  });
+}
+
+function quoteLane(quote) {
+  const shipment = (quote && quote.shipment) || {};
+  const pickup = shipment.pickup && shipment.pickup.location;
+  const delivery = shipment.delivery && shipment.delivery.location;
+  const origin = [pickup && pickup.city, pickup && pickup.state].filter(Boolean).join(', ');
+  const destination = [delivery && delivery.city, delivery && delivery.state].filter(Boolean).join(', ');
+  return origin && destination ? origin + ' to ' + destination : 'Shipment details pending';
+}
+
+function loadLane(load) {
+  const origin = (load.shipperLocation || load.shipper || 'Origin pending').split(',').slice(0, 2).join(',');
+  const destination = (load.consigneeLocation || load.consignee || 'Destination pending').split(',').slice(0, 2).join(',');
+  return { origin, destination };
+}
+
+function quoteTone(status) {
+  if (status === 'failed' || status === 'needs_review') return 'attention';
+  if (status === 'ready') return 'ready';
+  if (status === 'priced' || status === 'sent') return 'complete';
+  return 'working';
+}
+
+function DashboardMetric({ icon: Icon, label, value, detail, to, tone }) {
+  const content = (
+    <>
+      <div className={'ops-dashboard-metric-icon ' + (tone || '')}>
+        <Icon size={20} aria-hidden="true" />
+      </div>
+      <div className="ops-dashboard-metric-copy">
+        <span className="ops-dashboard-metric-label">{label}</span>
+        <strong className="ops-dashboard-metric-value">{value}</strong>
+        <span className="ops-dashboard-metric-detail">{detail}</span>
+      </div>
+      {to && <ChevronRight className="ops-dashboard-metric-arrow" size={18} aria-hidden="true" />}
+    </>
+  );
+
+  return to ? (
+    <Link className="ops-dashboard-metric" to={to}>{content}</Link>
+  ) : (
+    <div className="ops-dashboard-metric">{content}</div>
+  );
+}
 
 export default function DashboardPage() {
   const { user, checking, setUser } = useAuth();
   const [loads, setLoads] = useState([]);
-  const [emailText, setEmailText] = useState('');
-  
-  // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [ratePrefill, setRatePrefill] = useState(null);
-  const [lastPayload, setLastPayload] = useState(null);
-  const [modalError, setModalError] = useState(null);
-  const [modalSuccess, setModalSuccess] = useState(null);
+  const [quotes, setQuotes] = useState([]);
+  const [mailbox, setMailbox] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshWarning, setRefreshWarning] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => {
-    async function fetchLoads() {
-      if (!user) return;
-      try {
-        const resp = await fetch(buildApiUrl('/api/loads'), { credentials: 'include' });
-        const data = await resp.json();
-        if (Array.isArray(data)) {
-          setLoads(data);
-        }
-      } catch (e) {
-        // ignore
+  const canManageQuotes = Boolean(
+    user && Array.isArray(user.roles) && user.roles.indexOf('quote_approver') > -1
+  );
+
+  useEffect(function() {
+    if (!user) return undefined;
+    let cancelled = false;
+
+    async function requestJson(path) {
+      const response = await fetch(buildApiUrl(path), { credentials: 'include' });
+      if (!response.ok) throw new Error('Request failed with status ' + response.status);
+      return response.json();
+    }
+
+    async function loadDashboard() {
+      setLoading(true);
+      setRefreshWarning('');
+      const requests = [requestJson('/api/loads')];
+      if (canManageQuotes) {
+        requests.push(requestJson('/api/email-quotes?limit=75'));
+        requests.push(requestJson('/api/email-quotes/mailbox/status'));
       }
-    }
-    fetchLoads();
-  }, [user]);
 
-  // Filter loads by status
-  const activeShipments = loads.filter(s => s.status === 'In Transit');
-  const openQuotes = loads.filter(s => ['Pending', 'New Quote', 'Quoted'].includes(s.status));
-  const deliveredCount = loads.filter(s => s.status === 'Delivered').length;
-  const onTimeRate = loads.length > 0 ? Math.round((deliveredCount / Math.max(loads.length, 1)) * 100) : 98;
+      const results = await Promise.allSettled(requests);
+      if (cancelled) return;
 
-  // KPI data
-  const kpis = [
-    { 
-      label: 'Active Shipments', 
-      value: activeShipments.length.toString(), 
-      trend: '+12.5%', 
-      positive: true 
-    },
-    { 
-      label: 'Open Quotes', 
-      value: openQuotes.length.toString(), 
-      trend: '+3.2%', 
-      positive: true 
-    },
-    { 
-      label: 'On-Time Rate', 
-      value: `${onTimeRate}%`, 
-      trend: '-0.4%', 
-      positive: false 
-    },
-    { 
-      label: 'Tasks Remaining', 
-      value: '5', 
-      trend: '-2', 
-      positive: true 
-    },
-  ];
-
-  // Sample tasks
-  const tasks = [
-    { id: 1, type: 'urgent', title: 'Carrier Falloff - LNY-8392', subtitle: 'Needs recovery option ASAP.' },
-    { id: 2, type: 'warning', title: 'Send Quote: TechFlow Logistics', subtitle: 'Chicago to Austin' },
-    { id: 3, type: 'warning', title: 'Send Quote: GreenEarth Produce', subtitle: 'Seattle to Portland' },
-    { id: 4, type: 'success', title: 'Update Delivery Status', subtitle: 'Confirm delivery for LNY-9921' },
-  ];
-
-  function formatDate(dateStr) {
-    if (!dateStr) return '-';
-    try {
-      const d = new Date(dateStr);
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } catch {
-      return dateStr;
-    }
-  }
-
-  function getGreeting() {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good Morning';
-    if (hour < 18) return 'Good Afternoon';
-    return 'Good Evening';
-  }
-
-  function getUserName() {
-    if (user?.firstName) return user.firstName;
-    if (user?.email) return user.email.split('@')[0];
-    return 'there';
-  }
-
-  async function handleProcessQuote() {
-    if (!emailText.trim()) {
-      setModalError('Please paste email content first.');
-      setIsModalOpen(true);
-      return;
-    }
-    
-    setProcessing(true);
-    setModalError(null);
-    setModalSuccess(null);
-    setRatePrefill(null);
-    setLastPayload(null);
-    setIsModalOpen(true);
-    
-    try {
-      const resp = await fetch(buildApiUrl('/api/email-paste/openrouter'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: emailText })
-      });
-      const text = await resp.text();
-      if (!resp.ok) {
-        throw new Error(text || 'Failed to process email');
+      if (results[0].status === 'fulfilled' && Array.isArray(results[0].value)) {
+        setLoads(results[0].value);
       }
-      
-      setModalSuccess('Email processed successfully!');
-      
-      // Parse response and prefill the rate calculator
-      try {
-        const data = text ? JSON.parse(text) : {};
-        // The response might have `output` wrapper or be direct
-        const payload = data && data.output ? data.output : data;
-        setLastPayload(payload);
-        
-        // Handle both old and new response structures
-        const body = payload && payload.body ? payload.body : {};
-        const shipmentDetails = body.shipment_details || payload.shipment || {};
-        const pickup = shipmentDetails.pickup || {};
-        
-        // New structure: delivery_options is an array, take the first one
-        const deliveryOptions = shipmentDetails.delivery_options || [];
-        const delivery = shipmentDetails.delivery || (deliveryOptions.length > 0 ? deliveryOptions[0] : {});
-        
-        const shipmentInfo = shipmentDetails.shipment_info || {};
-        
-        // New structure: dimensions is an array, take the first one
-        const dimsArray = shipmentInfo.dimensions || [];
-        const dims = Array.isArray(dimsArray) ? (dimsArray[0] || {}) : dimsArray;
-        
-        // Weight: check total_weight_lbs first (new), then weight_lbs (old)
-        const weightLbs = shipmentInfo.total_weight_lbs || shipmentInfo.weight_lbs;
-        
-        // Pallets: check shipment_info.pallets first (new), then dims.pallets (old)
-        const pallets = shipmentInfo.pallets || dims.pallets;
-
-        setRatePrefill({
-          pickupCity: pickup.city || '',
-          pickupState: pickup.state || '',
-          pickupZip: pickup.zip || '',
-          pickupCountry: 'US',
-          pickupDate: pickup.pickup_date || pickup.requested_date_time || pickup.date || '',
-          deliveryCity: delivery.city || '',
-          deliveryState: delivery.state || '',
-          deliveryZip: delivery.zip_code || delivery.zip || '',
-          deliveryCountry: 'US',
-          piecesUnit: 'in',
-          piecesQuantity: pallets != null ? String(pallets) : '',
-          part1Length: dims.length_in != null ? String(dims.length_in) : '',
-          part1Width: dims.width_in != null ? String(dims.width_in) : '',
-          part1Height: dims.height_in != null ? String(dims.height_in) : '',
-          part2Length: '',
-          part2Width: '',
-          part2Height: '',
-          weightUnit: weightLbs ? 'lbs' : '',
-          weightValue: weightLbs ? String(weightLbs) : '',
-          hazardousUnNumbersText: '',
-          accessorialCodesText: '',
-          shipmentId: '',
-          referenceNumber: ''
-        });
-      } catch (_err) {
-        // ignore parse errors; prefill is best-effort
+      if (canManageQuotes && results[1] && results[1].status === 'fulfilled' && Array.isArray(results[1].value)) {
+        setQuotes(results[1].value);
       }
-    } catch (err) {
-      setModalError(err && err.message ? err.message : 'Failed to process email');
-    } finally {
-      setProcessing(false);
-    }
-  }
-
-  function closeModal() {
-    setIsModalOpen(false);
-    setModalError(null);
-    setModalSuccess(null);
-  }
-
-  async function handleSelectQuote(quote, contactInfo) {
-    if (!lastPayload) {
-      setModalError('No email payload to save with quote.');
-      return;
-    }
-    try {
-      const resp = await fetch(buildApiUrl('/api/email-paste/save-load'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          payload: lastPayload, 
-          quote,
-          contact: contactInfo
-        })
-      });
-      if (!resp.ok) {
-        const msg = await resp.text();
-        throw new Error(msg || 'Failed to save load with selected quote');
+      if (canManageQuotes && results[2] && results[2].status === 'fulfilled') {
+        setMailbox(results[2].value);
       }
-      const result = await resp.json();
-      setModalSuccess('Load saved with selected quote!');
-      setEmailText(''); // Clear the input
-      // Refresh loads
-      const loadsResp = await fetch(buildApiUrl('/api/loads'), { credentials: 'include' });
-      const data = await loadsResp.json();
-      if (Array.isArray(data)) {
-        setLoads(data);
+      if (results.some(function(result) { return result.status === 'rejected'; })) {
+        setRefreshWarning('Some live counts could not be refreshed. Open the related workspace for the latest status.');
       }
-    } catch (err) {
-      setModalError(err && err.message ? err.message : 'Failed to save load');
-      throw err; // Re-throw so modal can still show confirmation
+      setLastUpdated(new Date());
+      setLoading(false);
     }
-  }
+
+    loadDashboard();
+    return function() { cancelled = true; };
+  }, [user, canManageQuotes]);
+
+  const summary = useMemo(function() {
+    const quoteCount = function(statuses) {
+      return quotes.filter(function(quote) {
+        return statuses.indexOf(normalizedStatus(quote.status)) > -1;
+      }).length;
+    };
+    const loadCount = function(statuses) {
+      return loads.filter(function(load) {
+        return statuses.indexOf(normalizedStatus(load.status)) > -1;
+      }).length;
+    };
+
+    return {
+      quoteAttention: quoteCount(['needs_review', 'failed']),
+      quoteWorking: quoteCount(['received', 'parsing', 'rating']),
+      readyToPrice: quoteCount(['ready']),
+      readyToSend: quoteCount(['priced']),
+      quoteSent: quoteCount(['sent']),
+      newLoads: loadCount(['new quote', 'quoted']),
+      booked: loadCount(['booked', 'pending']),
+      inTransit: loadCount(['in transit']),
+      delivered: loadCount(['delivered', 'invoiced', 'paid'])
+    };
+  }, [loads, quotes]);
+
+  const actionableQuotes = summary.quoteAttention + summary.quoteWorking + summary.readyToPrice;
+  const recentQuotes = quotes.slice(0, 4);
+  const recentLoads = loads.slice(0, 4);
+  const mailboxConnected = Boolean(mailbox && mailbox.configured && mailbox.enabled);
+  const mailboxState = mailboxConnected ? 'online' : mailbox ? 'offline' : 'unknown';
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
+  });
+
+  const queueItems = [
+    ...(canManageQuotes ? [
+      {
+        key: 'review',
+        count: summary.quoteAttention,
+        title: 'Quote details need review',
+        detail: 'Correct missing shipment information before pricing.',
+        to: '/email-quotes',
+        tone: 'attention',
+        icon: AlertTriangle
+      },
+      {
+        key: 'price',
+        count: summary.readyToPrice,
+        title: 'Requests ready for pricing',
+        detail: 'Compare carrier costs, approve DAT if needed, and set the margin.',
+        to: '/email-quotes',
+        tone: 'ready',
+        icon: CircleDollarSign
+      },
+      {
+        key: 'send',
+        count: summary.readyToSend,
+        title: 'Client quotes ready to send',
+        detail: 'Review the final price and email it to the customer.',
+        to: '/email-quotes',
+        tone: 'complete',
+        icon: Send
+      }
+    ] : []),
+    {
+      key: 'transit',
+      count: summary.inTransit,
+      title: 'Shipments currently in transit',
+      detail: 'Confirm progress, delivery timing, and any active exceptions.',
+      to: '/loads',
+      tone: 'transit',
+      icon: Truck
+    }
+  ].filter(function(item) { return item.count > 0; });
 
   if (checking) {
     return (
       <div className="app-layout">
         <Sidebar />
-        <main className="app-main">
-          <div className="app-loading">Checking session…</div>
-        </main>
+        <main className="app-main"><div className="app-loading">Checking session…</div></main>
       </div>
     );
   }
 
-  if (!user) {
-    return <AuthForm onAuthed={(u) => setUser(u)} />;
-  }
+  if (!user) return <AuthForm onAuthed={function(authedUser) { setUser(authedUser); }} />;
 
   return (
     <div className="app-layout">
       <Sidebar />
       <MobileMenuButton floating={true} />
       <main className="app-main">
-        {/* Decorative Background Blobs */}
-        <div className="app-blob app-blob-1" />
-        <div className="app-blob app-blob-2" />
-        
         <div className="app-content">
-          <div className="dashboard">
-            {/* Header */}
-            <div className="dashboard-header">
-              <div>
-                <h1 className="dashboard-title">{getGreeting()}, {getUserName()}</h1>
-                <p className="dashboard-subtitle">Ready to move some freight?</p>
-              </div>
-              <div className="dashboard-timestamp">
-                Last updated: Just now
-              </div>
-            </div>
-
-            {/* KPI Grid */}
-            <div className="kpi-grid">
-              {kpis.map((kpi, idx) => (
-                <div key={idx} className="kpi-card">
-                  <div className="kpi-header">
-                    <span className="kpi-label">{kpi.label}</span>
-                    <span className={`kpi-trend ${kpi.positive ? 'positive' : 'negative'}`}>
-                      {kpi.positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                      {kpi.trend}
-                    </span>
-                  </div>
-                  <div className="kpi-value">{kpi.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick Import Section */}
-            <div className="quick-import-card">
-              <div className="quick-import-decoration">
-                <Sparkles size={120} />
-              </div>
-              <div className="quick-import-content">
-                <div className="quick-import-header">
-                  <div className="quick-import-icon">
-                    <ClipboardPaste size={20} />
-                  </div>
-                  <div>
-                    <h3 className="quick-import-title">Quick Import</h3>
-                    <p className="quick-import-subtitle">Paste load tender or email content to generate a quote.</p>
-                  </div>
-                </div>
-                
-                <div className="quick-import-input-wrapper">
-                  <textarea
-                    value={emailText}
-                    onChange={(e) => setEmailText(e.target.value)}
-                    placeholder="Paste email body here (e.g., 'Need a flatbed from Chicago to Austin...')"
-                    className="quick-import-textarea"
-                  />
-                  <div className="quick-import-actions">
-                    {emailText && (
-                      <button 
-                        onClick={() => setEmailText('')}
-                        className="btn-clear"
-                      >
-                        Clear
-                      </button>
-                    )}
-                    <button 
-                      onClick={handleProcessQuote}
-                      className="btn-process"
-                      disabled={processing || !emailText.trim()}
-                    >
-                      <Sparkles size={14} />
-                      {processing ? 'Processing...' : 'Process Quote'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Two Column Layout */}
-            <div className="dashboard-grid">
-              {/* Recent Quotes */}
-              <div className="dashboard-col-2">
-                <div className="section-header">
-                  <h3 className="section-title">Recent Quotes</h3>
-                  <Link to="/loads" className="section-link">
-                    View Pipeline <ChevronRight size={14} />
+          <div className="ops-dashboard">
+            <section className="ops-dashboard-hero">
+              <div className="ops-dashboard-hero-copy">
+                <span className="ops-dashboard-eyebrow">Operations overview</span>
+                <h1>{getGreeting()}, {getUserName(user)}</h1>
+                <p>
+                  Review inbound requests, price the shipment, send the customer quote,
+                  then manage booked freight through delivery.
+                </p>
+                <div className="ops-dashboard-hero-actions">
+                  {canManageQuotes && (
+                    <Link to="/email-quotes" className="ops-dashboard-primary-action">
+                      <Inbox size={17} aria-hidden="true" />
+                      Open Quote Inbox
+                    </Link>
+                  )}
+                  <Link to="/pipeline" className="ops-dashboard-secondary-action">
+                    View Pipeline <ArrowRight size={16} aria-hidden="true" />
                   </Link>
                 </div>
-                
-                <div className="glass-table-card">
-                  {openQuotes.length === 0 ? (
-                    <div className="table-empty">No active quotes found.</div>
-                  ) : (
-                    <table className="glass-table">
-                      <thead>
-                        <tr>
-                          <th>ID</th>
-                          <th>Customer</th>
-                          <th>Route</th>
-                          <th>Status</th>
-                          <th className="text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {openQuotes.slice(0, 5).map((s, idx) => (
-                          <tr key={s.id || idx}>
-                            <td className="font-medium">{s.loadNumber || '-'}</td>
-                            <td>{s.customer || '-'}</td>
-                            <td className="route-cell">
-                              {(s.shipperLocation || s.shipper || '-').split(',')[0]}
-                              <ArrowRight size={12} className="route-arrow" />
-                              {(s.consigneeLocation || s.consignee || '-').split(',')[0]}
-                            </td>
-                            <td>
-                              <StatusBadge status={s.status || 'Pending'} />
-                            </td>
-                            <td className="text-right">
-                              <button className="btn-review">Review</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
+              </div>
+
+              <div className="ops-dashboard-hero-status">
+                <span className="ops-dashboard-date">{todayLabel}</span>
+                {canManageQuotes ? (
+                  <div className={'ops-dashboard-connection ' + mailboxState}>
+                    {mailboxState === 'online'
+                      ? <Wifi size={18} aria-hidden="true" />
+                      : mailboxState === 'offline'
+                        ? <WifiOff size={18} aria-hidden="true" />
+                        : <Clock3 size={18} aria-hidden="true" />}
+                    <div>
+                      <strong>{mailboxState === 'online'
+                        ? 'Quote mailbox connected'
+                        : mailboxState === 'offline'
+                          ? 'Quote mailbox needs attention'
+                          : 'Checking quote mailbox'}</strong>
+                      <span>{mailboxState === 'online'
+                        ? (mailbox.connectedAddress || mailbox.mailboxAddress || 'Inbound requests are active')
+                        : mailboxState === 'offline'
+                          ? 'Open Quote Inbox to review the connection.'
+                          : 'Live connection status is loading.'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="ops-dashboard-connection neutral">
+                    <PackageCheck size={18} aria-hidden="true" />
+                    <div><strong>Shipment workspace</strong><span>Your account is ready for operations.</span></div>
+                  </div>
+                )}
+                <span className="ops-dashboard-updated">
+                  {loading ? 'Refreshing live work…' : 'Updated ' + formatDate(lastUpdated, true)}
+                </span>
+              </div>
+            </section>
+
+            {refreshWarning && <div className="ops-dashboard-warning"><AlertTriangle size={16} />{refreshWarning}</div>}
+
+            <section className="ops-dashboard-metrics" aria-label="Current workload">
+              {canManageQuotes ? (
+                <>
+                  <DashboardMetric
+                    icon={Inbox}
+                    label="Quote inbox"
+                    value={loading ? '—' : actionableQuotes}
+                    detail="Awaiting staff action"
+                    to="/email-quotes"
+                    tone="blue"
+                  />
+                  <DashboardMetric
+                    icon={CircleDollarSign}
+                    label="Ready to price"
+                    value={loading ? '—' : summary.readyToPrice}
+                    detail="Carrier comparison next"
+                    to="/email-quotes"
+                    tone="amber"
+                  />
+                </>
+              ) : (
+                <>
+                  <DashboardMetric
+                    icon={PackageCheck}
+                    label="Open shipment work"
+                    value={loading ? '—' : summary.newLoads + summary.booked + summary.inTransit}
+                    detail="Across active stages"
+                    to="/loads"
+                    tone="blue"
+                  />
+                  <DashboardMetric
+                    icon={Clock3}
+                    label="Booked / pending"
+                    value={loading ? '—' : summary.booked}
+                    detail="Preparing to move"
+                    to="/pipeline"
+                    tone="amber"
+                  />
+                </>
+              )}
+              <DashboardMetric
+                icon={Truck}
+                label="In transit"
+                value={loading ? '—' : summary.inTransit}
+                detail="Active shipments"
+                to="/loads"
+                tone="green"
+              />
+              <DashboardMetric
+                icon={CheckCircle2}
+                label="Completed"
+                value={loading ? '—' : summary.delivered}
+                detail="Delivered or closed"
+                to="/pipeline"
+                tone="slate"
+              />
+            </section>
+
+            <section className="ops-dashboard-section">
+              <div className="ops-dashboard-section-heading">
+                <div>
+                  <span className="ops-dashboard-section-kicker">How work moves</span>
+                  <h2>One clear workflow from email to delivery</h2>
+                  <p>Each step opens the workspace where that action is completed.</p>
                 </div>
               </div>
 
-              {/* Tasks */}
-              <div className="dashboard-col-1">
-                <div className="tasks-card">
-                  <div className="tasks-header">
-                    <div className="tasks-title-row">
-                      <AlertCircle size={18} className="tasks-icon" />
-                      <h3 className="section-title">Tasks</h3>
-                    </div>
-                    <span className="tasks-count">5 Pending</span>
-                  </div>
-                  
-                  <div className="tasks-list">
-                    {tasks.map((task) => (
-                      <div 
-                        key={task.id} 
-                        className={`task-item task-${task.type}`}
-                      >
-                        {task.type === 'success' ? (
-                          <CheckCircle2 size={16} className="task-icon-success" />
-                        ) : (
-                          <div className={`task-dot task-dot-${task.type}`} />
-                        )}
-                        <div>
-                          <div className="task-title">{task.title}</div>
-                          <div className="task-subtitle">{task.subtitle}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <button className="btn-add-task">
-                    + Add New Task
-                  </button>
-                </div>
+              <div className="ops-dashboard-workflow">
+                <WorkflowStep
+                  number="01"
+                  title="Review intake"
+                  detail="Confirm the shipment details parsed from the customer email."
+                  metric={canManageQuotes ? actionableQuotes + ' open' : 'Quote desk'}
+                  to={canManageQuotes ? '/email-quotes' : null}
+                  icon={Mail}
+                />
+                <WorkflowStep
+                  number="02"
+                  title="Price the shipment"
+                  detail="Choose the truck, compare carriers and DAT, then apply margin."
+                  metric={canManageQuotes ? summary.readyToPrice + ' ready' : 'Quote desk'}
+                  to={canManageQuotes ? '/email-quotes' : null}
+                  icon={CircleDollarSign}
+                />
+                <WorkflowStep
+                  number="03"
+                  title="Send the quote"
+                  detail="Approve the client price and send it from the quote record."
+                  metric={canManageQuotes ? summary.readyToSend + ' to send' : 'Quote desk'}
+                  to={canManageQuotes ? '/email-quotes' : null}
+                  icon={Send}
+                />
+                <WorkflowStep
+                  number="04"
+                  title="Manage the move"
+                  detail="Track booked freight in Pipeline and Shipments through delivery."
+                  metric={summary.inTransit + ' in transit'}
+                  to="/pipeline"
+                  icon={Truck}
+                  last
+                />
               </div>
+            </section>
+
+            <div className="ops-dashboard-main-grid">
+              <section className="ops-dashboard-panel ops-dashboard-queue-panel">
+                <div className="ops-dashboard-panel-header">
+                  <div>
+                    <span className="ops-dashboard-section-kicker">Priority queue</span>
+                    <h2>What needs attention</h2>
+                  </div>
+                  <span className="ops-dashboard-panel-count">{queueItems.length} active</span>
+                </div>
+
+                <div className="ops-dashboard-queue">
+                  {loading ? (
+                    <div className="ops-dashboard-empty"><Clock3 size={20} /><span>Loading current work…</span></div>
+                  ) : queueItems.length === 0 ? (
+                    <div className="ops-dashboard-empty success">
+                      <CheckCircle2 size={22} />
+                      <div><strong>You are caught up</strong><span>No active items need attention right now.</span></div>
+                    </div>
+                  ) : queueItems.map(function(item) {
+                    const Icon = item.icon;
+                    return (
+                      <Link key={item.key} to={item.to} className="ops-dashboard-queue-item">
+                        <div className={'ops-dashboard-queue-icon ' + item.tone}><Icon size={18} /></div>
+                        <div className="ops-dashboard-queue-copy">
+                          <strong>{item.title}</strong>
+                          <span>{item.detail}</span>
+                        </div>
+                        <span className={'ops-dashboard-queue-count ' + item.tone}>{item.count}</span>
+                        <ChevronRight size={18} className="ops-dashboard-queue-arrow" />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="ops-dashboard-panel ops-dashboard-stage-panel">
+                <div className="ops-dashboard-panel-header">
+                  <div>
+                    <span className="ops-dashboard-section-kicker">Shipment stages</span>
+                    <h2>Current pipeline</h2>
+                  </div>
+                  <Link to="/pipeline" className="ops-dashboard-text-link">Open board <ArrowRight size={14} /></Link>
+                </div>
+                <div className="ops-dashboard-stage-list">
+                  <StageRow label="New / quoted" value={summary.newLoads} total={loads.length} tone="new" />
+                  <StageRow label="Booked / pending" value={summary.booked} total={loads.length} tone="booked" />
+                  <StageRow label="In transit" value={summary.inTransit} total={loads.length} tone="transit" />
+                  <StageRow label="Completed" value={summary.delivered} total={loads.length} tone="complete" />
+                </div>
+              </section>
             </div>
 
-            {/* Active Shipments */}
-            <div className="dashboard-section">
-              <div className="section-header">
-                <h3 className="section-title">Active Shipments (In Transit)</h3>
-                <Link to="/loads" className="section-link">
-                  View All Shipments <ChevronRight size={14} />
+            <section className="ops-dashboard-section">
+              <div className="ops-dashboard-section-heading row">
+                <div>
+                  <span className="ops-dashboard-section-kicker">Recent work</span>
+                  <h2>Pick up where the team left off</h2>
+                </div>
+                <Link to={canManageQuotes ? '/email-quotes' : '/loads'} className="ops-dashboard-text-link">
+                  View all <ArrowRight size={14} />
                 </Link>
               </div>
-              
-              <div className="glass-table-card">
-                {activeShipments.length === 0 ? (
-                  <div className="table-empty">No shipments in transit.</div>
-                ) : (
-                  <table className="glass-table">
-                    <thead>
-                      <tr>
-                        <th>ID</th>
-                        <th>Customer</th>
-                        <th>Route</th>
-                        <th>Status</th>
-                        <th className="text-right">ETA</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeShipments.slice(0, 5).map((s, idx) => (
-                        <tr key={s.id || idx}>
-                          <td className="font-medium">{s.loadNumber || '-'}</td>
-                          <td>{s.customer || '-'}</td>
-                          <td className="route-cell">
-                            {(s.shipperLocation || s.shipper || '-').split(',')[0]}
-                            <ArrowRight size={12} className="route-arrow" />
-                            {(s.consigneeLocation || s.consignee || '-').split(',')[0]}
-                          </td>
-                          <td>
-                            <StatusBadge status={s.status || 'In Transit'} />
-                          </td>
-                          <td className="text-right font-medium">
-                            {formatDate(s.deliveryDate)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+              <div className={'ops-dashboard-recent-grid ' + (!canManageQuotes ? 'single' : '')}>
+                {canManageQuotes && (
+                  <RecentQuotes quotes={recentQuotes} loading={loading} />
                 )}
+                <RecentShipments loads={recentLoads} loading={loading} />
               </div>
-            </div>
+            </section>
           </div>
         </div>
       </main>
-
-      {/* Quote Processing Modal */}
-      {isModalOpen && (
-        <div className="quote-modal-overlay" onClick={closeModal}>
-          <div className="quote-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="quote-modal-header">
-              <div>
-                <h2 className="quote-modal-title">
-                  {processing ? 'Processing Email...' : 'Calculate Rate'}
-                </h2>
-                <p className="quote-modal-subtitle">
-                  {processing 
-                    ? 'Extracting shipment details from your email...'
-                    : 'Review and get quotes for this shipment'
-                  }
-                </p>
-              </div>
-              <button className="quote-modal-close" onClick={closeModal}>
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="quote-modal-body">
-              {modalError && (
-                <div className="quote-modal-message error">{modalError}</div>
-              )}
-              {modalSuccess && (
-                <div className="quote-modal-message success">{modalSuccess}</div>
-              )}
-              
-              {processing ? (
-                <div className="quote-modal-loading">
-                  <div className="quote-modal-spinner" />
-                  <span>Analyzing email content...</span>
-                </div>
-              ) : (
-                <CalculateRatePage 
-                  embedded 
-                  initialValues={{}} 
-                  prefill={ratePrefill}
-                  onSelectQuote={handleSelectQuote}
-                />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
+function WorkflowStep({ number, title, detail, metric, to, icon: Icon, last }) {
+  const content = (
+    <>
+      <div className="ops-dashboard-workflow-topline">
+        <span className="ops-dashboard-workflow-number">{number}</span>
+        <span className="ops-dashboard-workflow-metric">{metric}</span>
+      </div>
+      <div className="ops-dashboard-workflow-icon"><Icon size={21} aria-hidden="true" /></div>
+      <h3>{title}</h3>
+      <p>{detail}</p>
+      {to && <span className="ops-dashboard-workflow-link">Open workspace <ArrowRight size={14} /></span>}
+      {!last && <span className="ops-dashboard-workflow-connector" aria-hidden="true"><ChevronRight size={18} /></span>}
+    </>
+  );
+  return to ? (
+    <Link to={to} className="ops-dashboard-workflow-step">{content}</Link>
+  ) : (
+    <div className="ops-dashboard-workflow-step muted">{content}</div>
+  );
+}
+
+function StageRow({ label, value, total, tone }) {
+  const width = total > 0 && value > 0 ? Math.max(4, Math.round((value / total) * 100)) : 0;
+  return (
+    <div className="ops-dashboard-stage-row">
+      <div className="ops-dashboard-stage-label"><span>{label}</span><strong>{value}</strong></div>
+      <div className="ops-dashboard-stage-track">
+        <span className={'ops-dashboard-stage-fill ' + tone} style={{ width: width + '%' }} />
+      </div>
+    </div>
+  );
+}
+
+function RecentQuotes({ quotes, loading }) {
+  return (
+    <article className="ops-dashboard-panel ops-dashboard-recent-panel">
+      <div className="ops-dashboard-panel-header compact">
+        <div className="ops-dashboard-panel-title"><Inbox size={18} /><h3>Latest quote requests</h3></div>
+        <Link to="/email-quotes" className="ops-dashboard-text-link">Quote Inbox</Link>
+      </div>
+      <div className="ops-dashboard-recent-list">
+        {loading ? (
+          <div className="ops-dashboard-empty"><Clock3 size={20} /><span>Loading quote requests…</span></div>
+        ) : quotes.length === 0 ? (
+          <div className="ops-dashboard-empty"><Mail size={20} /><span>No quote requests yet.</span></div>
+        ) : quotes.map(function(quote) {
+          const status = normalizedStatus(quote.status);
+          return (
+            <Link to="/email-quotes" className="ops-dashboard-recent-item" key={quote.id}>
+              <div className="ops-dashboard-recent-copy">
+                <strong>{quote.subject || 'Untitled quote request'}</strong>
+                <span>{quoteLane(quote)}</span>
+                <small>{(quote.sender && (quote.sender.name || quote.sender.email)) || 'Sender pending'} · {formatDate(quote.receivedAt, true)}</small>
+              </div>
+              <span className={'ops-dashboard-quote-status ' + quoteTone(status)}>
+                {QUOTE_STATUS_LABELS[status] || 'Received'}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
+function RecentShipments({ loads, loading }) {
+  return (
+    <article className="ops-dashboard-panel ops-dashboard-recent-panel">
+      <div className="ops-dashboard-panel-header compact">
+        <div className="ops-dashboard-panel-title"><Truck size={18} /><h3>Latest shipments</h3></div>
+        <Link to="/loads" className="ops-dashboard-text-link">Shipments</Link>
+      </div>
+      <div className="ops-dashboard-recent-list">
+        {loading ? (
+          <div className="ops-dashboard-empty"><Clock3 size={20} /><span>Loading shipments…</span></div>
+        ) : loads.length === 0 ? (
+          <div className="ops-dashboard-empty"><Truck size={20} /><span>No shipments created yet.</span></div>
+        ) : loads.map(function(load) {
+          const lane = loadLane(load);
+          return (
+            <Link to="/loads" className="ops-dashboard-recent-item" key={load.id}>
+              <div className="ops-dashboard-load-mark">{String(load.customer || '?').charAt(0).toUpperCase()}</div>
+              <div className="ops-dashboard-recent-copy">
+                <strong>{load.loadNumber || 'Load pending'} · {load.customer || 'Customer pending'}</strong>
+                <span className="ops-dashboard-inline-lane">{lane.origin}<ArrowRight size={12} />{lane.destination}</span>
+                <small>{load.shipDate ? 'Pickup ' + formatDate(load.shipDate, false) : 'Pickup date pending'}</small>
+              </div>
+              <StatusBadge status={load.status || 'Pending'} />
+            </Link>
+          );
+        })}
+      </div>
+    </article>
+  );
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function getUserName(user) {
+  if (user && user.firstName) return user.firstName;
+  if (user && user.email) return user.email.split('@')[0];
+  return 'team';
+}

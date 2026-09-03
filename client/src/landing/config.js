@@ -28,7 +28,7 @@ function withoutTrailingSlash(value) {
 export const CRM_BASE =
   withoutTrailingSlash(process.env.REACT_APP_CRM_BASE_URL || getDefaultCrmBase());
 
-export const CRM_LOGIN_URL = `${CRM_BASE}/loads`;
+export const CRM_LOGIN_URL = `${CRM_BASE}/dashboard`;
 
 /* small fetch helper with a hard timeout so the UI never hangs
    on a cold backend — callers fall back to local behaviour */

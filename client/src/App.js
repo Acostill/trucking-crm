@@ -153,7 +153,7 @@ function OperationsRoute({ children, allowPreview = false, requiredRole }) {
 function DefaultRoute() {
   const { user, checking } = useAuth();
   if (checking) return null;
-  return <Navigate to={isCustomerAccount(user) ? '/portal' : '/loads'} replace />;
+  return <Navigate to={isCustomerAccount(user) ? '/portal' : '/dashboard'} replace />;
 }
 
 function AppRoutes() {

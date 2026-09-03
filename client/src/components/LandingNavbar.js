@@ -26,7 +26,7 @@ export default function LandingNavbar() {
 
           {/* CTA Buttons */}
           <div className="landing-navbar-actions">
-            <Link to={isAuthed ? '/dashboard' : '/loads'} className="landing-navbar-link">
+            <Link to="/dashboard" className="landing-navbar-link">
               {isAuthed ? 'Dashboard' : 'Log in'}
             </Link>
             <Link to="/calculate-rate" className="landing-navbar-cta">
@@ -55,7 +55,7 @@ export default function LandingNavbar() {
           <a href="#tracking" className="landing-navbar-mobile-link">Track Shipment</a>
           <hr className="landing-navbar-mobile-divider" />
           <div className="landing-navbar-mobile-actions">
-            <Link to={isAuthed ? '/dashboard' : '/loads'} className="landing-navbar-mobile-link">
+            <Link to="/dashboard" className="landing-navbar-mobile-link">
               {isAuthed ? 'Dashboard' : 'Log in'}
             </Link>
             <Link to="/calculate-rate" className="landing-navbar-mobile-cta">Get a Quote</Link>
@@ -65,4 +65,3 @@ export default function LandingNavbar() {
     </nav>
   );
 }
-

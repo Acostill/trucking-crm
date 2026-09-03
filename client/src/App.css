@@ -3431,139 +3431,6 @@ label {
   letter-spacing: -0.02em;
 }
 
-/* Quick Import Section */
-.quick-import-card {
-  position: relative;
-  overflow: hidden;
-  padding: 24px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  border-radius: 16px;
-  box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.05);
-}
-
-.quick-import-decoration {
-  position: absolute;
-  top: 0;
-  right: 0;
-  padding: 16px;
-  opacity: 0.1;
-  color: var(--primary);
-  transition: opacity 0.2s ease;
-}
-
-.quick-import-card:hover .quick-import-decoration {
-  opacity: 0.2;
-}
-
-.quick-import-content {
-  position: relative;
-  z-index: 1;
-}
-
-.quick-import-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.quick-import-icon {
-  padding: 10px;
-  background: var(--lanely-indigo-50);
-  color: var(--primary);
-  border-radius: 10px;
-}
-
-.quick-import-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
-}
-
-.quick-import-subtitle {
-  font-size: 12px;
-  color: var(--muted);
-  margin: 4px 0 0 0;
-}
-
-.quick-import-input-wrapper {
-  position: relative;
-}
-
-.quick-import-textarea {
-  width: 100%;
-  height: 96px;
-  padding: 16px;
-  background: rgba(248, 250, 252, 0.5);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  font-size: 14px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: var(--text);
-  resize: none;
-  transition: all 0.15s ease;
-}
-
-.quick-import-textarea::placeholder {
-  color: var(--lanely-slate-400);
-}
-
-.quick-import-textarea:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px var(--ring);
-}
-
-.quick-import-actions {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.btn-clear {
-  padding: 6px 12px;
-  background: transparent;
-  border: none;
-  font-size: 12px;
-  color: var(--lanely-slate-400);
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.btn-clear:hover {
-  color: var(--lanely-slate-600);
-}
-
-.btn-process {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--primary);
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  color: white;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px -2px rgba(79, 70, 229, 0.3);
-}
-
-.btn-process:hover {
-  background: #4338ca;
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px -4px rgba(79, 70, 229, 0.4);
-}
-
 /* Dashboard Grid */
 .dashboard-grid {
   display: grid;
@@ -3885,12 +3752,6 @@ label {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
-  }
-  
-  .quick-import-actions {
-    position: static;
-    margin-top: 12px;
-    justify-content: flex-end;
   }
   
   .glass-table th,
@@ -7173,7 +7034,6 @@ label {
 }
 
 .kpi-card,
-.quick-import-card,
 .glass-table-card,
 .tasks-card,
 .shipment-table-card,
@@ -7203,7 +7063,6 @@ label {
 }
 
 .kpi-card:hover,
-.quick-import-card:hover,
 .glass-table-card:hover,
 .shipment-table-card:hover,
 .tasks-card:hover {
@@ -7229,17 +7088,6 @@ label {
   border: 1px solid rgba(30, 64, 175, 0.28);
 }
 
-.quick-import-icon {
-  background: var(--fct-accent-soft);
-  color: #1e3a8a;
-  border: 1px solid rgba(30, 64, 175, 0.32);
-}
-
-.quick-import-decoration {
-  color: #1e3a8a;
-}
-
-.quick-import-textarea,
 .shipment-search input,
 .shipment-details-modal .modal-form input,
 .shipment-details-modal .modal-form textarea,
@@ -7249,7 +7097,6 @@ label {
   border-radius: var(--fct-radius);
 }
 
-.quick-import-textarea:focus,
 .shipment-search input:focus,
 .shipment-details-modal .modal-form input:focus,
 .shipment-details-modal .modal-form textarea:focus,
@@ -7259,7 +7106,6 @@ label {
 }
 
 .btn-create,
-.btn-process,
 .btn,
 .quote-modal .btn {
   background: var(--fct-black);
@@ -7269,7 +7115,6 @@ label {
 }
 
 .btn-create:hover,
-.btn-process:hover,
 .btn:hover {
   background: #111827;
   box-shadow: 0 18px 38px -18px rgba(5, 5, 5, 0.8);
