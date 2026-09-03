@@ -14,6 +14,7 @@
     "db:migrate:dat-rateview": "ts-node ./scripts/run-dat-rateview-migration.ts",
     "test:dat-rateview": "ts-node ./scripts/test-dat-rateview-integration.ts",
     "test:dat-search-loads": "ts-node ./scripts/test-dat-search-loads.ts",
+    "test:auto-dat-queue": "ts-node ./scripts/test-auto-dat-queue.ts",
     "test:dat-worker-state": "ts-node ./scripts/test-dat-worker-state-machine.ts",
     "test:truck-assignment": "ts-node ./scripts/test-truck-assignment.ts",
     "test:phase1-hardening": "ts-node ./scripts/test-phase1-hardening.ts",

@@ -843,7 +843,7 @@ export default function EmailQuoteInboxPage() {
       });
       applyDetail(detail);
       setNotice(detail.status === 'ready'
-        ? 'Shipment details saved and carrier rates refreshed.'
+        ? 'Shipment saved. Carrier pricing refreshed and eligible DAT searches were queued automatically.'
         : 'Shipment saved. Review the remaining missing details.');
       await loadWorkspace(detail.id);
     } catch (requestError) {
@@ -867,7 +867,7 @@ export default function EmailQuoteInboxPage() {
         method: 'POST'
       });
       applyDetail(detail);
-      setNotice('Email parsed again and carrier rates refreshed.');
+      setNotice('Email parsed again. Carrier pricing refreshed and eligible DAT searches were queued automatically.');
       await loadWorkspace(detail.id);
     } catch (requestError) {
       setError(requestError.message || 'Unable to reprocess the email');
@@ -876,7 +876,7 @@ export default function EmailQuoteInboxPage() {
     }
   }
 
-  async function approveDatLookup() {
+  async function retryDatLookup() {
     if (!selected) return;
     if (previewMode) {
       setNotice('Demo DAT lookup is complete. Spot and Contract market benchmarks are shown below.');
@@ -890,15 +890,15 @@ export default function EmailQuoteInboxPage() {
         method: 'POST'
       });
       applyDetail(detail);
-      setNotice('DAT lookup approved. The worker will update this quote automatically.');
+      setNotice('DAT pricing was queued again. The worker will update this quote automatically.');
     } catch (requestError) {
-      setError(requestError.message || 'Unable to approve the DAT lookup');
+      setError(requestError.message || 'Unable to retry DAT pricing');
     } finally {
       setRunningDat(false);
     }
   }
 
-  async function approveDatSearchLoads() {
+  async function retryDatSearchLoads() {
     if (!selected) return;
     if (previewMode) {
       setNotice('Demo DAT Search Loads results are shown below, ranked by highest total Rate.');
@@ -912,9 +912,9 @@ export default function EmailQuoteInboxPage() {
         method: 'POST'
       });
       applyDetail(detail);
-      setNotice('DAT Search Loads approved. The worker will return up to 10 highest market offers for pricing context.');
+      setNotice('DAT Search Loads was queued again. The worker will return up to 10 highest market offers for pricing context.');
     } catch (requestError) {
-      setError(requestError.message || 'Unable to approve DAT Search Loads');
+      setError(requestError.message || 'Unable to retry DAT Search Loads');
     } finally {
       setRunningDatLoads(false);
     }
@@ -1033,6 +1033,10 @@ export default function EmailQuoteInboxPage() {
   const datLoadsOption = carrierQuotes.find(function(option) { return option.key === 'datLoadOffers'; });
   const datLoadsBusy = datLoadsOption && ['pending', 'running'].indexOf(datLoadsOption.status) > -1;
   const datLoadsCompleted = datLoadsOption && datLoadsOption.status === 'completed';
+  const datRetryable = datStatusOption &&
+    ['awaiting_approval', 'needs_auth', 'failed'].indexOf(datStatusOption.status) > -1;
+  const datLoadsRetryable = datLoadsOption &&
+    ['awaiting_approval', 'needs_auth', 'failed'].indexOf(datLoadsOption.status) > -1;
   const datEquipmentSaved = Boolean(editor.datEquipmentType) &&
     editor.datEquipmentType === shipment.datEquipmentType;
   const datSearchToday = calendarDateInTimezone(new Date(), 'America/New_York');
@@ -1052,9 +1056,9 @@ export default function EmailQuoteInboxPage() {
     return String(editor[field] || '').trim().toUpperCase() ===
       String(savedEditor[field] || '').trim().toUpperCase();
   });
-  const datApprovalDisabled = runningDat || datBusy || datCompleted ||
+  const datRetryDisabled = runningDat || datBusy || datCompleted ||
     !datEquipmentSaved || (datStatusOption && datStatusOption.status === 'disabled');
-  const datLoadsApprovalDisabled = runningDatLoads || datLoadsBusy || datLoadsCompleted ||
+  const datLoadsRetryDisabled = runningDatLoads || datLoadsBusy || datLoadsCompleted ||
     !datEquipmentSaved || !datSearchPickupDateCurrent || !searchLoadsSnapshotSaved ||
     (datLoadsOption && datLoadsOption.status === 'disabled');
   const carrierCostOptions = carrierQuotes.filter(function(option) {
@@ -1272,18 +1276,25 @@ export default function EmailQuoteInboxPage() {
                     <div className="eq-section-actions">
                       <button type="button" className="eq-secondary-button strong" onClick={saveShipmentAndRate} disabled={savingShipment}>
                         <RefreshCw size={15} className={savingShipment ? 'spinning' : ''} />
-                        {savingShipment ? 'Checking carriers...' : 'Save details & refresh rates'}
+                        {savingShipment ? 'Refreshing pricing...' : 'Save details & refresh pricing'}
                       </button>
                     </div>
                   </section>
 
                   <section className="eq-section">
                     <div className="eq-section-heading">
-                      <div><Truck size={18} /><span><strong>Carrier costs + DAT market benchmarks</strong><small>Select a bookable carrier cost. Use DAT Spot and Contract ranges to validate the market.</small></span></div>
-                      <button type="button" className="eq-secondary-button eq-dat-button" onClick={approveDatLookup} disabled={datApprovalDisabled} title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !datEquipmentSaved ? 'Save shipment details before approving DAT' : ''}>
-                        <RefreshCw size={14} className={(runningDat || datBusy) ? 'spinning' : ''} />
-                        {datCompleted ? 'DAT complete' : datBusy ? 'DAT lookup running' : 'Approve & run DAT lookup'}
-                      </button>
+                      <div><Truck size={18} /><span><strong>Carrier costs + DAT market benchmarks</strong><small>Carrier pricing and DAT benchmarks run automatically. Select the best confirmed carrier cost when the results are ready.</small></span></div>
+                      {datRetryable ? (
+                        <button type="button" className="eq-secondary-button eq-dat-button" onClick={retryDatLookup} disabled={datRetryDisabled} title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !datEquipmentSaved ? 'Save shipment details before retrying DAT' : ''}>
+                          <RefreshCw size={14} className={runningDat ? 'spinning' : ''} />
+                          {runningDat ? 'Queueing...' : 'Retry DAT pricing'}
+                        </button>
+                      ) : (
+                        <span className={'eq-auto-status ' + (datCompleted ? 'complete' : datBusy ? 'working' : datStatusOption && datStatusOption.status === 'disabled' ? 'offline' : '')}>
+                          {datCompleted ? <CheckCircle2 size={14} /> : <RefreshCw size={14} className={datBusy ? 'spinning' : ''} />}
+                          {datCompleted ? 'DAT pricing ready' : datBusy ? 'Running automatically' : datStatusOption && datStatusOption.status === 'disabled' ? 'DAT worker offline' : 'Queues automatically'}
+                        </span>
+                      )}
                     </div>
                     {carrierCostOptions.length ? (
                       <div className="eq-carrier-grid">
@@ -1343,17 +1354,24 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section eq-dat-loads-section">
                     <div className="eq-section-heading">
-                      <div><Truck size={18} /><span><strong>DAT Market Offers — pricing context only</strong><small>Read-only Search Loads comparisons ranked by total Rate. They are not confirmed carrier bids or capacity.</small></span></div>
-                      <button
-                        type="button"
-                        className="eq-secondary-button eq-dat-button"
-                        onClick={approveDatSearchLoads}
-                        disabled={datLoadsApprovalDisabled}
-                        title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !editor.pickupDate ? 'Add and save a pickup date first' : !datSearchPickupDateCurrent ? 'Pickup date must be today or later' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and DAT equipment before approving Search Loads' : ''}
-                      >
-                        <RefreshCw size={14} className={(runningDatLoads || datLoadsBusy) ? 'spinning' : ''} />
-                        {datLoadsCompleted ? 'Search Loads complete' : datLoadsBusy ? 'Search Loads running' : 'Approve DAT Search Loads'}
-                      </button>
+                      <div><Truck size={18} /><span><strong>DAT Market Offers — pricing context only</strong><small>Search Loads runs automatically and returns up to 10 direct results ranked by total Rate. They are not confirmed carrier bids or capacity.</small></span></div>
+                      {datLoadsRetryable ? (
+                        <button
+                          type="button"
+                          className="eq-secondary-button eq-dat-button"
+                          onClick={retryDatSearchLoads}
+                          disabled={datLoadsRetryDisabled}
+                          title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !editor.pickupDate ? 'Add and save a pickup date first' : !datSearchPickupDateCurrent ? 'Pickup date must be today or later' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and DAT equipment before retrying Search Loads' : ''}
+                        >
+                          <RefreshCw size={14} className={runningDatLoads ? 'spinning' : ''} />
+                          {runningDatLoads ? 'Queueing...' : 'Retry Search Loads'}
+                        </button>
+                      ) : (
+                        <span className={'eq-auto-status ' + (datLoadsCompleted ? 'complete' : datLoadsBusy ? 'working' : datLoadsOption && datLoadsOption.status === 'disabled' ? 'offline' : '')}>
+                          {datLoadsCompleted ? <CheckCircle2 size={14} /> : <RefreshCw size={14} className={datLoadsBusy ? 'spinning' : ''} />}
+                          {datLoadsCompleted ? 'Market offers ready' : datLoadsBusy ? 'Running automatically' : datLoadsOption && datLoadsOption.status === 'disabled' ? 'DAT worker offline' : 'Queues automatically'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="eq-dat-market-warning">
@@ -1362,7 +1380,7 @@ export default function EmailQuoteInboxPage() {
                     </div>
 
                     {!datLoadsOption ? (
-                      <div className="eq-rate-empty"><Truck size={22} /><p>Save a complete shipment, then approve one exact DAT Search Loads query.</p></div>
+                      <div className="eq-rate-empty"><Truck size={22} /><p>Search Loads will start automatically as soon as the saved shipment has a valid lane, pickup date, and DAT equipment.</p></div>
                     ) : !datLoadsOption.available ? (
                       <div className="eq-dat-loads-state">
                         <AlertCircle size={17} />
@@ -1411,7 +1429,7 @@ export default function EmailQuoteInboxPage() {
                             </table>
                           </div>
                         ) : (
-                          <div className="eq-rate-empty"><Truck size={22} /><p>No eligible numeric direct rates were returned for this approved search.</p></div>
+                          <div className="eq-rate-empty"><Truck size={22} /><p>No eligible numeric direct rates were returned for this search.</p></div>
                         )}
                         <p className="eq-dat-loads-note">These are read-only DAT load-board rates for pricing context. They are not bookable carrier selections in this CRM.</p>
                       </>

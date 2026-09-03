@@ -15,7 +15,9 @@ import {
 } from './carrierQuoteOptions';
 import {
   cancelStalePendingDatJobs,
-  prepareDatRateViewOptions
+  isDatSearchPickupDateCurrentOrFuture,
+  prepareDatRateViewOptions,
+  queueAutomaticDatLookups
 } from './datRateViewJobs';
 import { assignTruckType } from './truckAssignment';
 
@@ -127,7 +129,7 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
         pickup.date_time ||
         pickup.date ||
         shipmentInfo.ready_for_loading_date
-      ) || new Date().toISOString()
+      )
     },
     delivery: {
       location: {
@@ -188,7 +190,14 @@ export function validateShipmentRequest(shipment: UnifiedQuoteRequest): Shipment
   if (!deliveryLocation.zip && !(deliveryLocation.city && deliveryLocation.state)) {
     missing.push('delivery location');
   }
-  if (!pickup.date) missing.push('pickup date');
+  if (!pickup.date) {
+    missing.push('pickup date');
+  } else {
+    const pickupDateMatch = String(pickup.date).match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/);
+    if (!pickupDateMatch || !isDatSearchPickupDateCurrentOrFuture(pickupDateMatch[1])) {
+      missing.push('current or future pickup date');
+    }
+  }
   if (!finiteNumber(pieces.quantity)) missing.push('piece or pallet count');
   if (!finiteNumber(firstPart.length)) missing.push('freight length');
   if (!finiteNumber(firstPart.width)) missing.push('freight width');
@@ -337,7 +346,8 @@ export async function rateEmailQuoteRequest(
       processingError
     ]
   );
-  return result.rows[0];
+  const queued = await queueAutomaticDatLookups(id);
+  return queued || result.rows[0];
 }
 
 export async function processEmailQuoteRequest(id: string): Promise<any> {

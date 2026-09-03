@@ -725,6 +725,39 @@
   flex: 0 0 auto;
 }
 
+.eq-auto-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 1px solid #cbd9e1;
+  border-radius: 999px;
+  color: #496476;
+  background: #f7fafb;
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.eq-auto-status.working {
+  color: #1f647c;
+  border-color: #a8ceda;
+  background: #eef8fb;
+}
+
+.eq-auto-status.complete {
+  color: #176b5a;
+  border-color: #b9d7c9;
+  background: #edf8f4;
+}
+
+.eq-auto-status.offline {
+  color: #875519;
+  border-color: #e8cea2;
+  background: #fff6e7;
+}
+
 .eq-carrier-top {
   display: flex;
   min-height: 20px;

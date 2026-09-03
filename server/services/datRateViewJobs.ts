@@ -633,32 +633,32 @@ export function mapDatSearchLoadsResult(result: DatSearchLoadsResult): CarrierQu
 
 function placeholderForJobStatus(status: string, message?: string | null): CarrierQuoteOption {
   if (status === 'pending') {
-    return datPlaceholder('pending', 'Approved and waiting for the DAT worker.');
+    return datPlaceholder('pending', 'Queued automatically and waiting for the DAT worker.');
   }
   if (status === 'claimed' || status === 'running') {
     return datPlaceholder('running', 'The DAT worker is checking this lane now.');
   }
   if (status === 'needs_auth') {
-    return datPlaceholder('needs_auth', 'DAT sign-in is required on the worker, then approve this lane again.');
+    return datPlaceholder('needs_auth', 'DAT sign-in is required on the worker. Sign in, then retry this lane.');
   }
   if (status === 'uncertain') {
     return datPlaceholder('uncertain', 'DAT submission outcome is uncertain. Reconcile this lookup before trying again.');
   }
   if (status === 'failed') {
-    return datPlaceholder('failed', 'DAT did not return a usable market rate. Review the worker log, then approve again if no search was submitted.');
+    return datPlaceholder('failed', 'DAT did not return a usable market rate. Review the worker log, then retry only if no search was submitted.');
   }
-  return datPlaceholder('awaiting_approval', 'Review this lane, then approve one DAT lookup.');
+  return datPlaceholder('awaiting_approval', 'DAT pricing will queue automatically after the shipment is complete.');
 }
 
 function searchLoadsPlaceholderForJobStatus(status: string): CarrierQuoteOption {
   if (status === 'pending') {
-    return datSearchLoadsPlaceholder('pending', 'Approved and waiting for the DAT worker.');
+    return datSearchLoadsPlaceholder('pending', 'Queued automatically and waiting for the DAT worker.');
   }
   if (status === 'claimed' || status === 'running') {
     return datSearchLoadsPlaceholder('running', 'The DAT worker is reading direct Search Loads results.');
   }
   if (status === 'needs_auth') {
-    return datSearchLoadsPlaceholder('needs_auth', 'DAT sign-in is required on the worker, then approve this exact search again.');
+    return datSearchLoadsPlaceholder('needs_auth', 'DAT sign-in is required on the worker. Sign in, then retry this exact search.');
   }
   if (status === 'uncertain') {
     return datSearchLoadsPlaceholder('uncertain', 'The DAT search outcome is uncertain and cannot be submitted again automatically.');
@@ -666,7 +666,7 @@ function searchLoadsPlaceholderForJobStatus(status: string): CarrierQuoteOption 
   if (status === 'failed') {
     return datSearchLoadsPlaceholder('failed', 'DAT Search Loads did not return a verified direct-result set.');
   }
-  return datSearchLoadsPlaceholder('awaiting_approval', 'Review the saved lane and pickup date, then approve one Search Loads query.');
+  return datSearchLoadsPlaceholder('awaiting_approval', 'Search Loads will queue automatically after the shipment is complete.');
 }
 
 async function prepareExistingSearchLoadsOption(
@@ -720,7 +720,8 @@ export async function prepareDatRateViewOptions(
 
 export async function requestDatRateViewLookup(
   emailQuoteRequestId: string,
-  approvedBy: string
+  approvedBy: string | null,
+  options: { automatic?: boolean } = {}
 ): Promise<any> {
   if (!isDatWorkerEnabled()) {
     const err: any = new Error('DAT_WORKER_ENABLED is not true on the server');
@@ -773,7 +774,10 @@ export async function requestDatRateViewLookup(
         ]
       );
       job = inserted.rows[0];
-    } else if (['needs_auth', 'failed', 'cancelled'].indexOf(job.status) > -1) {
+    } else if (
+      job.status === 'cancelled' ||
+      (!options.automatic && ['needs_auth', 'failed'].indexOf(job.status) > -1)
+    ) {
       const reset = await client.query(
         `UPDATE public.dat_rateview_jobs
          SET status = 'pending', input_payload = $2::jsonb,
@@ -803,7 +807,8 @@ export async function requestDatRateViewLookup(
 
 export async function requestDatSearchLoadsLookup(
   emailQuoteRequestId: string,
-  approvedBy: string
+  approvedBy: string | null,
+  options: { automatic?: boolean } = {}
 ): Promise<any> {
   if (!isDatWorkerEnabled()) {
     const err: any = new Error('DAT_WORKER_ENABLED is not true on the server');
@@ -821,8 +826,8 @@ export async function requestDatSearchLoadsLookup(
       throw err;
     }
     const quote = quoteResult.rows[0];
-    if (['ready', 'priced', 'sent'].indexOf(String(quote.status)) < 0) {
-      const err: any = new Error('Save and approve a complete shipment before Search Loads');
+    if (!options.automatic && ['ready', 'priced', 'sent'].indexOf(String(quote.status)) < 0) {
+      const err: any = new Error('Save a complete shipment before Search Loads');
       err.status = 409;
       throw err;
     }
@@ -876,7 +881,10 @@ export async function requestDatSearchLoadsLookup(
         ]
       );
       job = inserted.rows[0];
-    } else if (['needs_auth', 'failed', 'cancelled'].indexOf(job.status) > -1) {
+    } else if (
+      job.status === 'cancelled' ||
+      (!options.automatic && ['needs_auth', 'failed'].indexOf(job.status) > -1)
+    ) {
       const reset = await client.query(
         `UPDATE public.dat_rateview_jobs
          SET status = 'pending', input_payload = $2::jsonb,
@@ -902,6 +910,28 @@ export async function requestDatSearchLoadsLookup(
     );
     return updated.rows[0];
   }, approvedBy);
+}
+
+export async function queueAutomaticDatLookups(
+  emailQuoteRequestId: string
+): Promise<any | null> {
+  if (!isDatWorkerEnabled()) return null;
+
+  let latest: any | null = null;
+  try {
+    latest = await requestDatRateViewLookup(emailQuoteRequestId, null, { automatic: true });
+  } catch (err: any) {
+    // Connected-carrier pricing must remain usable when a DAT queue is unavailable.
+    console.error('Automatic DAT RateView queue failed:', err && err.message ? err.message : err);
+  }
+
+  try {
+    latest = await requestDatSearchLoadsLookup(emailQuoteRequestId, null, { automatic: true });
+  } catch (err: any) {
+    // Queue each read-only DAT workflow independently so one failure does not hide the other.
+    console.error('Automatic DAT Search Loads queue failed:', err && err.message ? err.message : err);
+  }
+  return latest;
 }
 
 export async function claimDatRateViewJob(workerId: string): Promise<any | null> {

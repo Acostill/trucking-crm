@@ -2,17 +2,17 @@
   "schema_version": 1,
   "workflow_id": "fct-dat-rateview-lane-pricing",
   "name": "First Class Trucking CRM truck assignment, DAT RateView, and DAT Search Loads",
-  "version": "0.6-approved-search-loads-v1",
+  "version": "0.7-approved-automatic-pricing-v1",
   "status": "approved",
   "change_control": {
-    "prior_approved_version": "0.4-approved-truck-assignment-v1",
-    "prior_approved_scope": "The CRM truck-assignment TA-010 through TA-060 workflow and DAT RateView RV-010 through RV-110 workflow remain approved and unchanged, including their safety, approval, evidence, and rerun boundaries.",
-    "pending_change": "Add a read-only DAT One Search Loads workflow after a durable CRM shipment approval and a single-use per-search approval. Return at most ten available offers ranked by the approved displayed-offer field, with comments and every discovery-approved visible result field, to the same CRM shipment context.",
-    "review_note": "The requester approved the Search Loads business scope and the staged production discovery search on 2026-08-13. Authenticated browser discovery confirmed the exact input, direct-result, total Rate, availability, sort, full-scope, and CRM persistence contracts used by SL-010 through SL-130."
+    "prior_approved_version": "0.6-approved-search-loads-v1",
+    "prior_approved_scope": "The CRM truck-assignment, DAT RateView, and read-only DAT Search Loads workflows remain approved, including their input, extraction, safety, evidence, and no-resubmission boundaries.",
+    "approved_change": "For every newly ingested email quote with a complete valid shipment, run connected-carrier pricing and automatically reserve one DAT RateView job and one DAT Search Loads job per immutable fingerprint. A staff save or reparse applies the same rule to a changed valid snapshot. No per-search CRM click is required in production.",
+    "review_note": "David Castillo approved automatic connected-carrier pricing and automatic read-only DAT RateView and Search Loads searches on 2026-09-03. The standing authorization is limited to the previously discovered search and extraction scope and does not authorize booking, posting, bidding, messaging, contact activation, purchasing, payment, or account changes."
   },
-  "trigger": "Either an operator starts an approved on-demand RateView lookup, or a durable CRM shipment approval makes one shipment eligible for a separately recorded single-use Search Loads search approval.",
+  "trigger": "A newly ingested quote email, staff shipment save, or email reparse produces a complete valid shipment snapshot. Connected-carrier pricing runs immediately and the CRM automatically reserves one read-only DAT RateView job and one read-only DAT Search Loads job for each new immutable fingerprint.",
   "preconditions": [
-    "The run is authorized for the client-provided shared DAT production account.",
+    "The run is covered by the requester-approved standing authorization for the client-provided shared DAT production account and remains within the read-only pricing scope.",
     "A human is available to enter credentials and complete SSO, MFA, CAPTCHA, or reauthentication.",
     "The request contains origin, destination, equipment type, and values for any additional required RateView fields discovered in the approved UI.",
     "The request does not ask for booking, posting, messaging, purchasing, payment, deletion, or an account change."
@@ -294,24 +294,28 @@
       },
       {
         "from": "TA-050",
-        "condition": "Assignment succeeds and an authorized DAT lookup is requested",
+        "condition": "Assignment succeeds and a complete valid shipment snapshot is persisted",
         "to": "RV-010",
-        "resume": "Use the separately approved DAT equipment_type input/mapping and retain all RV duplicate, approval, and lane-credit protections."
+        "resume": "Automatically reserve the read-only DAT jobs using the approved equipment_type mapping and retain all RV duplicate, fingerprint, and lane-credit protections."
       }
     ],
     "blocking_tbd": [],
     "nonblocking_validation": [
       "Q-018: First Class Trucking should confirm or replace the conservative v1 dimension guards before client acceptance. Until then, freight that fails these guards goes to staff review rather than receiving a larger guessed truck."
     ],
-    "rerun_safety": "Every parse or staff save re-evaluates automatic assignments from the current normalized freight values. Valid source=staff overrides are preserved. Truck classification itself never submits DAT; the separate DAT job ledger and approval boundary prevent duplicate searches."
+    "rerun_safety": "Every parse or staff save re-evaluates automatic assignments from the current normalized freight values. Valid source=staff overrides are preserved. The separate DAT job ledger and immutable fingerprints prevent duplicate searches; failed or authentication-blocked jobs require a staff retry, and uncertain submissions are never retried automatically."
   },
   "search_loads_extension": {
     "workflow_id": "fct-dat-search-loads-offers-v1",
     "status": "approved",
-    "intent": "After a CRM shipment is durably approved and an authenticated staff member approves one specific search, perform one read-only DAT One Search Loads submission, collect the available result offers across the discovery-approved result scope, rank them by the exact numeric displayed Offer field descending, and return at most ten offers to the same CRM shipment context.",
+    "intent": "After the CRM durably persists a complete valid shipment under the approved automatic-pricing policy, perform one read-only DAT One Search Loads submission per immutable fingerprint, collect the available result offers across the discovery-approved result scope, rank them by the exact numeric displayed Offer field descending, and return at most ten offers to the same CRM shipment context.",
     "scope_boundary": "DAT actions are limited to opening Search Loads, populating discovery-approved search inputs, submitting one approved search, traversing the discovery-approved result scope, and reading results. The automation must not book, contact, call, reveal or activate contact details, bid, negotiate, message, post a load, purchase, pay, save/favorite, download/export, change an account, or activate any other result-row or account action.",
-    "approval_boundary": "The existing authenticated CRM approval click is the single-use authorization for exactly one Search Loads submission for one immutable shipment/search snapshot. Durable shipment approval is a precondition but does not alone authorize a search. If any fingerprinted search input changes, or the click cannot be tied to the current snapshot, the authorization is invalid and a new click is required. Discovery and QA also require an explicit per-search human confirmation immediately before the live DAT submission.",
+    "approval_boundary": "The requester-approved standing production policy authorizes the CRM to reserve exactly one Search Loads submission for each complete immutable shipment/search fingerprint without a per-search click. A changed valid fingerprint is independently eligible; an unchanged completed, active, failed, authentication-blocked, or uncertain fingerprint is not automatically resubmitted. Discovery and live QA retain an explicit per-search human confirmation. The policy authorizes only read-only search and result persistence and never authorizes booking, contacting, bidding, messaging, posting, purchasing, payment, or account changes.",
     "source_material": [
+      {
+        "id": "REQUESTER-DIRECTION-2026-09-03-AUTOMATIC-PRICING",
+        "description": "Requester-approved behavior: when an inbound email is parsed into a complete valid shipment, run connected-carrier pricing and automatically queue the approved read-only DAT RateView and Search Loads workflows so staff only review costs and set margin/client price."
+      },
       {
         "id": "REQUESTER-DIRECTION-2026-08-13-SEARCH-LOADS-V1",
         "description": "Requester-approved behavior: use one.dat.com Search Loads after CRM shipment approval; read available offers; rank by highest exact numeric displayed Offer value; return up to ten with comments and relevant visible non-contact fields; perform no booking, contacting, bidding, messaging, posting, purchasing, or account changes."
@@ -322,8 +326,8 @@
       }
     ],
     "preconditions": [
-      "The CRM shipment and its durable approval state exist and can be identified unambiguously.",
-      "An authenticated authorized CRM user has clicked the Search Loads approval control for the exact current search snapshot.",
+      "The CRM shipment exists, is complete and valid, and can be identified unambiguously.",
+      "The automatic-pricing policy is enabled and the exact current search snapshot has an atomic idempotency reservation.",
       "Origin, destination, equipment, date, and every additional discovery-approved required Search Loads input are present, valid, and traceable to the approved CRM shipment snapshot.",
       "A human is available to enter credentials and complete SSO, MFA, CAPTCHA, shared-session handling, or reauthentication.",
       "Browser discovery has approved the Search Loads navigation, exact required inputs, total Rate formats, availability rule, result columns, direct-result scope, no-result and failure signals, and semantic locator candidates.",
@@ -333,12 +337,12 @@
       {
         "name": "shipment_record_id",
         "required": true,
-        "description": "The authoritative email_quote_requests.id for the durably approved quote/shipment context and result handoff."
+        "description": "The authoritative email_quote_requests.id for the complete durable quote/shipment context and result handoff."
       },
       {
-        "name": "search_approval",
+        "name": "automation_authorization",
         "required": true,
-        "description": "Single-use CRM approval event containing approver, approval timestamp, and the fingerprint of the immutable Search Loads input snapshot."
+        "description": "Standing requester authorization plus an atomic system reservation timestamp and fingerprint for the immutable Search Loads input snapshot."
       },
       {
         "name": "origin",
@@ -389,16 +393,16 @@
     "steps": [
       {
         "id": "SL-010",
-        "intent": "Bind one search to a valid approved CRM shipment snapshot.",
-        "action": "Read the durable shipment approval, current shipment fields, and single-use Search Loads approval event; normalize only discovery-approved values and calculate the search fingerprint.",
-        "target": "The authoritative CRM shipment, approval record, and Search Loads approval event.",
+        "intent": "Bind one search to a complete valid CRM shipment snapshot under the approved automatic-pricing policy.",
+        "action": "Read the durable shipment, validate the standing automatic-pricing authorization, normalize only discovery-approved values, and calculate the Search Loads fingerprint.",
+        "target": "The authoritative CRM shipment, automatic-pricing policy, and Search Loads job ledger.",
         "preconditions": ["A CRM shipment record was identified."],
         "postconditions": ["One immutable validated input snapshot and fingerprint exist, or the run stops before DAT."],
-        "validation": "Shipment approval is durable; the Search Loads approval click is attributable to an authorized user and matches the current fingerprint; all required values are present and traceable; no prohibited action is requested.",
-        "evidence": "A redacted validation record containing shipment_record_id, fingerprint, approval identity/timestamp, rule version, and field-level pass/fail results without unnecessary shipment values.",
-        "on_failure": "Stop with SHIPMENT_NOT_APPROVED, SEARCH_NOT_APPROVED, APPROVAL_STALE, INPUT_INVALID, or INPUT_MAPPING_TBD. Do not open DAT.",
+        "validation": "The shipment snapshot is durably stored and complete; the automatic-pricing policy applies; all required values are present and traceable; no prohibited action is requested.",
+        "evidence": "A redacted validation record containing shipment_record_id, fingerprint, system reservation timestamp, rule version, and field-level pass/fail results without unnecessary shipment values.",
+        "on_failure": "Stop with SHIPMENT_INCOMPLETE, AUTOMATION_NOT_AUTHORIZED, INPUT_INVALID, or INPUT_MAPPING_TBD. Do not open DAT.",
         "consequential": false,
-        "approval_required": "The authenticated CRM Search Loads approval click for this exact snapshot."
+        "approval_required": "Covered by the requester-approved standing automatic-pricing policy for this exact immutable snapshot."
       },
       {
         "id": "SL-020",
@@ -411,7 +415,7 @@
         "evidence": "A redacted state-transition record with shipment_record_id, fingerprint, prior state, resulting state, and timestamp.",
         "on_failure": "Return the prior completed result when available; otherwise stop with DUPLICATE_ACTIVE or UNCERTAIN_REQUIRES_RECONCILIATION. Never reset an uncertain submission automatically.",
         "consequential": false,
-        "approval_required": "Uses the SL-010 single-use approval; no new approval is consumed yet."
+        "approval_required": "Uses the SL-010 standing policy and atomic fingerprint reservation; no per-search click is required in production."
       },
       {
         "id": "SL-030",
@@ -463,33 +467,33 @@
         "evidence": "A commercially redacted pre-submit screenshot and field-by-field comparison log.",
         "on_failure": "Clear and retry an affected field once only when discovery defines that recovery; otherwise stop for human review. Never guess an option or required value.",
         "consequential": false,
-        "approval_required": "Field entry is covered by the single-use CRM approval; submission is still blocked until SL-070."
+        "approval_required": "Field entry is covered by the standing read-only authorization; submission remains blocked until SL-070 validation."
       },
       {
         "id": "SL-070",
-        "intent": "Validate the single-use authorization immediately before the only Search Loads submission.",
-        "action": "Recheck authentication, immutable fingerprint, approval freshness, ledger state, and all displayed criteria; in discovery/QA, record the additional live-search confirmation.",
-        "target": "The CRM approval event, current DAT form, and Search Loads ledger reservation.",
+        "intent": "Validate the standing authorization and single-use reservation immediately before the only Search Loads submission.",
+        "action": "Recheck authentication, immutable fingerprint, standing-policy scope, ledger state, and all displayed criteria; in discovery/QA, record the additional live-search confirmation.",
+        "target": "The automatic-pricing policy, current DAT form, and Search Loads ledger reservation.",
         "preconditions": ["SL-060 passed and the search control has not been activated."],
         "postconditions": ["A current single-use authorization exists for exactly the displayed criteria."],
-        "validation": "Session is authenticated; ledger is reserved; approval and fingerprint match; displayed values match; discovery/QA confirmation exists when applicable.",
-        "evidence": "A redacted checkpoint with shipment_record_id, fingerprint, approval timestamp, confirmation timestamp when applicable, and field comparison result.",
-        "on_failure": "For authentication loss return to SL-040 and then repeat SL-050 through SL-070 with fresh field state. For any input or approval change stop and require a new CRM approval click.",
+        "validation": "Session is authenticated; ledger is reserved; standing policy and fingerprint match; displayed values match; discovery/QA confirmation exists when applicable.",
+        "evidence": "A redacted checkpoint with shipment_record_id, fingerprint, reservation timestamp, confirmation timestamp when applicable, and field comparison result.",
+        "on_failure": "For authentication loss stop with AUTH_REQUIRED and require staff to restore the session before a controlled retry. For any input change cancel the pre-submit reservation and allow the new valid fingerprint to be reserved automatically.",
         "consequential": true,
-        "approval_required": "The existing CRM approval click authorizes this one submission; discovery and QA additionally require explicit per-search human confirmation."
+        "approval_required": "The standing production policy and atomic reservation authorize this one submission; discovery and live QA additionally require explicit per-search human confirmation."
       },
       {
         "id": "SL-080",
         "intent": "Submit exactly one authorized read-only Search Loads query.",
-        "action": "Atomically mark the job submitted, activate the discovery-approved semantic Search Loads action once, and permanently disable automated resubmission for this fingerprint unless a human reconciles proof that no submission occurred and issues a new approval.",
+        "action": "Atomically mark the job submitted, activate the discovery-approved semantic Search Loads action once, and permanently disable automated resubmission for this fingerprint unless a human reconciles proof that no submission occurred and performs a controlled retry.",
         "target": "The validated Search Loads submit action and job ledger.",
         "preconditions": ["SL-070 produced a current single-use authorization."],
         "postconditions": ["One search was submitted and the job remains submitted/uncertain until the result scope is validated."],
         "validation": "One activation produces a recognized loading/results transition and the idempotency key records at most one submitted transition.",
         "evidence": "A redacted transition screenshot, activation timestamp, and before/after ledger state.",
-        "on_failure": "If activation may have occurred, mark UNCERTAIN and require human reconciliation; never click again automatically. If evidence proves no activation occurred, stop before submission and require a fresh checkpoint and approval as configured by the final job contract.",
+        "on_failure": "If activation may have occurred, mark UNCERTAIN and require human reconciliation; never click again automatically. If evidence proves no activation occurred, stop before submission and require a fresh controlled checkpoint as configured by the final job contract.",
         "consequential": true,
-        "approval_required": "Consumes the single-use authorization established at SL-070."
+        "approval_required": "Consumes the single-use ledger reservation validated at SL-070."
       },
       {
         "id": "SL-090",
@@ -554,17 +558,17 @@
         "evidence": "A redacted completion/readback record with identifiers, counts, timestamp, schema version, ledger state, and artifact paths only.",
         "on_failure": "Do not resubmit DAT. Retain the validated result in a recoverable write-pending state and retry only the idempotent CRM write, or require human reconciliation when shipment state changed.",
         "consequential": true,
-        "approval_required": "The originating single-use CRM approval includes writing the validated read-only result to the same approved shipment context; it authorizes no other CRM or DAT mutation."
+        "approval_required": "The standing automatic-pricing policy includes writing the validated read-only result to the same shipment context; it authorizes no other CRM or DAT mutation."
       }
     ],
     "branches": [
-      {"from": "SL-010", "condition": "Shipment is not durably approved, approval is absent/stale, or a required mapped input is invalid", "to": "STOP_BEFORE_DAT"},
+      {"from": "SL-010", "condition": "Shipment is incomplete, automatic-pricing authorization is unavailable, or a required mapped input is invalid", "to": "STOP_BEFORE_DAT"},
       {"from": "SL-020", "condition": "A completed result exists for the same fingerprint", "to": "RETURN_PRIOR_SEARCH_LOADS_RESULT"},
       {"from": "SL-020", "condition": "A submitted, active, or uncertain entry exists", "to": "HUMAN_RECONCILIATION_NO_RESUBMIT"},
       {"from": "SL-030", "condition": "Session is unauthenticated or expired before submission", "to": "SL-040"},
       {"from": "SL-040", "condition": "Human authentication succeeds", "to": "SL-050"},
       {"from": "SL-070", "condition": "Session is lost before submission", "to": "SL-040", "resume": "Repeat SL-050 through SL-070 and require a fresh discovery/QA confirmation; do not reuse stale form state."},
-      {"from": "SL-070", "condition": "Shipment/search fingerprint changed", "to": "STOP_REQUIRE_NEW_CRM_APPROVAL"},
+      {"from": "SL-070", "condition": "Shipment/search fingerprint changed before submission", "to": "CANCEL_STALE_RESERVATION_AND_REQUEUE_NEW_VALID_FINGERPRINT"},
       {"from": "SL-080", "condition": "Activation or post-submit outcome is uncertain", "to": "HUMAN_RECONCILIATION_NO_RESUBMIT"},
       {"from": "SL-090", "condition": "DAT displays a discovery-approved empty-result state", "to": "SL-130", "resume": "Persist a completed empty ranked_offers array and zero row counts with the visible outcome reason."},
       {"from": "SL-090", "condition": "Complete result scope cannot be proven", "to": "SUBMITTED_INCOMPLETE_HUMAN_REVIEW"},
@@ -576,11 +580,11 @@
       "key": "Hash the stable shipment_record_id plus every normalized Search Loads field in the immutable submitted snapshot and the workflow/schema version.",
       "states": ["reserved", "submitted", "submitted_incomplete", "uncertain", "write_pending", "completed", "cancelled_before_submit"],
       "duplicate_check": "Check before browser use and again immediately before submission. Return completed results; block submitted, submitted_incomplete, uncertain, and write_pending states from another DAT search.",
-      "partial_run_recovery": "Before SL-080, restart from SL-030 only after full revalidation and a current approval. At or after possible SL-080 activation, never resubmit automatically. Retry only an idempotent CRM write of an already validated result."
+      "partial_run_recovery": "Before SL-080, restart only through a controlled staff retry after full revalidation; changed valid fingerprints may be reserved automatically. At or after possible SL-080 activation, never resubmit automatically. Retry only an idempotent CRM write of an already validated result."
     },
     "evidence_policy": "Evidence must use the existing commercially confidential classification and redaction/30-day screenshot-log rule. Preserve step IDs, timestamps, token-free URL patterns, state transitions, counts, and schema/locator evidence; do not retain credentials, authentication artifacts, contact data, raw sensitive exports, or unredacted shipment/offers in shared artifacts.",
     "completion_validation": [
-      "The DAT search was tied to one durably approved CRM shipment and one matching single-use CRM approval click.",
+      "The DAT search was tied to one complete durable CRM shipment, the standing automatic-pricing policy, and one atomic fingerprint reservation.",
       "At most one Search Loads submission transition exists for the fingerprint.",
       "The full discovery-approved result scope and stable source order were established, or a recognized empty-result state was recorded.",
       "Every source row is accounted for; missing/non-numeric Offer rows are excluded with reason counts, and deduplication occurs only by an observed stable DAT load ID.",
@@ -593,15 +597,15 @@
     {
       "id": "RV-010",
       "intent": "Normalize and validate one approved lane request.",
-      "action": "Validate the request schema, normalize whitespace and casing for duplicate comparison, and reject prohibited-action requests.",
-      "target": "The on-demand request payload before browser use.",
+      "action": "Validate the request schema and standing automatic-pricing scope, normalize whitespace and casing for duplicate comparison, and reject prohibited-action requests.",
+      "target": "The automatic or manual-retry request payload before browser use.",
       "preconditions": ["A request payload was supplied."],
       "postconditions": ["A normalized request and deterministic idempotency key exist."],
       "validation": "Required business fields are non-empty and the request contains no prohibited action.",
       "evidence": "A redacted validation log containing the request_id and validation result only.",
       "on_failure": "Stop without opening DAT and return a validation error.",
       "consequential": false,
-      "approval_required": "No additional approval beyond the operator starting the on-demand run."
+      "approval_required": "A valid automatic CRM trigger is covered by the standing read-only pricing authorization; manual retries require an authenticated operations user."
     },
     {
       "id": "RV-020",
@@ -614,7 +618,7 @@
       "evidence": "A redacted preflight log with date, request_id, duplicate status, and audit-only submitted-today count; no shipment values.",
       "on_failure": "Return the prior completed result when available; otherwise stop for human review. Never submit an uncertain duplicate lookup.",
       "consequential": false,
-      "approval_required": "An authorized on-demand invocation permits one validated read-only lookup. There is no application-level daily cap."
+      "approval_required": "An authorized automatic trigger or authenticated manual retry permits one validated read-only lookup. There is no application-level daily cap."
     },
     {
       "id": "RV-030",
@@ -671,15 +675,15 @@
     {
       "id": "RV-070",
       "intent": "Establish the final approval and recovery checkpoint immediately before a lane-credit lookup.",
-      "action": "Recheck authentication, the idempotency key, and all displayed lane fields; record audit-only usage and, during discovery and QA, request explicit human confirmation for this search.",
+      "action": "Recheck authentication, the idempotency key, standing-policy scope, and all displayed lane fields; record audit-only usage and, during discovery and live QA, request explicit human confirmation for this search.",
       "target": "The validated pre-search state and local ledger.",
       "preconditions": ["RV-060 passed and the search control has not been activated."],
       "postconditions": ["A single-use search authorization exists for the validated state."],
-      "validation": "Session authenticated; duplicate absent; lane values match; operator approval recorded for discovery/QA.",
+      "validation": "Session authenticated; duplicate absent; lane values match; automatic policy applies; operator confirmation is recorded for discovery/live QA.",
       "evidence": "A redacted checkpoint record with request_id, audit-only submitted-today count, and approval timestamp.",
       "on_failure": "Return to RV-040 for authentication loss, otherwise stop without submitting.",
       "consequential": true,
-      "approval_required": "Discovery and QA require per-search human confirmation; an operational run is approved by its authorized on-demand invocation. There is no application daily cap."
+      "approval_required": "Discovery and live QA require per-search human confirmation; a production run is approved by its valid automatic CRM trigger or authenticated manual retry. There is no application daily cap."
     },
     {
       "id": "RV-080",
@@ -798,8 +802,8 @@
     "No credential/authentication artifact or unredacted commercially confidential evidence is stored.",
     "No booking, posting, messaging, purchasing/payment, deletion, or account change occurred."
   ],
-  "approved_by": "Jack, First Class Trucking client approver (original DAT scope; surname/title not provided), and David Castillo / Optimation AI. David approved the Search Loads scope and the exact staged production discovery search on 2026-08-13.",
-  "approved_at": "2026-08-11T18:20:00Z",
-  "pending_change_requested_by": "David Castillo / Optimation AI",
-  "pending_change_requested_at": "2026-08-13"
+  "approved_by": "Jack, First Class Trucking client approver (original DAT scope; surname/title not provided), and David Castillo / Optimation AI. David approved Search Loads on 2026-08-13 and automatic connected-carrier pricing plus automatic read-only DAT RateView and Search Loads triggers on 2026-09-03.",
+  "approved_at": "2026-09-03T00:00:00Z",
+  "pending_change_requested_by": null,
+  "pending_change_requested_at": null
 }
