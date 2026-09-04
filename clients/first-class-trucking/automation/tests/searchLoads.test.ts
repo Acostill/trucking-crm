@@ -225,6 +225,53 @@ test("continues through delayed DAT virtual-window hydration", async () => {
   }
 });
 
+test("extracts the current compact DAT row layout from observed data-test landmarks", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <cdk-virtual-scroll-viewport class="table-rows-container">
+        <div class="row-container" id="table-row-compact-1">
+          <div class="cell-rate"><dat-rate>
+            <div data-test="load-rate-cell"><div class="offer">$2,100</div><span>$3.00*/mi</span></div>
+          </dat-rate></div>
+          <div class="cell-route"><dat-route>
+            <div data-test="load-trip-cell">700</div>
+            <div data-test="load-origin-cell">
+              <div class="city-state-container"><span>Sacramento</span><span>, </span><span>CA</span></div>
+              <div class="city-state-container" data-test="load-destination-cell"><span>Phoenix</span><span>, </span><span>AZ</span></div>
+            </div>
+            <div data-test="load-dho-cell">(118)</div>
+            <div data-test="load-dhd-cell">(12)</div>
+          </dat-route></div>
+          <div class="cell-company-small"><dat-company>
+            <div class="info-container"><div><span class="equipment-type">VR</span> | <span>40K lbs</span> | <span>53 ft</span> | <span>Full</span></div></div>
+            <div class="truncate company">Safe Carrier</div>
+          </dat-company></div>
+        </div>
+      </cdk-virtual-scroll-viewport>
+    `);
+
+    const [compact] = await collectCompleteDirectRows(page, 1, 2000);
+
+    assert.equal(compact.displayedTotal, "$2,100");
+    assert.equal(compact.rpm, "$3.00*/mi");
+    assert.equal(compact.tripMiles, "700 mi");
+    assert.equal(compact.origin, "Sacramento, CA");
+    assert.equal(compact.destination, "Phoenix, AZ");
+    assert.equal(compact.originDeadhead, "DH-O 118 mi");
+    assert.equal(compact.destinationDeadhead, "DH-D 12 mi");
+    assert.equal(compact.equipmentCode, "VR");
+    assert.equal(compact.weight, "40K lbs");
+    assert.equal(compact.lengthLoadType, "VR | 40K lbs | 53 ft | Full");
+    assert.equal(compact.company, "Safe Carrier");
+    assert.equal(compact.pickup, null);
+    assert.equal(compact.commentsStatus, "not_displayed");
+  } finally {
+    await browser.close();
+  }
+});
+
 const equipmentCases: Array<{
   requestLabel: SearchLoadsRequest["equipmentType"];
   uiLabel: string;

@@ -20,8 +20,8 @@ async function main(): Promise<void> {
         return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
       };
       const safeText = (element) => {
-        const text = (element.textContent || "").replace(/\s+/g, " ").trim();
-        return /^(?:\d+\s*)?(?:Results?|Loads?|Matches?|No (?:Results?|Loads?|Matches?))(?:\s*\(\d+\))?$/i.test(text)
+        const text = (element.textContent || "").replace(/\\s+/g, " ").trim();
+        return /^(?:\\d+\\s*)?(?:Results?|Loads?|Matches?|No (?:Results?|Loads?|Matches?))(?:\\s*\\(\\d+\\))?$/i.test(text)
           ? text.slice(0, 120)
           : null;
       };
@@ -38,12 +38,12 @@ async function main(): Promise<void> {
       const sortControls = Array.from(document.querySelectorAll('button, [role="button"], [role="combobox"]'))
         .filter(visible)
         .map((element) => ({
-          text: (element.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120),
+          text: (element.textContent || "").replace(/\\s+/g, " ").trim().slice(0, 120),
           ariaLabel: element.getAttribute("aria-label"),
           dataTest: element.getAttribute("data-test"),
           title: element.getAttribute("title"),
         }))
-        .filter((control) => /sort|newest|rate\s*-\s*highest/i.test([
+        .filter((control) => /sort|newest|rate\\s*-\\s*highest/i.test([
           control.text,
           control.ariaLabel,
           control.dataTest,
@@ -51,13 +51,55 @@ async function main(): Promise<void> {
         ].filter(Boolean).join(" ")))
         .slice(0, 20);
       const counter = document.querySelector('[data-test="results-counter"]');
+      const firstDirectRow = document.querySelector(
+        '.row-container[id^="table-row-"]:not(#table-row-similar-matches-separator)',
+      );
+      const firstRowStructure = firstDirectRow
+        ? [firstDirectRow, ...Array.from(firstDirectRow.querySelectorAll('*'))]
+          .slice(0, 240)
+          .map((element) => ({
+            tag: element.tagName.toLowerCase(),
+            className: String(element.getAttribute('class') || '').slice(0, 180),
+            dataTest: element.getAttribute('data-test'),
+            role: element.getAttribute('role'),
+            hasAriaLabel: Boolean(element.getAttribute('aria-label')),
+          }))
+        : [];
+      const valueFreeSignature = (element) => (element.textContent || '')
+        .replace(/\\s+/g, ' ')
+        .trim()
+        .slice(0, 180)
+        .replace(/\\d/g, '#')
+        .replace(/[A-Za-z]+/g, 'A');
+      const diagnosticSelectors = [
+        '[data-test="load-age-cell"]',
+        '[data-test="load-rate-cell"]',
+        '[data-test="load-trip-cell"]',
+        '[data-test="load-origin-cell"]',
+        '[data-test="load-destination-cell"]',
+        '[data-test="load-dho-cell"]',
+        '[data-test="load-dhd-cell"]',
+        '.cell-company-small .info-container',
+        '.cell-company-small .info-container > *',
+        '.cell-company-small .company',
+      ];
+      const firstRowValueFreeSignatures = firstDirectRow
+        ? diagnosticSelectors.flatMap((selector) =>
+          Array.from(firstDirectRow.querySelectorAll(selector)).map((element, index) => ({
+            selector,
+            index,
+            tag: element.tagName.toLowerCase(),
+            className: String(element.getAttribute('class') || '').slice(0, 180),
+            signature: valueFreeSignature(element),
+          })))
+        : [];
       const counterStructure = counter ? Array.from(counter.querySelectorAll('*')).slice(0, 30).map((element) => ({
         tag: element.tagName.toLowerCase(),
         dataTest: element.getAttribute('data-test'),
         ariaLabel: element.getAttribute('aria-label'),
         title: element.getAttribute('title'),
         value: 'value' in element ? String(element.value || '').slice(0, 80) : null,
-        text: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120),
+        text: (element.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 120),
         className: String(element.getAttribute('class') || '').slice(0, 160),
       })) : [];
       return {
@@ -67,8 +109,10 @@ async function main(): Promise<void> {
           '.row-container[id^="table-row-"]:not(#table-row-similar-matches-separator)',
         ).length,
         allRowCount: document.querySelectorAll('[id^="table-row-"]').length,
-        counterText: counter ? (counter.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 240) : null,
+        counterText: counter ? (counter.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 240) : null,
         counterStructure,
+        firstRowStructure,
+        firstRowValueFreeSignatures,
         structural,
         sortControls,
       };

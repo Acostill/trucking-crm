@@ -718,17 +718,31 @@ async function snapshotVisibleRows(rows: Locator): Promise<RawSearchLoadCandidat
     ].join(",");
     return elements.map((element) => {
       const cellTexts = [
-        ".cell-rate dat-rate .offer",
-        ".cell-rate dat-rate",
-        ".cell-route dat-route",
-        ".cell-timing dat-timing",
-        ".cell-equipment dat-equipment",
-        ".cell-company dat-company",
-        ".cell-credit dat-credit",
-      ].map((selector) => {
+        { selector: ".cell-rate dat-rate .offer" },
+        { selector: '[data-test="load-rate-cell"]' },
+        { selector: ".cell-rate dat-rate" },
+        { selector: ".cell-route dat-route" },
+        { selector: '[data-test="load-trip-cell"]' },
+        {
+          selector: '[data-test="load-origin-cell"]',
+          removeNestedSelector: '[data-test="load-destination-cell"]',
+        },
+        { selector: '[data-test="load-destination-cell"]' },
+        { selector: '[data-test="load-dho-cell"]' },
+        { selector: '[data-test="load-dhd-cell"]' },
+        { selector: ".cell-timing dat-timing" },
+        { selector: ".cell-equipment dat-equipment" },
+        { selector: ".cell-company-small .info-container > div:first-child" },
+        { selector: ".cell-company dat-company" },
+        { selector: ".cell-company-small .company" },
+        { selector: ".cell-credit dat-credit" },
+      ].map(({ selector, removeNestedSelector }) => {
         const source = element.querySelector(selector);
         if (!source) return null;
         const clone = source.cloneNode(true) as HTMLElement;
+        if (removeNestedSelector) {
+          clone.querySelectorAll(removeNestedSelector).forEach((candidate) => candidate.remove());
+        }
         clone.querySelectorAll(removableSelector).forEach((candidate) => candidate.remove());
         return clone.innerText || clone.textContent || null;
       });
@@ -748,12 +762,17 @@ async function snapshotVisibleRows(rows: Locator): Promise<RawSearchLoadCandidat
           (candidate.textContent || "").trim() === "CANCELED"
         ),
         displayedTotal: cellTexts[0],
-        rateText: cellTexts[1],
-        routeText: cellTexts[2],
-        timingText: cellTexts[3],
-        equipmentText: cellTexts[4],
-        companyText: cellTexts[5],
-        creditText: cellTexts[6],
+        rateText: cellTexts[1] || cellTexts[2],
+        routeText: cellTexts[3],
+        tripText: cellTexts[4],
+        originText: cellTexts[5],
+        destinationText: cellTexts[6],
+        originDeadheadText: cellTexts[7],
+        destinationDeadheadText: cellTexts[8],
+        timingText: cellTexts[9],
+        equipmentText: cellTexts[10] || cellTexts[11],
+        companyText: cellTexts[12] || cellTexts[13],
+        creditText: cellTexts[14],
         rawComments: commentsVisible && commentsPanel
           ? commentsPanel.textContent
           : null,
@@ -768,22 +787,40 @@ async function snapshotVisibleRows(rows: Locator): Promise<RawSearchLoadCandidat
     const equipmentText = sanitizeNonContactText(snapshot.equipmentText).value;
     const companyText = sanitizeNonContactText(snapshot.companyText).value;
     const creditText = sanitizeNonContactText(snapshot.creditText).value;
+    const compactOrigin = sanitizeNonContactText(snapshot.originText).value;
+    const compactDestination = sanitizeNonContactText(snapshot.destinationText).value;
+    const compactTrip = sanitizeNonContactText(snapshot.tripText).value;
+    const compactOriginDeadhead = sanitizeNonContactText(snapshot.originDeadheadText).value;
+    const compactDestinationDeadhead = sanitizeNonContactText(
+      snapshot.destinationDeadheadText,
+    ).value;
     const cities = routeText?.match(/[A-Za-z][A-Za-z .'-]+,\s*[A-Z]{2}\b/g) || [];
+    const cityState = (value: string | null): string | null => {
+      const match = value?.match(/^(.+?)[,\s]+([A-Z]{2})$/);
+      return match ? `${match[1].replace(/,\s*$/, "").trim()}, ${match[2]}` : null;
+    };
+    const miles = (value: string | null, prefix = ""): string | null => {
+      const match = value?.match(/^\(?\s*([\d,]+)\s*\)?(?:\s*(?:mi|miles))?$/i);
+      return match ? `${prefix}${match[1]} mi` : null;
+    };
     const comments = sanitizeNonContactText(snapshot.rawComments);
     return {
       datLoadId: clean(snapshot.datLoadId) || "",
       sourceOrder,
       canceled: snapshot.canceled,
       displayedTotal: clean(snapshot.displayedTotal),
-      rpm: firstMatch(rateText, /\$[\d,.]+\s*(?:\/\s*mi|per\s+mile)/i),
-      tripMiles: firstMatch(routeText, /[\d,]+\s*(?:mi|miles)\b/i),
-      origin: cities[0] || null,
-      destination: cities[1] || null,
-      originDeadhead: firstMatch(routeText, /DH[-\s]?O\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
-      destinationDeadhead: firstMatch(routeText, /DH[-\s]?D\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
+      rpm: firstMatch(rateText, /\$[\d,.]+\s*[*†‡]?\s*(?:\/\s*mi|per\s+mile)/i),
+      tripMiles: miles(compactTrip) ||
+        firstMatch(routeText, /[\d,]+\s*(?:mi|miles)\b/i),
+      origin: cityState(compactOrigin) || cities[0] || null,
+      destination: cityState(compactDestination) || cities[1] || null,
+      originDeadhead: miles(compactOriginDeadhead, "DH-O ") ||
+        firstMatch(routeText, /DH[-\s]?O\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
+      destinationDeadhead: miles(compactDestinationDeadhead, "DH-D ") ||
+        firstMatch(routeText, /DH[-\s]?D\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
       pickup: timingText,
-      equipmentCode: firstMatch(equipmentText, /\b(?:V|F|R|VAN|REEFER|FLATBED)\b/i),
-      weight: firstMatch(equipmentText, /[\d,]+\s*(?:lbs?|pounds?)\b/i),
+      equipmentCode: firstMatch(equipmentText, /\b(?:VR|V|F|R|VAN|REEFER|FLATBED)\b/i),
+      weight: firstMatch(equipmentText, /[\d,]+(?:\.\d+)?\s*K?\s*(?:lbs?|pounds?)\b/i),
       lengthLoadType: equipmentText,
       company: companyText,
       creditScore: firstMatch(creditText, /(?:credit\s*)?\d{2,3}/i),
@@ -839,6 +876,7 @@ export async function inspectExistingSearchLoadsStructure(
   excludedCount: number;
   offerCount: number;
   outcome: SearchLoadsResult["outcome"];
+  fieldCoverage: Record<string, number>;
 }> {
   const count = await directResultCount(page, config.resultTimeoutMs);
   if (count > 0) await chooseHighestRateSort(page, config.resultTimeoutMs);
@@ -848,12 +886,34 @@ export async function inspectExistingSearchLoadsStructure(
     config.resultTimeoutMs,
   );
   const ranked = rankSearchLoadCandidates(candidates);
+  const fieldCoverage = [
+    "rpm",
+    "tripMiles",
+    "origin",
+    "destination",
+    "originDeadhead",
+    "destinationDeadhead",
+    "pickup",
+    "equipmentCode",
+    "weight",
+    "lengthLoadType",
+    "company",
+    "creditScore",
+    "daysToPay",
+    "comments",
+  ].reduce<Record<string, number>>((coverage, field) => {
+    coverage[field] = ranked.offers.filter((offer) =>
+      Boolean(offer[field as keyof SearchLoadOffer])
+    ).length;
+    return coverage;
+  }, {});
   return {
     directResultCount: ranked.directResultCount,
     eligibleCount: ranked.eligibleCount,
     excludedCount: ranked.excludedCount,
     offerCount: ranked.offers.length,
     outcome: ranked.outcome,
+    fieldCoverage,
   };
 }
 
