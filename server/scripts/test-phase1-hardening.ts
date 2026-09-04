@@ -3,7 +3,7 @@ import db from '../db';
 import { evaluateEnvironmentSafety, runtimeEnvironment } from '../config/environmentSafety';
 import { evaluateDatabaseIdentity } from '../config/databaseIdentity';
 import { deriveGmailHealth } from '../services/operationsHealth';
-import { userHasPermission } from '../utils/auth';
+import { userHasAnyRole, userHasPermission } from '../utils/auth';
 
 function gmailState(overrides: Record<string, any> = {}): any {
   return {
@@ -26,6 +26,10 @@ async function main() {
   );
   assert.equal(userHasPermission({ permissions: ['quotes.read'] }, 'loads.manage'), false);
   assert.equal(userHasPermission(null, 'loads.read'), false);
+
+  assert.equal(userHasAnyRole({ roles: ['admin'] }, ['quote_approver']), true);
+  assert.equal(userHasAnyRole({ roles: ['quote_approver'] }, ['quote_approver']), true);
+  assert.equal(userHasAnyRole({ roles: ['agent'] }, ['quote_approver']), false);
 
   assert.equal(runtimeEnvironment({ RAILWAY_ENVIRONMENT: 'production' }), 'production');
   assert.equal(runtimeEnvironment({ RAILWAY_PROJECT_ID: 'project-id' }), 'production');

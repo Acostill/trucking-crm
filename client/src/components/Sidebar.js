@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
+import { userCanManageQuotes } from '../utils/accessControl';
 import { 
   LayoutDashboard, 
   Package, 
@@ -26,7 +27,7 @@ function Sidebar(props) {
   const operationsRoles = ['admin', 'manager', 'agent', 'viewer', 'quote_approver'];
   const hasOperationsRole = userRoles.some(function(role) { return operationsRoles.indexOf(role) > -1; });
   const isCustomer = Boolean(user) && !hasOperationsRole && (userRoles.length === 0 || userRoles.indexOf('customer') > -1);
-  const isQuoteApprover = userRoles.indexOf('quote_approver') > -1;
+  const isQuoteApprover = userCanManageQuotes(user);
   const { isOpen, closeSidebar } = useSidebar();
   const sidebarRef = useRef(null);
 

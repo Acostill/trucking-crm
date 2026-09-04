@@ -21,6 +21,7 @@ import StatusBadge from '../components/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
 import { buildApiUrl } from '../config';
+import { userCanManageQuotes } from '../utils/accessControl';
 import MobileMenuButton from '../components/MobileMenuButton';
 import './DashboardPage.css';
 
@@ -103,9 +104,7 @@ export default function DashboardPage() {
   const [refreshWarning, setRefreshWarning] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  const canManageQuotes = Boolean(
-    user && Array.isArray(user.roles) && user.roles.indexOf('quote_approver') > -1
-  );
+  const canManageQuotes = userCanManageQuotes(user);
 
   useEffect(function() {
     if (!user) return undefined;

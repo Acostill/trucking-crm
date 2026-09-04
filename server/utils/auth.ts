@@ -66,6 +66,16 @@ export function userHasPermission(
   return Boolean(user && user.permissions.indexOf(permission) > -1);
 }
 
+export function userHasAnyRole(
+  user: Pick<AuthenticatedUser, 'roles'> | null,
+  allowedRoles: string[]
+): boolean {
+  if (!user) return false;
+  return user.roles.indexOf('admin') > -1 || user.roles.some(function(role) {
+    return allowedRoles.indexOf(role) > -1;
+  });
+}
+
 export function requirePermission(permission: string) {
   return async function(req: Request, res: Response, next: NextFunction) {
     try {
@@ -93,9 +103,7 @@ export function requireAnyRole(allowedRoles: string[]) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
-      const allowed = user.roles.some(function(role) {
-        return allowedRoles.indexOf(role) > -1;
-      });
+      const allowed = userHasAnyRole(user, allowedRoles);
       if (!allowed) {
         res.status(403).json({ error: 'Operations access required' });
         return;

@@ -1,6 +1,6 @@
 import express, { NextFunction, Request, Response } from 'express';
 import db from '../db';
-import { getUserIdFromRequest } from '../utils/auth';
+import { getAuthenticatedUserFromRequest, userHasAnyRole } from '../utils/auth';
 import {
   ingestGmailQuoteMessage,
   processEmailQuoteRequest,
@@ -90,26 +90,16 @@ function rowToEmailQuote(row: any, includeRaw = false) {
 }
 
 async function requireOperationsUser(req: Request, res: Response): Promise<string | null> {
-  const userId = await getUserIdFromRequest(req);
-  if (!userId) {
+  const user = await getAuthenticatedUserFromRequest(req);
+  if (!user) {
     res.status(401).json({ error: 'Sign in to manage email quotes' });
     return null;
   }
-  const roles = await db.query(
-    `SELECT r.name
-     FROM public.user_roles ur
-     JOIN public.roles r ON r.id = ur.role_id
-     WHERE ur.user_id = $1`,
-    [userId]
-  );
-  const allowed = roles.rows.some(function(row) {
-    return QUOTE_APPROVER_ROLES.indexOf(row.name) > -1;
-  });
-  if (!allowed) {
+  if (!userHasAnyRole(user, QUOTE_APPROVER_ROLES)) {
     res.status(403).json({ error: 'Quote approver access is required to manage email quotes' });
     return null;
   }
-  return userId;
+  return user.id;
 }
 
 router.get('/mailbox/status', async function(req: Request, res: Response, next: NextFunction) {

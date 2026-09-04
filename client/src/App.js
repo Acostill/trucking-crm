@@ -20,6 +20,7 @@ import EmailQuoteInboxPage from './pages/EmailQuoteInboxPage';
 import { buildApiUrl } from './config';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SidebarProvider } from './context/SidebarContext';
+import { userHasRole } from './utils/accessControl';
 
 function DashboardApp() {
   const { user, checking, setUser } = useAuth();
@@ -144,7 +145,7 @@ function OperationsRoute({ children, allowPreview = false, requiredRole }) {
   if (isCustomerAccount(user)) {
     return <Navigate to="/portal" replace />;
   }
-  if (requiredRole && !(Array.isArray(user.roles) && user.roles.indexOf(requiredRole) > -1)) {
+  if (requiredRole && !userHasRole(user, requiredRole)) {
     return <Navigate to="/loads" replace />;
   }
   return children;
