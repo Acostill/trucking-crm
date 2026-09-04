@@ -114,8 +114,24 @@ app.get('/api/health', async function(_req: Request, res: Response) {
 // pure-API dev setups.
 const LANDING_DIST = path.join(ROOT_DIR, '..', 'landing', 'dist');
 const CLIENT_BUILD = path.join(ROOT_DIR, '..', 'client', 'build');
-app.use(express.static(LANDING_DIST));
-app.use(express.static(CLIENT_BUILD));
+
+function setStaticCacheHeaders(res: Response, filePath: string) {
+  // Render's custom-domain edge may otherwise keep index.html for several
+  // minutes after a deploy. A stale HTML shell can reference an older React
+  // bundle (and, historically, an older cross-origin API configuration),
+  // which makes a successful sign-in look as though the session cookie was
+  // rejected. Hashed JS/CSS assets remain cacheable; only the HTML entrypoint
+  // must always be revalidated.
+  if (path.basename(filePath) === 'index.html') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('CDN-Cache-Control', 'no-store');
+    res.setHeader('Surrogate-Control', 'no-store');
+    res.setHeader('Expires', '0');
+  }
+}
+
+app.use(express.static(LANDING_DIST, { setHeaders: setStaticCacheHeaders }));
+app.use(express.static(CLIENT_BUILD, { setHeaders: setStaticCacheHeaders }));
 
 app.use('/', indexRouter);
 app.use('/api/admin/users', usersRouter);
@@ -146,6 +162,7 @@ app.get('*', function(req: Request, res: Response, next: NextFunction) {
     next();
     return;
   }
+  setStaticCacheHeaders(res, CLIENT_INDEX);
   res.sendFile(CLIENT_INDEX);
 });
 
