@@ -6,7 +6,11 @@ import {
   requestDatLookups,
   requestDatRateViewLookup
 } from '../services/datRateViewJobs';
-import { parsedEmailToShipmentRequest, validateShipmentRequest } from '../services/emailQuoteWorkflow';
+import {
+  applyExplicitTemperatureService,
+  parsedEmailToShipmentRequest,
+  validateShipmentRequest
+} from '../services/emailQuoteWorkflow';
 
 const quoteId = 'email-quote-automatic-dat-test';
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -117,6 +121,34 @@ async function run() {
       ...missingDateShipment,
       pickup: { ...missingDateShipment.pickup, date: '2000-01-01T12:00:00.000Z' }
     }).missing.includes('current or future pickup date'));
+
+    const hallucinatedReefer = parsedEmailToShipmentRequest({
+      output: {
+        parsedSample: {
+          body: {
+            shipment_details: {
+              pickup: { city: 'Selma', state: 'CA', zip: '93662', pickup_date: '2099-09-08' },
+              delivery: { city: 'Los Angeles', state: 'CA', zip_code: '90001' },
+              shipment_info: {
+                pallets: 2,
+                total_weight_lbs: 1900,
+                dimensions: [{ count: 2, length_in: 48, width_in: 40, height_in: 52 }],
+                temperature_control: { min_c: 2, max_c: 8 }
+              }
+            }
+          }
+        }
+      }
+    } as any);
+    assert.strictEqual(hallucinatedReefer.truckType, 'Reefer Cargo Van');
+    const correctedDry = applyExplicitTemperatureService(
+      hallucinatedReefer,
+      'Commodity: General merchandise\nDry freight\nNon-hazardous'
+    );
+    assert.strictEqual(correctedDry.temperatureControlled, false);
+    assert.strictEqual(correctedDry.temperatureControl, undefined);
+    assert.strictEqual(correctedDry.truckType, 'Cargo Van');
+    assert.strictEqual(correctedDry.datEquipmentType, 'Van');
 
     await queueAutomaticDatLookups(quoteId);
     assert.strictEqual(client.jobs.length, 2, 'automatic pricing must queue RateView and Search Loads');

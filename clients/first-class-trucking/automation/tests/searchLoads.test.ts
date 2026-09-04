@@ -342,6 +342,34 @@ test("waits for the approved city while DAT replaces a stale autocomplete option
   }
 });
 
+test("selects one exact enabled Material option while DAT keeps it animated", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <style>
+        @keyframes dat-option-motion {
+          from { transform: translateY(0); }
+          to { transform: translateY(2px); }
+        }
+        mat-option { animation: dat-option-motion 20ms infinite alternate; }
+      </style>
+      <mat-option role="option" aria-disabled="false">
+        <span aria-hidden="true">S</span><span>Selma, CA</span>
+      </mat-option>
+      <script>
+        document.querySelector('mat-option').addEventListener('click', (event) => {
+          document.body.dataset.selected = event.currentTarget.textContent.trim();
+        });
+      </script>
+    `);
+    await selectExactSearchLoadsOption(page, "Selma, CA", 2500, "Origin");
+    assert.equal(await page.locator("body").getAttribute("data-selected"), "SSelma, CA");
+  } finally {
+    await browser.close();
+  }
+});
+
 test("fails closed when an exact primary option label is ambiguous", async () => {
   const browser = await chromium.launch({ headless: true });
   try {

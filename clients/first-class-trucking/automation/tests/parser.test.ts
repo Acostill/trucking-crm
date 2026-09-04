@@ -42,6 +42,18 @@ test("parses alternate DAT range typography and per-mile wording", () => {
   assert.equal(result.rangeUnavailableReason, null);
 });
 
+test("parses the current DAT average-per-mile value when the unit is outside the value element", () => {
+  const result = parseRateCard({
+    rateType: "SPOT",
+    acceptedMarketLane: "Selma Mkt - Los Angeles Mkt",
+    averageTotal: "$900",
+    averagePerMile: "$3.86",
+    milesAndTimeframe: "233 mi | 7d average",
+    range: "$800 - $1,000",
+  });
+  assert.equal(result.averagePerMileUsd, 3.86);
+});
+
 test("returns explicit nulls when DAT labels the range unavailable", () => {
   const result = parseRateCard({
     rateType: "SPOT",

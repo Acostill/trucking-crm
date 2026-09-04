@@ -233,6 +233,34 @@ export async function selectExactSearchLoadsOption(
   const deadline = Date.now() + timeoutMs;
   let sawAmbiguousMatch = false;
 
+  const clickVerifiedOption = async (option: Locator): Promise<boolean> => {
+    try {
+      await option.scrollIntoViewIfNeeded({ timeout: Math.min(timeoutMs, 750) });
+    } catch {
+      return false;
+    }
+    if (
+      await option.count() !== 1 ||
+      !await option.isVisible().catch(() => false) ||
+      await option.getAttribute("aria-disabled") === "true"
+    ) return false;
+    try {
+      await option.click({ timeout: Math.min(timeoutMs, 750) });
+      return true;
+    } catch {
+      // DAT Material autocomplete options can remain animated even after the
+      // exact, unique, enabled business value is visible. Force bypasses only
+      // Playwright's stability wait; selectCity still verifies the retained
+      // field value before the workflow can continue to SEARCH.
+      try {
+        await option.click({ force: true, timeout: Math.min(timeoutMs, 750) });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  };
+
   // DAT can briefly expose a stale autocomplete option while the requested
   // city is still loading. Wait for the approved exact value itself instead
   // of treating the first visible option as the final result set.
@@ -244,8 +272,9 @@ export async function selectExactSearchLoadsOption(
       continue;
     }
     if (accessibleCount === 1) {
-      await exactAccessible.click();
-      return;
+      if (await clickVerifiedOption(exactAccessible)) return;
+      await page.waitForTimeout(100);
+      continue;
     }
 
     // Current DAT Material options can prepend decorative text to the
@@ -258,8 +287,9 @@ export async function selectExactSearchLoadsOption(
       continue;
     }
     if (primaryCount === 1) {
-      await primaryMatches.click();
-      return;
+      if (await clickVerifiedOption(primaryMatches)) return;
+      await page.waitForTimeout(100);
+      continue;
     }
 
     const normalizedMatchIndexes = await visibleOptions.evaluateAll(
@@ -290,8 +320,9 @@ export async function selectExactSearchLoadsOption(
       continue;
     }
     if (normalizedMatchIndexes.length === 1) {
-      await visibleOptions.nth(normalizedMatchIndexes[0]).click();
-      return;
+      if (await clickVerifiedOption(visibleOptions.nth(normalizedMatchIndexes[0]))) return;
+      await page.waitForTimeout(100);
+      continue;
     }
     await page.waitForTimeout(100);
   } while (Date.now() < deadline);

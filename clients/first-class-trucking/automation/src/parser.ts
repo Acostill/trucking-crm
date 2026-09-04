@@ -17,7 +17,13 @@ function money(value: string, field: string): number {
 }
 
 function perMile(value: string, field: string): number {
-  const match = value.match(/\$([\d.]+)\s*\/\s*(?:mi|mile)/i);
+  const normalized = value
+    .replace(/[\u00a0\u202f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const match = normalized.match(
+    /^\(?\s*\$([\d,]+(?:\.\d+)?)\s*(?:(?:\/\s*|per\s+)(?:mi|mile))?\s*\)?$/i,
+  );
   if (!match) {
     throw new WorkflowError(
       "EXTRACTION_UNVERIFIED",
@@ -25,7 +31,7 @@ function perMile(value: string, field: string): number {
       "RV-100",
     );
   }
-  return Number(match[1]);
+  return Number(match[1].replaceAll(",", ""));
 }
 
 const RANGE_NUMBER = "([\\d,]+(?:\\.\\d+)?)";

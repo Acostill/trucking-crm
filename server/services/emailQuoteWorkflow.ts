@@ -175,6 +175,31 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
   return assignTruckType(shipment).shipment;
 }
 
+const EXPLICIT_DRY_SERVICE = /\b(?:dry freight|dry cargo|dry shipment|non[-\s]?refrigerated|no temperature control)\b/i;
+const EXPLICIT_REEFER_SERVICE = /\b(?:reefer|refrigerat(?:ed|ion)|temperature[-\s]?controlled|temperature control)\b/i;
+
+export function applyExplicitTemperatureService(
+  shipment: UnifiedQuoteRequest,
+  rawText: string
+): UnifiedQuoteRequest {
+  const explicitDry = EXPLICIT_DRY_SERVICE.test(String(rawText || ''));
+  const explicitReefer = EXPLICIT_REEFER_SERVICE.test(String(rawText || ''));
+  if (!explicitDry || explicitReefer || shipment.truckAssignment?.source === 'staff') {
+    return shipment;
+  }
+
+  const corrected: UnifiedQuoteRequest = {
+    ...shipment,
+    temperatureControlled: false
+  };
+  delete corrected.temperatureControl;
+  if (/^Reefer\b/i.test(String(corrected.truckType || ''))) {
+    delete corrected.truckType;
+  }
+  delete corrected.truckAssignment;
+  return assignTruckType(corrected).shipment;
+}
+
 export function validateShipmentRequest(shipment: UnifiedQuoteRequest): ShipmentValidation {
   const missing: string[] = [];
   const pickup = shipment.pickup || {};
@@ -371,7 +396,10 @@ export async function processEmailQuoteRequest(id: string): Promise<any> {
       [id]
     );
     const parsed = await parseEmailWithOpenRouter(record.rows[0].raw_text);
-    const shipment = parsedEmailToShipmentRequest(parsed);
+    const shipment = applyExplicitTemperatureService(
+      parsedEmailToShipmentRequest(parsed),
+      record.rows[0].raw_text
+    );
     const existingShipment = typeof record.rows[0].shipment_request === 'string'
       ? JSON.parse(record.rows[0].shipment_request)
       : record.rows[0].shipment_request || {};
