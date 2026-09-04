@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "@playwright/test";
 import {
+  collectCompleteDirectRows,
   parseDirectResultCountText,
   parseDisplayedTotal,
   rankSearchLoadCandidates,
@@ -109,6 +110,43 @@ test("returns explicit empty and no-qualifying outcomes", () => {
     ]).outcome,
     "no_qualifying_offers",
   );
+});
+
+test("snapshots a full DAT row batch atomically when one row has no offer element", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const rows = Array.from({ length: 26 }, (_, index) => {
+      const offer = index === 24 ? "" : `<span class="offer">$${2000 - index * 10}</span>`;
+      return `
+        <div class="row-container" id="table-row-${index + 1}">
+          <div class="cell-rate"><dat-rate>${offer}<span>$2.50/mi</span></dat-rate></div>
+          <div class="cell-route"><dat-route>Dallas, TX Atlanta, GA 780 mi</dat-route></div>
+          <div class="cell-timing"><dat-timing>Sep 8</dat-timing></div>
+          <div class="cell-equipment"><dat-equipment>V 850 lbs 53 ft - Full</dat-equipment></div>
+          <div class="cell-company"><dat-company>Safe Carrier ${index + 1}</dat-company></div>
+          <div class="cell-credit"><dat-credit>95 CS 20 DTP</dat-credit></div>
+        </div>
+      `;
+    }).join("");
+    await page.setContent(`
+      <cdk-virtual-scroll-viewport class="table-rows-container">
+        ${rows}
+      </cdk-virtual-scroll-viewport>
+    `);
+
+    const candidates = await collectCompleteDirectRows(page, 26, 2000);
+
+    assert.equal(candidates.length, 26);
+    assert.equal(candidates[24].datLoadId, "table-row-25");
+    assert.equal(candidates[24].displayedTotal, null);
+    const ranked = rankSearchLoadCandidates(candidates);
+    assert.equal(ranked.directResultCount, 26);
+    assert.equal(ranked.exclusionReasons.MISSING_OR_NON_NUMERIC_OFFER, 1);
+    assert.equal(ranked.offers.length, 10);
+  } finally {
+    await browser.close();
+  }
 });
 
 const equipmentCases: Array<{

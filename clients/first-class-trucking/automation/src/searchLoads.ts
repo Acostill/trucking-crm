@@ -669,63 +669,102 @@ export async function captureSearchLoadsPreSubmitEvidence(
   );
 }
 
-async function safeCellText(row: Locator, selector: string): Promise<string | null> {
-  const cell = row.locator(selector).first();
-  if (!(await cell.count())) return null;
-  const value = await cell.evaluate((element) => {
-    const clone = element.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll(
-      'a[href^="tel:"], a[href^="mailto:"], button, [role="button"], [aria-label*="phone" i], [aria-label*="email" i], [aria-label*="contact" i], [aria-label*="call" i]',
-    ).forEach((candidate) => candidate.remove());
-    return clone.innerText || clone.textContent || "";
-  });
-  return sanitizeNonContactText(value).value;
-}
-
 function firstMatch(value: string | null, pattern: RegExp): string | null {
   return value?.match(pattern)?.[0]?.replace(/\s+/g, " ").trim() || null;
 }
 
-async function extractVisibleRow(row: Locator, sourceOrder: number): Promise<RawSearchLoadCandidate> {
-  const datLoadId = clean(await row.getAttribute("id")) || "";
-  const displayedTotal = clean(await row.locator(".cell-rate dat-rate .offer").first().textContent());
-  const rateText = await safeCellText(row, ".cell-rate dat-rate");
-  const routeText = await safeCellText(row, ".cell-route dat-route");
-  const timingText = await safeCellText(row, ".cell-timing dat-timing");
-  const equipmentText = await safeCellText(row, ".cell-equipment dat-equipment");
-  const companyText = await safeCellText(row, ".cell-company dat-company");
-  const creditText = await safeCellText(row, ".cell-credit dat-credit");
-  const cities = routeText?.match(/[A-Za-z][A-Za-z .'-]+,\s*[A-Z]{2}\b/g) || [];
-  const commentsPanel = row.locator("dat-notes .notes-contents.multiline").first();
-  const commentsVisible = Boolean(await commentsPanel.count()) &&
-    await commentsPanel.isVisible().catch(() => false);
-  const rawComments = commentsVisible ? await commentsPanel.textContent() : null;
-  const comments = sanitizeNonContactText(rawComments);
-  return {
-    datLoadId,
-    sourceOrder,
-    canceled: await row.getByText("CANCELED", { exact: true }).count() > 0,
-    displayedTotal,
-    rpm: firstMatch(rateText, /\$[\d,.]+\s*(?:\/\s*mi|per\s+mile)/i),
-    tripMiles: firstMatch(routeText, /[\d,]+\s*(?:mi|miles)\b/i),
-    origin: cities[0] || null,
-    destination: cities[1] || null,
-    originDeadhead: firstMatch(routeText, /DH[-\s]?O\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
-    destinationDeadhead: firstMatch(routeText, /DH[-\s]?D\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
-    pickup: timingText,
-    equipmentCode: firstMatch(equipmentText, /\b(?:V|F|R|VAN|REEFER|FLATBED)\b/i),
-    weight: firstMatch(equipmentText, /[\d,]+\s*(?:lbs?|pounds?)\b/i),
-    lengthLoadType: equipmentText,
-    company: companyText,
-    creditScore: firstMatch(creditText, /(?:credit\s*)?\d{2,3}/i),
-    daysToPay: firstMatch(creditText, /\d+\s*(?:DTP|days?(?:\s+to\s+pay)?)/i),
-    comments: comments.value,
-    commentsStatus: comments.redacted
-      ? "redacted"
-      : commentsVisible && comments.value
-        ? "displayed"
-        : "not_displayed",
-  };
+async function snapshotVisibleRows(rows: Locator): Promise<RawSearchLoadCandidate[]> {
+  const snapshots = await rows.evaluateAll((elements) => {
+    const removableSelector = [
+      'a[href^="tel:"]',
+      'a[href^="mailto:"]',
+      "button",
+      '[role="button"]',
+      '[aria-label*="phone" i]',
+      '[aria-label*="email" i]',
+      '[aria-label*="contact" i]',
+      '[aria-label*="call" i]',
+    ].join(",");
+    return elements.map((element) => {
+      const cellTexts = [
+        ".cell-rate dat-rate .offer",
+        ".cell-rate dat-rate",
+        ".cell-route dat-route",
+        ".cell-timing dat-timing",
+        ".cell-equipment dat-equipment",
+        ".cell-company dat-company",
+        ".cell-credit dat-credit",
+      ].map((selector) => {
+        const source = element.querySelector(selector);
+        if (!source) return null;
+        const clone = source.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll(removableSelector).forEach((candidate) => candidate.remove());
+        return clone.innerText || clone.textContent || null;
+      });
+      const commentsPanel = element.querySelector("dat-notes .notes-contents.multiline");
+      const commentsStyle = commentsPanel
+        ? window.getComputedStyle(commentsPanel as HTMLElement)
+        : null;
+      const commentsRect = commentsPanel
+        ? (commentsPanel as HTMLElement).getBoundingClientRect()
+        : null;
+      const commentsVisible = Boolean(commentsPanel && commentsStyle && commentsRect) &&
+        commentsStyle?.display !== "none" && commentsStyle?.visibility !== "hidden" &&
+        Number(commentsRect?.width) > 0 && Number(commentsRect?.height) > 0;
+      return {
+        datLoadId: element.getAttribute("id") || "",
+        canceled: Array.from(element.querySelectorAll("*")).some((candidate) =>
+          (candidate.textContent || "").trim() === "CANCELED"
+        ),
+        displayedTotal: cellTexts[0],
+        rateText: cellTexts[1],
+        routeText: cellTexts[2],
+        timingText: cellTexts[3],
+        equipmentText: cellTexts[4],
+        companyText: cellTexts[5],
+        creditText: cellTexts[6],
+        rawComments: commentsVisible && commentsPanel
+          ? commentsPanel.textContent
+          : null,
+        commentsVisible,
+      };
+    });
+  });
+  return snapshots.map((snapshot, sourceOrder) => {
+    const rateText = sanitizeNonContactText(snapshot.rateText).value;
+    const routeText = sanitizeNonContactText(snapshot.routeText).value;
+    const timingText = sanitizeNonContactText(snapshot.timingText).value;
+    const equipmentText = sanitizeNonContactText(snapshot.equipmentText).value;
+    const companyText = sanitizeNonContactText(snapshot.companyText).value;
+    const creditText = sanitizeNonContactText(snapshot.creditText).value;
+    const cities = routeText?.match(/[A-Za-z][A-Za-z .'-]+,\s*[A-Z]{2}\b/g) || [];
+    const comments = sanitizeNonContactText(snapshot.rawComments);
+    return {
+      datLoadId: clean(snapshot.datLoadId) || "",
+      sourceOrder,
+      canceled: snapshot.canceled,
+      displayedTotal: clean(snapshot.displayedTotal),
+      rpm: firstMatch(rateText, /\$[\d,.]+\s*(?:\/\s*mi|per\s+mile)/i),
+      tripMiles: firstMatch(routeText, /[\d,]+\s*(?:mi|miles)\b/i),
+      origin: cities[0] || null,
+      destination: cities[1] || null,
+      originDeadhead: firstMatch(routeText, /DH[-\s]?O\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
+      destinationDeadhead: firstMatch(routeText, /DH[-\s]?D\s*[:]?\s*[\d,.]+\s*(?:mi|miles)?/i),
+      pickup: timingText,
+      equipmentCode: firstMatch(equipmentText, /\b(?:V|F|R|VAN|REEFER|FLATBED)\b/i),
+      weight: firstMatch(equipmentText, /[\d,]+\s*(?:lbs?|pounds?)\b/i),
+      lengthLoadType: equipmentText,
+      company: companyText,
+      creditScore: firstMatch(creditText, /(?:credit\s*)?\d{2,3}/i),
+      daysToPay: firstMatch(creditText, /\d+\s*(?:DTP|days?(?:\s+to\s+pay)?)/i),
+      comments: comments.value,
+      commentsStatus: comments.redacted
+        ? "redacted"
+        : snapshot.commentsVisible && comments.value
+          ? "displayed"
+          : "not_displayed",
+    };
+  });
 }
 
 async function directResultCount(page: Page, timeoutMs: number): Promise<number> {
@@ -787,7 +826,7 @@ export async function inspectExistingSearchLoadsStructure(
   };
 }
 
-async function collectCompleteDirectRows(
+export async function collectCompleteDirectRows(
   page: Page,
   expectedCount: number,
   timeoutMs: number,
@@ -800,12 +839,15 @@ async function collectCompleteDirectRows(
   let unchangedPasses = 0;
   let lastSize = -1;
   while (Date.now() < deadline && collected.size < expectedCount) {
-    const count = await rows.count();
-    for (let index = 0; index < count; index += 1) {
-      const row = rows.nth(index);
-      const id = clean(await row.getAttribute("id"));
+    const visibleRows = await snapshotVisibleRows(rows);
+    for (const visibleRow of visibleRows) {
+      const id = clean(visibleRow.datLoadId);
       if (!id || collected.has(id)) continue;
-      collected.set(id, await extractVisibleRow(row, collected.size));
+      collected.set(id, {
+        ...visibleRow,
+        datLoadId: id,
+        sourceOrder: collected.size,
+      });
     }
     if (collected.size === lastSize) unchangedPasses += 1;
     else unchangedPasses = 0;
