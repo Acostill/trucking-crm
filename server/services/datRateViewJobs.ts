@@ -92,7 +92,8 @@ interface DatMarketRateCard {
   rateType: 'SPOT' | 'CONTRACT';
   acceptedMarketLane: string;
   averageTotalUsd: number;
-  averagePerMileUsd: number;
+  averagePerMileUsd: number | null;
+  averagePerMileUnavailableReason: string | null;
   lowTotalUsd: number | null;
   highTotalUsd: number | null;
   lowPerMileUsd: number | null;
@@ -338,7 +339,7 @@ function resultCard(
     ...(card.rangeUnavailableReason
       ? { marketRangeUnavailableReason: card.rangeUnavailableReason }
       : {}),
-    ratePerMile: card.averagePerMileUsd,
+    ...(card.averagePerMileUsd == null ? {} : { ratePerMile: card.averagePerMileUsd }),
     ...(card.lowPerMileUsd == null ? {} : { lowRatePerMile: card.lowPerMileUsd }),
     ...(card.highPerMileUsd == null ? {} : { highRatePerMile: card.highPerMileUsd }),
     miles: card.miles,
@@ -364,7 +365,12 @@ function validateMarketCard(value: any, expected: 'SPOT' | 'CONTRACT'): DatMarke
     rateType: expected,
     acceptedMarketLane: cleanText(value.acceptedMarketLane),
     averageTotalUsd: Number(value.averageTotalUsd),
-    averagePerMileUsd: Number(value.averagePerMileUsd),
+    averagePerMileUsd: value.averagePerMileUsd == null
+      ? null
+      : Number(value.averagePerMileUsd),
+    averagePerMileUnavailableReason: value.averagePerMileUnavailableReason == null
+      ? null
+      : cleanText(value.averagePerMileUnavailableReason).slice(0, 200),
     lowTotalUsd: value.lowTotalUsd == null ? null : Number(value.lowTotalUsd),
     highTotalUsd: value.highTotalUsd == null ? null : Number(value.highTotalUsd),
     lowPerMileUsd: value.lowPerMileUsd == null ? null : Number(value.lowPerMileUsd),
@@ -377,13 +383,21 @@ function validateMarketCard(value: any, expected: 'SPOT' | 'CONTRACT'): DatMarke
   };
   const numericValues = [
     card.averageTotalUsd,
-    card.averagePerMileUsd,
     card.miles
   ];
   if (!card.acceptedMarketLane || !card.timeframe || numericValues.some(function(number) {
     return !Number.isFinite(number) || number <= 0;
   })) {
     throw new Error(`DAT ${expected.toLowerCase()} result is invalid`);
+  }
+  if (
+    (card.averagePerMileUsd != null && (
+      !Number.isFinite(card.averagePerMileUsd) || card.averagePerMileUsd <= 0
+    )) ||
+    (card.averagePerMileUsd == null && !card.averagePerMileUnavailableReason) ||
+    (card.averagePerMileUsd != null && card.averagePerMileUnavailableReason)
+  ) {
+    throw new Error(`DAT ${expected.toLowerCase()} average per-mile result is invalid`);
   }
   const totalRangePresent = card.lowTotalUsd != null && card.highTotalUsd != null;
   const perMileRangePresent = card.lowPerMileUsd != null && card.highPerMileUsd != null;
@@ -408,7 +422,7 @@ function validateMarketCard(value: any, expected: 'SPOT' | 'CONTRACT'): DatMarke
       (card.lowTotalUsd as number) > card.averageTotalUsd ||
       card.averageTotalUsd > (card.highTotalUsd as number)
     )) ||
-    (perMileRangePresent && (
+    (perMileRangePresent && card.averagePerMileUsd != null && (
       (card.lowPerMileUsd as number) > card.averagePerMileUsd ||
       card.averagePerMileUsd > (card.highPerMileUsd as number)
     ))

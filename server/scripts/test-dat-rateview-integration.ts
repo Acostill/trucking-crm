@@ -77,6 +77,18 @@ function run() {
   assert.strictEqual(unavailableOption.marketLow, undefined);
   assert.match(unavailableOption.marketRangeUnavailableReason || '', /unavailable/);
 
+  const unavailableAveragePerMile = validateDatRateViewResult({
+    ...result,
+    spot: {
+      ...result.spot,
+      averagePerMileUsd: null,
+      averagePerMileUnavailableReason: 'DAT explicitly displayed the average per-mile rate as unavailable'
+    }
+  });
+  const unavailableAverageOption = mapDatRateViewResult(unavailableAveragePerMile)[0];
+  assert.strictEqual(unavailableAverageOption.available, true);
+  assert.strictEqual(unavailableAverageOption.ratePerMile, undefined);
+
   assert.throws(function() {
     validateDatRateViewResult({
       ...result,

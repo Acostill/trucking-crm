@@ -66,6 +66,20 @@ test("parses a bounded DAT per-mile expression with spacing and a footnote marke
   assert.equal(result.averagePerMileUsd, 3.86);
 });
 
+test("preserves the market total when DAT displays average per-mile as unavailable", () => {
+  const result = parseRateCard({
+    rateType: "SPOT",
+    acceptedMarketLane: "Selma Mkt - Los Angeles Mkt",
+    averageTotal: "$900",
+    averagePerMile: "–",
+    milesAndTimeframe: "233 mi | 7d average",
+    range: "$800 - $1,000",
+  });
+  assert.equal(result.averageTotalUsd, 900);
+  assert.equal(result.averagePerMileUsd, null);
+  assert.match(result.averagePerMileUnavailableReason || "", /unavailable/);
+});
+
 test("fails closed on multiple per-mile numbers and reports only a value-free format signature", () => {
   assert.throws(
     () => parseRateCard({

@@ -16,11 +16,14 @@ function money(value: string, field: string): number {
   return Number(match[1].replaceAll(",", ""));
 }
 
-function perMile(value: string, field: string): number {
+const EXPLICITLY_UNAVAILABLE_VALUE = /^(?:n\/?a|-{1,2}|[–—]|not available|unavailable)$/i;
+
+function perMile(value: string, field: string): number | null {
   const normalized = value
     .replace(/[\u00a0\u202f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+  if (EXPLICITLY_UNAVAILABLE_VALUE.test(normalized)) return null;
   const numericTokens = normalized.match(/[\d,]+(?:\.\d+)?/g) || [];
   const numericToken = numericTokens.length === 1 ? numericTokens[0] : null;
   const numericTokenIsValid = numericToken !== null && (
@@ -145,12 +148,16 @@ export function parseRateCard(input: {
     );
   }
   const range = rangeValues(input.range);
+  const averagePerMileUsd = perMile(input.averagePerMile, "average per-mile rate");
 
   return {
     rateType: input.rateType,
     acceptedMarketLane: input.acceptedMarketLane.trim(),
     averageTotalUsd: money(input.averageTotal, "average total"),
-    averagePerMileUsd: perMile(input.averagePerMile, "average per-mile rate"),
+    averagePerMileUsd,
+    averagePerMileUnavailableReason: averagePerMileUsd === null
+      ? "DAT explicitly displayed the average per-mile rate as unavailable"
+      : null,
     ...range,
     miles: Number(milesMatch[1].replaceAll(",", "")),
     timeframe: milesMatch[2].trim(),

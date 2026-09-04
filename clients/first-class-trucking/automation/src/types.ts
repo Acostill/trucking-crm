@@ -28,7 +28,8 @@ export interface MarketRateCard {
   rateType: RateType;
   acceptedMarketLane: string;
   averageTotalUsd: number;
-  averagePerMileUsd: number;
+  averagePerMileUsd: number | null;
+  averagePerMileUnavailableReason?: string | null;
   lowTotalUsd: number | null;
   highTotalUsd: number | null;
   lowPerMileUsd: number | null;
