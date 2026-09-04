@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import AuthForm from '../components/AuthForm';
+import QuoteRouteMap from '../components/QuoteRouteMap';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../config';
 import './EmailQuoteInboxPage.css';
@@ -1286,6 +1287,17 @@ export default function EmailQuoteInboxPage() {
                         {savingShipment ? 'Refreshing pricing...' : 'Save details & refresh pricing'}
                       </button>
                     </div>
+                  </section>
+
+                  <section className="eq-section eq-route-section">
+                    <div className="eq-section-heading">
+                      <div><MapPin size={18} /><span><strong>Route map + nearby major cities</strong><small>See the shipment lane and useful metro context before pricing.</small></span></div>
+                      <span className="eq-map-context-badge">Operational context</span>
+                    </div>
+                    <QuoteRouteMap
+                      pickup={{ city: editor.pickupCity, state: editor.pickupState, zip: editor.pickupZip }}
+                      delivery={{ city: editor.deliveryCity, state: editor.deliveryState, zip: editor.deliveryZip }}
+                    />
                   </section>
 
                   <section className="eq-section">

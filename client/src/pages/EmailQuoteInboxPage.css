@@ -519,6 +519,210 @@
   font-weight: 700;
 }
 
+.eq-map-context-badge {
+  padding: 5px 8px;
+  border: 1px solid #c9e1e8;
+  border-radius: 999px;
+  color: #28748d;
+  background: #eef7f9;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.eq-route-section {
+  overflow: hidden;
+}
+
+.eq-route-context {
+  display: grid;
+  gap: 12px;
+}
+
+.eq-route-map-shell {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #d3e0e7;
+  border-radius: 11px;
+  background: #eaf1f3;
+}
+
+.eq-route-map {
+  z-index: 0;
+  width: 100%;
+  height: 330px;
+  font-family: inherit;
+}
+
+.eq-route-map .leaflet-tooltip {
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 6px;
+  color: #193247;
+  box-shadow: 0 4px 16px rgba(17, 46, 65, .16);
+  font-family: inherit;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.eq-route-map .leaflet-control-attribution {
+  font-size: 7px;
+}
+
+.eq-route-map-legend {
+  position: absolute;
+  z-index: 500;
+  right: 10px;
+  bottom: 19px;
+  display: flex;
+  gap: 10px;
+  padding: 7px 9px;
+  border: 1px solid rgba(207, 220, 228, .9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 5px 18px rgba(23, 48, 65, .1);
+  color: #50687a;
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.eq-route-map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.eq-route-map-legend i {
+  width: 8px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(32, 59, 76, .14);
+}
+
+.eq-route-map-legend .pickup { background: #14715f; }
+.eq-route-map-legend .delivery { background: #1f6fa7; }
+.eq-route-map-legend .metro { background: #f09b42; }
+
+.eq-route-metro-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.eq-route-metro-group {
+  padding: 11px;
+  border: 1px solid #dce5eb;
+  border-radius: 10px;
+  background: #fbfcfd;
+}
+
+.eq-route-metro-group.pickup { border-top: 3px solid #378d7b; }
+.eq-route-metro-group.delivery { border-top: 3px solid #4c8db7; }
+
+.eq-route-metro-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.eq-route-metro-heading span {
+  color: #708192;
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.eq-route-metro-heading strong {
+  overflow: hidden;
+  color: #254156;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eq-route-metro-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.eq-route-metro {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px;
+  border-radius: 7px;
+  color: #39768a;
+  background: #f0f6f8;
+}
+
+.eq-route-metro > span,
+.eq-route-metro strong,
+.eq-route-metro small {
+  display: block;
+  min-width: 0;
+}
+
+.eq-route-metro strong {
+  overflow: hidden;
+  color: #243f53;
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.eq-route-metro small {
+  margin-top: 1px;
+  color: #758698;
+  font-size: 7.5px;
+}
+
+.eq-route-disclaimer {
+  margin: 0;
+  color: #718294;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.eq-route-map-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  min-height: 170px;
+  padding: 20px;
+  border: 1px dashed #cbd9e2;
+  border-radius: 11px;
+  color: #658096;
+  background: linear-gradient(135deg, #f8fbfc, #f1f6f8);
+}
+
+.eq-route-map-state > div,
+.eq-route-map-state strong,
+.eq-route-map-state span {
+  display: block;
+}
+
+.eq-route-map-state strong {
+  color: #29485c;
+  font-size: 11px;
+}
+
+.eq-route-map-state span {
+  margin-top: 3px;
+  font-size: 9px;
+}
+
+.eq-route-map-state.loading { color: #2d829e; }
+.eq-route-map-state.error { color: #b06d36; }
+
 .eq-quote-reference {
   padding: 5px 8px;
   border-radius: 7px;
@@ -1240,6 +1444,10 @@
   .eq-pricing-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  .eq-route-metro-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 900px) {
@@ -1292,5 +1500,19 @@
   .eq-field-grid.freight .temperature-control,
   .eq-field-grid.freight .truck-assignment {
     grid-column: auto;
+  }
+
+  .eq-route-map {
+    height: 270px;
+  }
+
+  .eq-route-map-legend {
+    right: 7px;
+    bottom: 18px;
+    gap: 6px;
+  }
+
+  .eq-route-metro-grid {
+    grid-template-columns: 1fr;
   }
 }
