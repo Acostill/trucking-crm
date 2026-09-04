@@ -1034,9 +1034,11 @@ export default function EmailQuoteInboxPage() {
     return option.key === 'datSpot' || option.key === 'datContract';
   });
   const datBusy = datStatusOption && ['pending', 'running'].indexOf(datStatusOption.status) > -1;
+  const datUncertain = datStatusOption && datStatusOption.status === 'uncertain';
   const datLoadsOption = carrierQuotes.find(function(option) { return option.key === 'datLoadOffers'; });
   const datLoadsBusy = datLoadsOption && ['pending', 'running'].indexOf(datLoadsOption.status) > -1;
   const datLoadsCompleted = datLoadsOption && datLoadsOption.status === 'completed';
+  const datLoadsUncertain = datLoadsOption && datLoadsOption.status === 'uncertain';
   const datRetryable = datStatusOption &&
     ['awaiting_approval', 'needs_auth', 'failed'].indexOf(datStatusOption.status) > -1;
   const datLoadsRetryable = (datLoadsOption &&
@@ -1295,9 +1297,9 @@ export default function EmailQuoteInboxPage() {
                           {runningDat ? 'Queueing...' : 'Retry DAT pricing'}
                         </button>
                       ) : (
-                        <span className={'eq-auto-status ' + (datCompleted ? 'complete' : datBusy ? 'working' : datStatusOption && datStatusOption.status === 'disabled' ? 'offline' : '')}>
-                          {datCompleted ? <CheckCircle2 size={14} /> : <RefreshCw size={14} className={datBusy ? 'spinning' : ''} />}
-                          {datCompleted ? 'DAT pricing ready' : datBusy ? 'Running automatically' : datStatusOption && datStatusOption.status === 'disabled' ? 'DAT worker offline' : 'Queues automatically'}
+                        <span className={'eq-auto-status ' + (datCompleted ? 'complete' : datBusy ? 'working' : datUncertain ? 'review' : datStatusOption && datStatusOption.status === 'disabled' ? 'offline' : '')}>
+                          {datCompleted ? <CheckCircle2 size={14} /> : datUncertain ? <AlertCircle size={14} /> : <RefreshCw size={14} className={datBusy ? 'spinning' : ''} />}
+                          {datCompleted ? 'DAT pricing ready' : datBusy ? 'Running automatically' : datUncertain ? 'Reconcile required' : datStatusOption && datStatusOption.status === 'disabled' ? 'DAT worker offline' : 'Queues automatically'}
                         </span>
                       )}
                     </div>
@@ -1376,9 +1378,9 @@ export default function EmailQuoteInboxPage() {
                           {runningDatLoads ? 'Queueing...' : datLoadsOption ? 'Retry DAT lookups' : 'Queue missing DAT searches'}
                         </button>
                       ) : (
-                        <span className={'eq-auto-status ' + (datLoadsCompleted ? 'complete' : datLoadsBusy ? 'working' : datLoadsOption && datLoadsOption.status === 'disabled' ? 'offline' : '')}>
-                          {datLoadsCompleted ? <CheckCircle2 size={14} /> : <RefreshCw size={14} className={datLoadsBusy ? 'spinning' : ''} />}
-                          {datLoadsCompleted ? 'Market offers ready' : datLoadsBusy ? 'Running automatically' : datLoadsOption && datLoadsOption.status === 'disabled' ? 'DAT worker offline' : 'Queues automatically'}
+                        <span className={'eq-auto-status ' + (datLoadsCompleted ? 'complete' : datLoadsBusy ? 'working' : datLoadsUncertain ? 'review' : datLoadsOption && datLoadsOption.status === 'disabled' ? 'offline' : '')}>
+                          {datLoadsCompleted ? <CheckCircle2 size={14} /> : datLoadsUncertain ? <AlertCircle size={14} /> : <RefreshCw size={14} className={datLoadsBusy ? 'spinning' : ''} />}
+                          {datLoadsCompleted ? 'Market offers ready' : datLoadsBusy ? 'Running automatically' : datLoadsUncertain ? 'Reconcile required' : datLoadsOption && datLoadsOption.status === 'disabled' ? 'DAT worker offline' : 'Queues automatically'}
                         </span>
                       )}
                     </div>

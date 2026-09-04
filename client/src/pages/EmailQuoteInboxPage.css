@@ -758,6 +758,12 @@
   background: #fff6e7;
 }
 
+.eq-auto-status.review {
+  color: #8a4b18;
+  border-color: #e4c49c;
+  background: #fff7e9;
+}
+
 .eq-carrier-top {
   display: flex;
   min-height: 20px;
