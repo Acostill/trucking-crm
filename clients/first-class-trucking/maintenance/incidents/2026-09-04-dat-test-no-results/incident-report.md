@@ -7,7 +7,7 @@
 - Affected quote: `TEST RFQ – Selma CA to Los Angeles CA – 09/08/2026`
 - Affected workflows: DAT RateView and DAT Search Loads
 - Primary classifications: `UI/result-contract drift` and `client-data parsing`
-- Repair status: authorized by the user; production search flow verified and compact-row field repair pending final read-only verification
+- Repair status: production search flow and compact-row field extraction verified; the broader client QA gate remains open
 
 ## User-visible symptom
 
@@ -103,3 +103,20 @@ The operator approved one final Search Loads submission for the same fictional S
 ## Release note
 
 The client workspace remains structurally valid at the QA stage with `qa_passed: false` and `client_accepted: false`. This diagnosis does not advance a gate.
+
+## Additional full-field production verification
+
+The operator requested another end-to-end production test on 2026-09-04. The first email exposed a compound dry-service phrase (`No refrigeration or temperature control required`) that the deterministic override did not remove before its affirmative reefer check. Commit `73b6a4b` extends the negation contract and adds the exact regression case. After deployment, the saved email reparsed as `Cargo Van` with DAT `Van` equipment.
+
+The same Selma-to-Los Angeles test showed a valid RateView total while DAT rendered the average per-mile value as an en dash. Commit `a822faf` preserves the displayed market total, persists a null per-mile value with an explicit unavailable reason, and renders `Per-mile unavailable` instead of failing the complete benchmark. The worker suite passed 54/54 tests and the server RateView contract test passed before deployment to Render and Railway.
+
+Future-date Sacramento-to-Phoenix searches for 2026-09-11 and 2026-09-12 completed with verified empty outcomes. A final same-day fictional quote, Gmail message `1a06d1c135a2ef8a`, produced the required non-empty verification:
+
+- RateView job `dat-job-d3fcb74f-82f2-489c-92fa-2be601f85089` completed.
+- Search Loads job `dat-search-job-b69fa9fd-299c-4f00-be53-9da98fe32cd0` completed.
+- The CRM displayed three direct results, three eligible numeric rates, zero exclusions, and three rows sorted by total Rate descending.
+- All three displayed rows included RPM, trip miles, origin, destination, origin and destination deadhead, equipment, weight, length/load type, and company.
+- Pickup, credit/days-to-pay, and comments were not displayed by DAT's compact row and therefore remained explicitly unavailable. No contact or detail control was activated.
+- Forward Air, ExpediteAll, DAT Spot, and DAT Contract cards were visible in the same quote. The Railway health endpoint reported `crm_poll_healthy`, no active job, and no last error.
+
+The RateView idempotency key remains quote-scoped: each separate test email created its own RateView job even for the same lane. No duplicate was submitted within a single quote record.
