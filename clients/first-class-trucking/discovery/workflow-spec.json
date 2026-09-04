@@ -2,13 +2,13 @@
   "schema_version": 1,
   "workflow_id": "fct-dat-rateview-lane-pricing",
   "name": "First Class Trucking CRM truck assignment, DAT RateView, and DAT Search Loads",
-  "version": "0.7-approved-automatic-pricing-v1",
+  "version": "0.8-approved-dat-result-fallbacks-v1",
   "status": "approved",
   "change_control": {
-    "prior_approved_version": "0.6-approved-search-loads-v1",
-    "prior_approved_scope": "The CRM truck-assignment, DAT RateView, and read-only DAT Search Loads workflows remain approved, including their input, extraction, safety, evidence, and no-resubmission boundaries.",
-    "approved_change": "For every newly ingested email quote with a complete valid shipment, run connected-carrier pricing and automatically reserve one DAT RateView job and one DAT Search Loads job per immutable fingerprint. A staff save or reparse applies the same rule to a changed valid snapshot. No per-search CRM click is required in production.",
-    "review_note": "David Castillo approved automatic connected-carrier pricing and automatic read-only DAT RateView and Search Loads searches on 2026-09-03. The standing authorization is limited to the previously discovered search and extraction scope and does not authorize booking, posting, bidding, messaging, contact activation, purchasing, payment, or account changes."
+    "prior_approved_version": "0.7-approved-automatic-pricing-v1",
+    "prior_approved_scope": "The CRM truck-assignment, automatic connected-carrier pricing, DAT RateView, and read-only DAT Search Loads workflows remain approved, including their immutable fingerprints, safety boundaries, and uncertain no-resubmission rule.",
+    "approved_change": "Accept verified alternate DAT range typography and an explicit unavailable range as a completed RateView result with null optional range fields and a reason. An authenticated manual retry requests RateView and Search Loads independently so an uncertain job remains protected without blocking the other missing workflow.",
+    "review_note": "David Castillo approved this maintenance repair on 2026-09-03. Unknown or ambiguous range text remains EXTRACTION_UNVERIFIED, uncertain jobs are never reset or resubmitted, and the change does not authorize booking, posting, bidding, messaging, contact activation, purchasing, payment, or account changes."
   },
   "trigger": "A newly ingested quote email, staff shipment save, or email reparse produces a complete valid shipment snapshot. Connected-carrier pricing runs immediately and the CRM automatically reserves one read-only DAT RateView job and one read-only DAT Search Loads job for each new immutable fingerprint.",
   "preconditions": [

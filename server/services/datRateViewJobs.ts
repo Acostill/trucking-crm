@@ -93,10 +93,11 @@ interface DatMarketRateCard {
   acceptedMarketLane: string;
   averageTotalUsd: number;
   averagePerMileUsd: number;
-  lowTotalUsd: number;
-  highTotalUsd: number;
-  lowPerMileUsd: number;
-  highPerMileUsd: number;
+  lowTotalUsd: number | null;
+  highTotalUsd: number | null;
+  lowPerMileUsd: number | null;
+  highPerMileUsd: number | null;
+  rangeUnavailableReason: string | null;
   miles: number;
   timeframe: string;
 }
@@ -332,11 +333,14 @@ function resultCard(
     status: 'completed',
     cost: card.averageTotalUsd,
     marketAverage: card.averageTotalUsd,
-    marketLow: card.lowTotalUsd,
-    marketHigh: card.highTotalUsd,
+    ...(card.lowTotalUsd == null ? {} : { marketLow: card.lowTotalUsd }),
+    ...(card.highTotalUsd == null ? {} : { marketHigh: card.highTotalUsd }),
+    ...(card.rangeUnavailableReason
+      ? { marketRangeUnavailableReason: card.rangeUnavailableReason }
+      : {}),
     ratePerMile: card.averagePerMileUsd,
-    lowRatePerMile: card.lowPerMileUsd,
-    highRatePerMile: card.highPerMileUsd,
+    ...(card.lowPerMileUsd == null ? {} : { lowRatePerMile: card.lowPerMileUsd }),
+    ...(card.highPerMileUsd == null ? {} : { highRatePerMile: card.highPerMileUsd }),
     miles: card.miles,
     timeframe: card.timeframe,
     truckType: result.acceptedEquipmentType,
@@ -361,20 +365,19 @@ function validateMarketCard(value: any, expected: 'SPOT' | 'CONTRACT'): DatMarke
     acceptedMarketLane: cleanText(value.acceptedMarketLane),
     averageTotalUsd: Number(value.averageTotalUsd),
     averagePerMileUsd: Number(value.averagePerMileUsd),
-    lowTotalUsd: Number(value.lowTotalUsd),
-    highTotalUsd: Number(value.highTotalUsd),
-    lowPerMileUsd: Number(value.lowPerMileUsd),
-    highPerMileUsd: Number(value.highPerMileUsd),
+    lowTotalUsd: value.lowTotalUsd == null ? null : Number(value.lowTotalUsd),
+    highTotalUsd: value.highTotalUsd == null ? null : Number(value.highTotalUsd),
+    lowPerMileUsd: value.lowPerMileUsd == null ? null : Number(value.lowPerMileUsd),
+    highPerMileUsd: value.highPerMileUsd == null ? null : Number(value.highPerMileUsd),
+    rangeUnavailableReason: value.rangeUnavailableReason == null
+      ? null
+      : cleanText(value.rangeUnavailableReason).slice(0, 200),
     miles: Number(value.miles),
     timeframe: cleanText(value.timeframe)
   };
   const numericValues = [
     card.averageTotalUsd,
     card.averagePerMileUsd,
-    card.lowTotalUsd,
-    card.highTotalUsd,
-    card.lowPerMileUsd,
-    card.highPerMileUsd,
     card.miles
   ];
   if (!card.acceptedMarketLane || !card.timeframe || numericValues.some(function(number) {
@@ -382,11 +385,33 @@ function validateMarketCard(value: any, expected: 'SPOT' | 'CONTRACT'): DatMarke
   })) {
     throw new Error(`DAT ${expected.toLowerCase()} result is invalid`);
   }
+  const totalRangePresent = card.lowTotalUsd != null && card.highTotalUsd != null;
+  const perMileRangePresent = card.lowPerMileUsd != null && card.highPerMileUsd != null;
+  const totalRangePartial = (card.lowTotalUsd == null) !== (card.highTotalUsd == null);
+  const perMileRangePartial = (card.lowPerMileUsd == null) !== (card.highPerMileUsd == null);
+  const optionalValues = [
+    card.lowTotalUsd,
+    card.highTotalUsd,
+    card.lowPerMileUsd,
+    card.highPerMileUsd
+  ];
+  if (totalRangePartial || perMileRangePartial || optionalValues.some(function(number) {
+    return number != null && (!Number.isFinite(number) || number <= 0);
+  })) {
+    throw new Error(`DAT ${expected.toLowerCase()} range is invalid`);
+  }
+  if ((!totalRangePresent || !perMileRangePresent) && !card.rangeUnavailableReason) {
+    throw new Error(`DAT ${expected.toLowerCase()} unavailable range reason is missing`);
+  }
   if (
-    card.lowTotalUsd > card.averageTotalUsd ||
-    card.averageTotalUsd > card.highTotalUsd ||
-    card.lowPerMileUsd > card.averagePerMileUsd ||
-    card.averagePerMileUsd > card.highPerMileUsd
+    (totalRangePresent && (
+      (card.lowTotalUsd as number) > card.averageTotalUsd ||
+      card.averageTotalUsd > (card.highTotalUsd as number)
+    )) ||
+    (perMileRangePresent && (
+      (card.lowPerMileUsd as number) > card.averagePerMileUsd ||
+      card.averagePerMileUsd > (card.highPerMileUsd as number)
+    ))
   ) {
     throw new Error(`DAT ${expected.toLowerCase()} range is inconsistent`);
   }
@@ -910,6 +935,40 @@ export async function requestDatSearchLoadsLookup(
     );
     return updated.rows[0];
   }, approvedBy);
+}
+
+function isProtectedUncertainConflict(err: any): boolean {
+  return Number(err && err.status) === 409 && /uncertain/i.test(String(err && err.message || ''));
+}
+
+export async function requestDatLookups(
+  emailQuoteRequestId: string,
+  approvedBy: string
+): Promise<any> {
+  let latest: any | null = null;
+  const blockingErrors: any[] = [];
+  const protectedConflicts: any[] = [];
+
+  try {
+    latest = await requestDatRateViewLookup(emailQuoteRequestId, approvedBy);
+  } catch (err) {
+    if (isProtectedUncertainConflict(err)) protectedConflicts.push(err);
+    else blockingErrors.push(err);
+  }
+
+  try {
+    latest = await requestDatSearchLoadsLookup(emailQuoteRequestId, approvedBy);
+  } catch (err) {
+    if (isProtectedUncertainConflict(err)) protectedConflicts.push(err);
+    else blockingErrors.push(err);
+  }
+
+  if (blockingErrors.length) throw blockingErrors[0];
+  if (latest) return latest;
+  if (protectedConflicts.length) throw protectedConflicts[0];
+  const err: any = new Error('No DAT lookup could be queued');
+  err.status = 409;
+  throw err;
 }
 
 export async function queueAutomaticDatLookups(

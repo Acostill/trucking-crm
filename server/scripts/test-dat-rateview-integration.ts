@@ -61,6 +61,36 @@ function run() {
   assert.strictEqual(datOptions[0].selectable, false);
   assert.strictEqual(datOptions[0].marketLow, 3197);
 
+  const unavailableRange = validateDatRateViewResult({
+    ...result,
+    spot: {
+      ...result.spot,
+      lowTotalUsd: null,
+      highTotalUsd: null,
+      lowPerMileUsd: null,
+      highPerMileUsd: null,
+      rangeUnavailableReason: 'DAT explicitly displayed the market range as unavailable'
+    }
+  });
+  const unavailableOption = mapDatRateViewResult(unavailableRange)[0];
+  assert.strictEqual(unavailableOption.available, true);
+  assert.strictEqual(unavailableOption.marketLow, undefined);
+  assert.match(unavailableOption.marketRangeUnavailableReason || '', /unavailable/);
+
+  assert.throws(function() {
+    validateDatRateViewResult({
+      ...result,
+      spot: {
+        ...result.spot,
+        lowTotalUsd: null,
+        highTotalUsd: null,
+        lowPerMileUsd: null,
+        highPerMileUsd: null,
+        rangeUnavailableReason: null
+      }
+    });
+  }, /reason is missing/);
+
   const options: CarrierQuoteOption[] = [
     {
       key: 'forwardAir',

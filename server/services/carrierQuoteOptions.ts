@@ -24,6 +24,7 @@ export interface CarrierQuoteOption {
   marketLow?: number;
   marketAverage?: number;
   marketHigh?: number;
+  marketRangeUnavailableReason?: string;
   lowRatePerMile?: number;
   highRatePerMile?: number;
   miles?: number;

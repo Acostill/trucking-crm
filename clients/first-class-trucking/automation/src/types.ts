@@ -29,10 +29,11 @@ export interface MarketRateCard {
   acceptedMarketLane: string;
   averageTotalUsd: number;
   averagePerMileUsd: number;
-  lowTotalUsd: number;
-  highTotalUsd: number;
-  lowPerMileUsd: number;
-  highPerMileUsd: number;
+  lowTotalUsd: number | null;
+  highTotalUsd: number | null;
+  lowPerMileUsd: number | null;
+  highPerMileUsd: number | null;
+  rangeUnavailableReason: string | null;
   miles: number;
   timeframe: string;
   fuel: OptionalValue<number>;

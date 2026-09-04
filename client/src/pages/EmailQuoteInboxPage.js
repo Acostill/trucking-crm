@@ -886,15 +886,17 @@ export default function EmailQuoteInboxPage() {
     setError('');
     setNotice('');
     try {
-      const detail = await requestJson('/api/email-quotes/' + selected.id + '/dat-rateview', {
+      setRunningDatLoads(true);
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/dat-lookups', {
         method: 'POST'
       });
       applyDetail(detail);
-      setNotice('DAT pricing was queued again. The worker will update this quote automatically.');
+      setNotice('Eligible DAT RateView and Search Loads lookups were queued. Protected uncertain results were left unchanged.');
     } catch (requestError) {
       setError(requestError.message || 'Unable to retry DAT pricing');
     } finally {
       setRunningDat(false);
+      setRunningDatLoads(false);
     }
   }
 
@@ -908,15 +910,17 @@ export default function EmailQuoteInboxPage() {
     setError('');
     setNotice('');
     try {
-      const detail = await requestJson('/api/email-quotes/' + selected.id + '/dat-search-loads', {
+      setRunningDat(true);
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/dat-lookups', {
         method: 'POST'
       });
       applyDetail(detail);
-      setNotice('DAT Search Loads was queued again. The worker will return up to 10 highest market offers for pricing context.');
+      setNotice('Eligible DAT RateView and Search Loads lookups were queued. Protected uncertain results were left unchanged.');
     } catch (requestError) {
       setError(requestError.message || 'Unable to retry DAT Search Loads');
     } finally {
       setRunningDatLoads(false);
+      setRunningDat(false);
     }
   }
 
@@ -1035,8 +1039,9 @@ export default function EmailQuoteInboxPage() {
   const datLoadsCompleted = datLoadsOption && datLoadsOption.status === 'completed';
   const datRetryable = datStatusOption &&
     ['awaiting_approval', 'needs_auth', 'failed'].indexOf(datStatusOption.status) > -1;
-  const datLoadsRetryable = datLoadsOption &&
-    ['awaiting_approval', 'needs_auth', 'failed'].indexOf(datLoadsOption.status) > -1;
+  const datLoadsRetryable = (datLoadsOption &&
+    ['awaiting_approval', 'needs_auth', 'failed'].indexOf(datLoadsOption.status) > -1) ||
+    (!datLoadsOption && selected && ['ready', 'priced', 'sent'].indexOf(selected.status) > -1);
   const datEquipmentSaved = Boolean(editor.datEquipmentType) &&
     editor.datEquipmentType === shipment.datEquipmentType;
   const datSearchToday = calendarDateInTimezone(new Date(), 'America/New_York');
@@ -1322,7 +1327,11 @@ export default function EmailQuoteInboxPage() {
                                   <p>{benchmark ? 'Market average — not a bookable carrier quote' : 'Carrier cost'}</p>
                                   {benchmark ? (
                                     <>
-                                      <div className="eq-market-range"><span>Low {formatMoney(option.marketLow)}</span><span>High {formatMoney(option.marketHigh)}</span></div>
+                                      {option.marketLow != null && option.marketHigh != null ? (
+                                        <div className="eq-market-range"><span>Low {formatMoney(option.marketLow)}</span><span>High {formatMoney(option.marketHigh)}</span></div>
+                                      ) : (
+                                        <div className="eq-market-range"><span>{option.marketRangeUnavailableReason || 'DAT market range unavailable'}</span></div>
+                                      )}
                                       <div className="eq-carrier-details">
                                         <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi avg' : 'Per-mile unavailable'}</span>
                                         <span>{option.miles ? option.miles.toLocaleString() + ' mi' : 'Miles unavailable'}</span>
@@ -1364,7 +1373,7 @@ export default function EmailQuoteInboxPage() {
                           title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !editor.pickupDate ? 'Add and save a pickup date first' : !datSearchPickupDateCurrent ? 'Pickup date must be today or later' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and DAT equipment before retrying Search Loads' : ''}
                         >
                           <RefreshCw size={14} className={runningDatLoads ? 'spinning' : ''} />
-                          {runningDatLoads ? 'Queueing...' : 'Retry Search Loads'}
+                          {runningDatLoads ? 'Queueing...' : datLoadsOption ? 'Retry DAT lookups' : 'Queue missing DAT searches'}
                         </button>
                       ) : (
                         <span className={'eq-auto-status ' + (datLoadsCompleted ? 'complete' : datLoadsBusy ? 'working' : datLoadsOption && datLoadsOption.status === 'disabled' ? 'offline' : '')}>

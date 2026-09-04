@@ -22,7 +22,70 @@ test("parses the observed Spot result contract", () => {
     { average: 3729, low: 3197, high: 4092, miles: 2131, timeframe: "7d average" },
   );
   assert.equal(result.fuel.value, null);
+  assert.equal(result.rangeUnavailableReason, null);
   assert.match(result.fuel.reason || "", /did not display/);
+});
+
+test("parses alternate DAT range typography and per-mile wording", () => {
+  const result = parseRateCard({
+    rateType: "CONTRACT",
+    acceptedMarketLane: "A - B",
+    averageTotal: "$1,000",
+    averagePerMile: "($1.00/mile)",
+    milesAndTimeframe: "1,000 mi | 90d average",
+    range: "$900.00 – $1,100.00 ($0.90/mile — $1.10/mile)",
+  });
+  assert.equal(result.lowTotalUsd, 900);
+  assert.equal(result.highTotalUsd, 1100);
+  assert.equal(result.lowPerMileUsd, 0.9);
+  assert.equal(result.highPerMileUsd, 1.1);
+  assert.equal(result.rangeUnavailableReason, null);
+});
+
+test("returns explicit nulls when DAT labels the range unavailable", () => {
+  const result = parseRateCard({
+    rateType: "SPOT",
+    acceptedMarketLane: "A - B",
+    averageTotal: "$1,000",
+    averagePerMile: "($1.00/mi)",
+    milesAndTimeframe: "1,000 mi | 7d average",
+    range: "Insufficient data",
+  });
+  assert.equal(result.lowTotalUsd, null);
+  assert.equal(result.highTotalUsd, null);
+  assert.equal(result.lowPerMileUsd, null);
+  assert.equal(result.highPerMileUsd, null);
+  assert.match(result.rangeUnavailableReason || "", /explicitly displayed/);
+});
+
+test("returns explicit nulls when the verified range field is blank", () => {
+  const result = parseRateCard({
+    rateType: "SPOT",
+    acceptedMarketLane: "A - B",
+    averageTotal: "$1,000",
+    averagePerMile: "($1.00/mi)",
+    milesAndTimeframe: "1,000 mi | 7d average",
+    range: "  ",
+  });
+  assert.equal(result.lowTotalUsd, null);
+  assert.equal(result.highTotalUsd, null);
+  assert.match(result.rangeUnavailableReason || "", /did not display/);
+});
+
+test("preserves a displayed total range when its per-mile range is absent", () => {
+  const result = parseRateCard({
+    rateType: "SPOT",
+    acceptedMarketLane: "A - B",
+    averageTotal: "$1,000",
+    averagePerMile: "($1.00/mi)",
+    milesAndTimeframe: "1,000 mi | 7d average",
+    range: "$900 - $1,100",
+  });
+  assert.equal(result.lowTotalUsd, 900);
+  assert.equal(result.highTotalUsd, 1100);
+  assert.equal(result.lowPerMileUsd, null);
+  assert.equal(result.highPerMileUsd, null);
+  assert.match(result.rangeUnavailableReason || "", /per-mile/);
 });
 
 test("rejects an ambiguous range instead of guessing", () => {
@@ -34,7 +97,7 @@ test("rejects an ambiguous range instead of guessing", () => {
         averageTotal: "$1,000",
         averagePerMile: "($1.00/mi)",
         milesAndTimeframe: "1,000 mi | 90d average",
-        range: "not available",
+        range: "Market estimate pending review",
       }),
     /range could not be verified/,
   );

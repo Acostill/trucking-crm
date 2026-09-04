@@ -5,7 +5,7 @@
     "slug": "first-class-trucking"
   },
   "created_at": "2026-08-10T00:55:43+00:00",
-  "updated_at": "2026-09-03T00:00:00+00:00",
+  "updated_at": "2026-09-03T18:00:00+00:00",
   "stage": "qa",
   "gates": {
     "workspace_ready": true,

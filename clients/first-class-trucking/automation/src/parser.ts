@@ -17,7 +17,7 @@ function money(value: string, field: string): number {
 }
 
 function perMile(value: string, field: string): number {
-  const match = value.match(/\$([\d.]+)\s*\/\s*mi/i);
+  const match = value.match(/\$([\d.]+)\s*\/\s*(?:mi|mile)/i);
   if (!match) {
     throw new WorkflowError(
       "EXTRACTION_UNVERIFIED",
@@ -26,6 +26,75 @@ function perMile(value: string, field: string): number {
     );
   }
   return Number(match[1]);
+}
+
+const RANGE_NUMBER = "([\\d,]+(?:\\.\\d+)?)";
+const PER_MILE_NUMBER = "([\\d.]+)";
+const DASH = "[-–—]";
+const FULL_RANGE = new RegExp(
+  `^\\s*\\$${RANGE_NUMBER}\\s*${DASH}\\s*\\$${RANGE_NUMBER}` +
+    `\\s*\\(\\s*\\$${PER_MILE_NUMBER}\\s*(?:\\/\\s*(?:mi|mile))?` +
+    `\\s*${DASH}\\s*\\$${PER_MILE_NUMBER}\\s*\\/\\s*(?:mi|mile)\\s*\\)\\s*$`,
+  "i",
+);
+const TOTAL_ONLY_RANGE = new RegExp(
+  `^\\s*\\$${RANGE_NUMBER}\\s*${DASH}\\s*\\$${RANGE_NUMBER}\\s*$`,
+  "i",
+);
+const EXPLICITLY_UNAVAILABLE_RANGE = /^(?:n\/?a|--|not available|unavailable|insufficient data|not enough data|no (?:market )?range available|(?:rate|market )?range unavailable)$/i;
+
+function rangeValues(value: string): Pick<
+  MarketRateCard,
+  "lowTotalUsd" | "highTotalUsd" | "lowPerMileUsd" |
+  "highPerMileUsd" | "rangeUnavailableReason"
+> {
+  const normalized = value.replace(/[\u00a0\u202f]/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return {
+      lowTotalUsd: null,
+      highTotalUsd: null,
+      lowPerMileUsd: null,
+      highPerMileUsd: null,
+      rangeUnavailableReason: "DAT did not display a market range",
+    };
+  }
+  const full = normalized.match(FULL_RANGE);
+  if (full) {
+    return {
+      lowTotalUsd: Number(full[1].replaceAll(",", "")),
+      highTotalUsd: Number(full[2].replaceAll(",", "")),
+      lowPerMileUsd: Number(full[3]),
+      highPerMileUsd: Number(full[4]),
+      rangeUnavailableReason: null,
+    };
+  }
+
+  const totals = normalized.match(TOTAL_ONLY_RANGE);
+  if (totals) {
+    return {
+      lowTotalUsd: Number(totals[1].replaceAll(",", "")),
+      highTotalUsd: Number(totals[2].replaceAll(",", "")),
+      lowPerMileUsd: null,
+      highPerMileUsd: null,
+      rangeUnavailableReason: "DAT did not display a per-mile market range",
+    };
+  }
+
+  if (EXPLICITLY_UNAVAILABLE_RANGE.test(normalized)) {
+    return {
+      lowTotalUsd: null,
+      highTotalUsd: null,
+      lowPerMileUsd: null,
+      highPerMileUsd: null,
+      rangeUnavailableReason: "DAT explicitly displayed the market range as unavailable",
+    };
+  }
+
+  throw new WorkflowError(
+    "EXTRACTION_UNVERIFIED",
+    "The displayed market range could not be verified.",
+    "RV-100",
+  );
 }
 
 export function parseRateCard(input: {
@@ -39,9 +108,6 @@ export function parseRateCard(input: {
   const milesMatch = input.milesAndTimeframe.match(
     /([\d,]+)\s*mi\s*\|\s*(.+)$/i,
   );
-  const rangeMatch = input.range.match(
-    /\$([\d,]+)\s*-\s*\$([\d,]+)\s*\(\$([\d.]+)\s*-\s*\$([\d.]+)\s*\/\s*mi\)/i,
-  );
 
   if (!input.acceptedMarketLane.trim() || !milesMatch) {
     throw new WorkflowError(
@@ -50,23 +116,14 @@ export function parseRateCard(input: {
       "RV-100",
     );
   }
-  if (!rangeMatch) {
-    throw new WorkflowError(
-      "EXTRACTION_UNVERIFIED",
-      "The displayed market range could not be verified.",
-      "RV-100",
-    );
-  }
+  const range = rangeValues(input.range);
 
   return {
     rateType: input.rateType,
     acceptedMarketLane: input.acceptedMarketLane.trim(),
     averageTotalUsd: money(input.averageTotal, "average total"),
     averagePerMileUsd: perMile(input.averagePerMile, "average per-mile rate"),
-    lowTotalUsd: Number(rangeMatch[1].replaceAll(",", "")),
-    highTotalUsd: Number(rangeMatch[2].replaceAll(",", "")),
-    lowPerMileUsd: Number(rangeMatch[3]),
-    highPerMileUsd: Number(rangeMatch[4]),
+    ...range,
     miles: Number(milesMatch[1].replaceAll(",", "")),
     timeframe: milesMatch[2].trim(),
     fuel: {

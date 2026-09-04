@@ -3,6 +3,7 @@ import db from '../db';
 import {
   DAT_SEARCH_LOADS_WORKFLOW_ID,
   queueAutomaticDatLookups,
+  requestDatLookups,
   requestDatRateViewLookup
 } from '../services/datRateViewJobs';
 import { parsedEmailToShipmentRequest, validateShipmentRequest } from '../services/emailQuoteWorkflow';
@@ -137,6 +138,19 @@ async function run() {
     await requestDatRateViewLookup(quoteId, userId);
     assert.strictEqual(rateViewJob.status, 'pending', 'an authenticated staff retry can reset a pre-submit failure');
     assert.strictEqual(rateViewJob.approved_by, userId);
+
+    rateViewJob.status = 'uncertain';
+    client.quote.status = 'ready';
+    client.jobs = client.jobs.filter(function(job) {
+      return job.input_payload.workflowId !== DAT_SEARCH_LOADS_WORKFLOW_ID;
+    });
+    await requestDatLookups(quoteId, userId);
+    assert.strictEqual(rateViewJob.status, 'uncertain', 'combined retry must preserve an uncertain RateView lookup');
+    const manualSearchLoadsJob = client.jobs.find(function(job) {
+      return job.input_payload.workflowId === DAT_SEARCH_LOADS_WORKFLOW_ID;
+    });
+    assert(manualSearchLoadsJob, 'combined retry must independently queue missing Search Loads');
+    assert.strictEqual(manualSearchLoadsJob.approved_by, userId);
 
     console.log('Automatic connected-pricing DAT queue tests passed.');
   } finally {

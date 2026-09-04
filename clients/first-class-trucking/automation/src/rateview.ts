@@ -329,6 +329,11 @@ async function text(locator: Locator): Promise<string> {
   return value;
 }
 
+async function optionalText(locator: Locator): Promise<string> {
+  await expect(locator).toHaveCount(1);
+  return (await locator.textContent())?.replace(/\s+/g, " ").trim() || "";
+}
+
 async function extractCard(
   page: Page,
   rateType: "SPOT" | "CONTRACT",
@@ -342,7 +347,7 @@ async function extractCard(
     averageTotal: await text(card.locator(".rate-data")),
     averagePerMile: await text(card.locator(".rate-permile")),
     milesAndTimeframe: await text(card.locator(".miles-day-average")),
-    range: await text(card.locator(".range-data")),
+    range: await optionalText(card.locator(".range-data")),
   });
 }
 
@@ -357,8 +362,6 @@ export async function submitAndExtract(
   const newSearch = page.getByRole("button", { name: "NEW SEARCH", exact: true });
   await newSearch.waitFor({ state: "visible", timeout: config.resultTimeoutMs });
 
-  const spot = await extractCard(page, "SPOT");
-  const contract = await extractCard(page, "CONTRACT");
   await fs.mkdir(runDirectory, { recursive: true, mode: 0o700 });
   await page.screenshot({
     path: path.join(runDirectory, "result-redacted.png"),
@@ -369,6 +372,8 @@ export async function submitAndExtract(
     ],
     maskColor: "#111827",
   });
+  const spot = await extractCard(page, "SPOT");
+  const contract = await extractCard(page, "CONTRACT");
 
   return {
     requestId: request.requestId,

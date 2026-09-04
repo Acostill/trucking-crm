@@ -11,6 +11,7 @@ import {
   pollGmailQuoteInbox
 } from '../services/emailQuotePoller';
 import {
+  requestDatLookups,
   requestDatRateViewLookup,
   requestDatSearchLoadsLookup
 } from '../services/datRateViewJobs';
@@ -224,6 +225,17 @@ router.put('/:id/shipment', async function(req: Request, res: Response, next: Ne
       return;
     }
     const record = await rateEmailQuoteRequest(req.params.id, shipment);
+    res.json(rowToEmailQuote(record, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/dat-lookups', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = await requireOperationsUser(req, res);
+    if (!userId) return;
+    const record = await requestDatLookups(req.params.id, userId);
     res.json(rowToEmailQuote(record, true));
   } catch (err) {
     next(err);
