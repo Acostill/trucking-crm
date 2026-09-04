@@ -150,6 +150,15 @@ async function run() {
     assert.strictEqual(correctedDry.truckType, 'Cargo Van');
     assert.strictEqual(correctedDry.datEquipmentType, 'Van');
 
+    const correctedCompoundNegation = applyExplicitTemperatureService(
+      hallucinatedReefer,
+      'Dry freight. No refrigeration or temperature control required.'
+    );
+    assert.strictEqual(correctedCompoundNegation.temperatureControlled, false);
+    assert.strictEqual(correctedCompoundNegation.temperatureControl, undefined);
+    assert.strictEqual(correctedCompoundNegation.truckType, 'Cargo Van');
+    assert.strictEqual(correctedCompoundNegation.datEquipmentType, 'Van');
+
     const explicitReefer = applyExplicitTemperatureService(
       hallucinatedReefer,
       'Dry freight packaging, but refrigerated service is required'

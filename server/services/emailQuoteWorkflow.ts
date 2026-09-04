@@ -175,7 +175,7 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
   return assignTruckType(shipment).shipment;
 }
 
-const EXPLICIT_DRY_SERVICE = /\b(?:dry freight|dry cargo|dry shipment|non[-\s]?refrigerated|no temperature control)\b/i;
+const EXPLICIT_DRY_SERVICE = /\b(?:dry freight|dry cargo|dry shipment|non[-\s]?refrigerated|no (?:refrigeration(?: or temperature control)?|temperature control)(?: required)?|without (?:refrigeration|temperature control))\b/i;
 const EXPLICIT_REEFER_SERVICE = /\b(?:reefer|refrigerat(?:ed|ion)|temperature[-\s]?controlled|temperature control)\b/i;
 
 export function applyExplicitTemperatureService(
