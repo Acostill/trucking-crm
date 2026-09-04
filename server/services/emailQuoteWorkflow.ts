@@ -182,8 +182,16 @@ export function applyExplicitTemperatureService(
   shipment: UnifiedQuoteRequest,
   rawText: string
 ): UnifiedQuoteRequest {
-  const explicitDry = EXPLICIT_DRY_SERVICE.test(String(rawText || ''));
-  const explicitReefer = EXPLICIT_REEFER_SERVICE.test(String(rawText || ''));
+  const normalizedRawText = String(rawText || '');
+  const explicitDry = EXPLICIT_DRY_SERVICE.test(normalizedRawText);
+  // Remove explicit dry/negated-temperature phrases before looking for an
+  // affirmative reefer request. Otherwise "No temperature control required"
+  // also matches the shorter positive phrase "temperature control".
+  const affirmativeServiceText = normalizedRawText.replace(
+    new RegExp(EXPLICIT_DRY_SERVICE.source, 'ig'),
+    ' '
+  );
+  const explicitReefer = EXPLICIT_REEFER_SERVICE.test(affirmativeServiceText);
   if (!explicitDry || explicitReefer || shipment.truckAssignment?.source === 'staff') {
     return shipment;
   }

@@ -65,7 +65,22 @@ The same approved test exposed two narrower post-submit extraction defects:
 1. Search Loads now stops collection exactly when the independently verified direct-result count is reached, including when direct and similar rows are present in the same DOM snapshot. A 46-row regression fixture verifies that a reported direct count of 14 returns only the first 14 direct rows.
 2. RateView now accepts a bounded single-number per-mile expression with optional DAT currency, unit, spacing, and footnote decoration. It still rejects multiple numeric values or unrecognized text instead of guessing.
 3. An unmatched RateView value now reports only a value-free format signature: digits are replaced with `#` and words with `A`. This permits exact format diagnosis without logging the live market rate.
-4. The full worker suite passes 51/51 tests. A second live DAT submission requires a new explicit approval because the first approved test was consumed.
+4. The full worker suite passed 51/51 tests before the second approved production test.
+
+## Second repair production verification
+
+The operator approved one RateView and one Search Loads submission for a fictional Sacramento, CA to Phoenix, AZ dry shipment with pickup date 2026-09-09. Gmail message `1a06ceb84b812a9c` was delivered to the connected inbox and automatically ingested by the production CRM.
+
+1. RateView job `dat-job-9c6d9095-1e63-45ec-b137-e59a95179048` completed and the CRM displayed both Spot and Contract market benchmark cards. This verifies the bounded per-mile parser repair in production.
+2. Search Loads job `dat-search-job-41c16278-2835-4664-b9fc-9c28b070154d` submitted once. DAT reported 130 direct results, but only eight unique virtual rows hydrated before the collector's five-unchanged-frame cutoff. The job correctly became `uncertain` at `SL-090`; it was not retried.
+3. The parsed quote was incorrectly assigned `Reefer Cargo Van` even though the email said both `Dry freight` and `No temperature control required`. The prior dry override detected the dry phrases, but its affirmative reefer expression also matched the shorter words `temperature control` inside the negated sentence.
+
+## Third repair
+
+1. Search Loads resets the verified result viewport to the top and continues collecting through the full bounded result timeout. It no longer treats five unchanged virtual frames as terminal because DAT can briefly retain the prior window while sorted rows hydrate.
+2. A delayed-hydration Playwright fixture keeps the first eight rows unchanged through six scroll events, then exposes the next eight. The collector verifies all 16 rows in source order. The full worker suite passes 52/52 tests.
+3. Explicit dry and negated-temperature phrases are removed before checking for an affirmative reefer request. The exact test wording now overrides a hallucinated temperature range, while an actual later `refrigerated service is required` instruction still wins. The automatic DAT queue server test passes.
+4. The completed RateView result cannot make the uncertain Search Loads job safe to retry. A new pickup-date fingerprint and a new explicit Search Loads approval are required for the final production verification.
 
 ## Release note
 

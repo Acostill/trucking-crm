@@ -143,12 +143,19 @@ async function run() {
     assert.strictEqual(hallucinatedReefer.truckType, 'Reefer Cargo Van');
     const correctedDry = applyExplicitTemperatureService(
       hallucinatedReefer,
-      'Commodity: General merchandise\nDry freight\nNon-hazardous'
+      'Commodity: General merchandise\nDry freight\nNon-hazardous\nNo temperature control required'
     );
     assert.strictEqual(correctedDry.temperatureControlled, false);
     assert.strictEqual(correctedDry.temperatureControl, undefined);
     assert.strictEqual(correctedDry.truckType, 'Cargo Van');
     assert.strictEqual(correctedDry.datEquipmentType, 'Van');
+
+    const explicitReefer = applyExplicitTemperatureService(
+      hallucinatedReefer,
+      'Dry freight packaging, but refrigerated service is required'
+    );
+    assert.strictEqual(explicitReefer.truckType, 'Reefer Cargo Van');
+    assert.strictEqual(explicitReefer.datEquipmentType, 'Reefer');
 
     await queueAutomaticDatLookups(quoteId);
     assert.strictEqual(client.jobs.length, 2, 'automatic pricing must queue RateView and Search Loads');

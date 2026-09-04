@@ -865,10 +865,15 @@ export async function collectCompleteDirectRows(
   if (expectedCount === 0) return [];
   const rows = page.locator('.row-container[id^="table-row-"]:not(#table-row-similar-matches-separator)');
   const viewport = page.locator("cdk-virtual-scroll-viewport.table-rows-container").first();
+  if (await viewport.count()) {
+    await viewport.evaluate((element) => {
+      element.scrollTop = 0;
+      element.dispatchEvent(new Event("scroll", { bubbles: true }));
+    });
+    await page.waitForTimeout(250);
+  }
   const collected = new Map<string, RawSearchLoadCandidate>();
   const deadline = Date.now() + timeoutMs;
-  let unchangedPasses = 0;
-  let lastSize = -1;
   while (Date.now() < deadline && collected.size < expectedCount) {
     const visibleRows = await snapshotVisibleRows(rows);
     for (const visibleRow of visibleRows) {
@@ -885,9 +890,6 @@ export async function collectCompleteDirectRows(
       // exactly at the independently verified direct count.
       if (collected.size >= expectedCount) break;
     }
-    if (collected.size === lastSize) unchangedPasses += 1;
-    else unchangedPasses = 0;
-    lastSize = collected.size;
     if (collected.size >= expectedCount) break;
     if (!(await viewport.count())) break;
     await viewport.evaluate((element) => {
@@ -897,8 +899,10 @@ export async function collectCompleteDirectRows(
       );
       element.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
-    await page.waitForTimeout(200);
-    if (unchangedPasses >= 5) break;
+    // A sorted DAT result set can retain the prior virtual window briefly
+    // while the new rows hydrate. Continue through the bounded result timeout
+    // instead of treating five unchanged frames as a terminal list.
+    await page.waitForTimeout(250);
   }
   if (collected.size !== expectedCount) {
     throw new WorkflowError(

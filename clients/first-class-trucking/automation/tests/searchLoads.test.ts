@@ -179,6 +179,52 @@ test("stops at DAT's verified direct count when the same DOM batch also contains
   }
 });
 
+test("continues through delayed DAT virtual-window hydration", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`
+      <cdk-virtual-scroll-viewport class="table-rows-container" style="display:block;height:160px;overflow:auto">
+        <div style="height:1000px"></div>
+        <div id="window"></div>
+      </cdk-virtual-scroll-viewport>
+      <script>
+        const viewport = document.querySelector('cdk-virtual-scroll-viewport');
+        const windowElement = document.querySelector('#window');
+        let scrollEvents = 0;
+        const render = (start) => {
+          windowElement.innerHTML = Array.from({ length: 8 }, (_, offset) => {
+            const index = start + offset;
+            return \`
+              <div class="row-container" id="table-row-\${index}">
+                <div class="cell-rate"><dat-rate><span class="offer">$\${2000 - index}</span><span>$2.50/mi</span></dat-rate></div>
+                <div class="cell-route"><dat-route>Sacramento, CA Phoenix, AZ 754 mi</dat-route></div>
+                <div class="cell-timing"><dat-timing>Sep 9</dat-timing></div>
+                <div class="cell-equipment"><dat-equipment>V 2,000 lbs 53 ft - Full</dat-equipment></div>
+                <div class="cell-company"><dat-company>Carrier \${index}</dat-company></div>
+                <div class="cell-credit"><dat-credit>95 CS 20 DTP</dat-credit></div>
+              </div>
+            \`;
+          }).join('');
+        };
+        render(1);
+        viewport.addEventListener('scroll', () => {
+          scrollEvents += 1;
+          if (scrollEvents >= 7) render(9);
+        });
+      </script>
+    `);
+
+    const candidates = await collectCompleteDirectRows(page, 16, 4000);
+
+    assert.equal(candidates.length, 16);
+    assert.equal(candidates[0].datLoadId, "table-row-1");
+    assert.equal(candidates[15].datLoadId, "table-row-16");
+  } finally {
+    await browser.close();
+  }
+});
+
 const equipmentCases: Array<{
   requestLabel: SearchLoadsRequest["equipmentType"];
   uiLabel: string;
