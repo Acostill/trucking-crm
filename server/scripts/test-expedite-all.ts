@@ -1,7 +1,12 @@
 import assert from 'assert';
 import { EventEmitter } from 'events';
 import https from 'https';
-import { callExpediteAllAPI, prepareExpediteAllRequest } from '../services/expediteAll';
+import {
+  callExpediteAllAPI,
+  describeExpediteAllError,
+  expediteAllEligibilityError,
+  prepareExpediteAllRequest
+} from '../services/expediteAll';
 
 async function run() {
   const originalBaseUrl = process.env.EXPEDITEALL_BASE_URL;
@@ -39,7 +44,11 @@ async function run() {
       return request;
     };
 
-    const result = await callExpediteAllAPI({ pickup: { date: '2026-09-08' } });
+    const result = await callExpediteAllAPI({
+      pickup: { date: '2026-09-08' },
+      truckType: 'Cargo Van',
+      weight: { value: 2500, unit: 'lbs' }
+    });
     assert.strictEqual(result.statusCode, 200);
     assert.strictEqual((result.data as any).priceTotal, 725);
     assert.strictEqual(capturedOptions.hostname, 'api.expediteall.com');
@@ -69,24 +78,31 @@ async function run() {
       };
       return request;
     };
-    const overweightCargoVan = await callExpediteAllAPI({
+    const overweightCargoVanMessage = describeExpediteAllError({
       truckType: 'Cargo Van',
       weight: { value: 3450, unit: 'lbs' }
+    }, {
+      message: 'The weight of the load exceeds the limit.',
+      code: 'LOAD_WEIGHT_OVER_LIMIT'
     });
-    assert.strictEqual(overweightCargoVan.statusCode, 422);
     assert.strictEqual(
-      (overweightCargoVan.data as any).error,
+      overweightCargoVanMessage,
       "Cargo Van exceeds ExpediteAll's 3,000 lb limit; Straight Truck or larger equipment is required."
     );
 
-    const overweightBoxTruck = await callExpediteAllAPI({
+    assert.strictEqual(expediteAllEligibilityError({
       truckType: 'Box Truck',
       weight: { value: 3450, unit: 'lbs' }
+    }), 'ExpediteAll rates Cargo Van shipments only; this load requires Box Truck.');
+
+    const unsupportedStraightTruck = await callExpediteAllAPI({
+      truckType: 'Straight Truck',
+      weight: { value: 3450, unit: 'lbs' }
     });
-    assert.strictEqual(overweightBoxTruck.statusCode, 422);
+    assert.strictEqual(unsupportedStraightTruck.statusCode, 422);
     assert.strictEqual(
-      (overweightBoxTruck.data as any).error,
-      "Box Truck exceeds ExpediteAll's 3,000 lb limit; Straight Truck or larger equipment is required."
+      (unsupportedStraightTruck.data as any).error,
+      'ExpediteAll rates Cargo Van shipments only; this load requires Straight Truck.'
     );
 
     const cleaned = prepareExpediteAllRequest({
@@ -112,7 +128,10 @@ async function run() {
       };
       return request;
     };
-    const mislabeledJson = await callExpediteAllAPI({});
+    const mislabeledJson = await callExpediteAllAPI({
+      truckType: 'Cargo Van',
+      weight: { value: 2500, unit: 'lbs' }
+    });
     assert.strictEqual(mislabeledJson.statusCode, 200);
     assert.strictEqual((mislabeledJson.data as any).priceTotal, 640);
 

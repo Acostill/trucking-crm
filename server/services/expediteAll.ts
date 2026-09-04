@@ -106,6 +106,23 @@ export interface ExpediteAllResponse {
   [key: string]: any; // Allow additional properties from API
 }
 
+export function expediteAllEligibilityError(body: UnifiedQuoteRequest): string | null {
+  const truckType = String(body && body.truckType || '').trim();
+  if (!truckType) return null;
+
+  const baseTruckType = truckType.replace(/^Reefer\s+/i, '');
+  if (baseTruckType !== 'Cargo Van') {
+    return `ExpediteAll rates Cargo Van shipments only; this load requires ${truckType}.`;
+  }
+
+  const weight = Number(body && body.weight && body.weight.value);
+  if (Number.isFinite(weight) && weight > 3000) {
+    return `${truckType} exceeds ExpediteAll's 3,000 lb Cargo Van limit; larger equipment is required.`;
+  }
+
+  return null;
+}
+
 export function describeExpediteAllError(
   body: UnifiedQuoteRequest,
   response: any
@@ -146,6 +163,15 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
       resolve({
         statusCode: 503,
         data: { error: config.error || 'ExpediteAll is not configured.' } as ErrorResponse
+      });
+      return;
+    }
+
+    const eligibilityError = expediteAllEligibilityError(body || {} as UnifiedQuoteRequest);
+    if (eligibilityError) {
+      resolve({
+        statusCode: 422,
+        data: { error: eligibilityError } as ErrorResponse
       });
       return;
     }
