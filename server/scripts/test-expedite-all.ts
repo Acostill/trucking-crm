@@ -39,7 +39,7 @@ async function run() {
       return request;
     };
 
-    const result = await callExpediteAllAPI({});
+    const result = await callExpediteAllAPI({ pickup: { date: '2026-09-08' } });
     assert.strictEqual(result.statusCode, 200);
     assert.strictEqual((result.data as any).priceTotal, 725);
     assert.strictEqual(capturedOptions.hostname, 'api.expediteall.com');
@@ -49,6 +49,7 @@ async function run() {
     const parsedPayload = JSON.parse(capturedPayload);
     assert.strictEqual(parsedPayload.shipmentId, '1');
     assert.strictEqual(parsedPayload.referenceNumber, 'Reference12345');
+    assert.strictEqual(parsedPayload.pickup.date, '2026-09-08T00:00:00.000Z');
 
     console.log('ExpediteAll production configuration tests passed.');
   } finally {
