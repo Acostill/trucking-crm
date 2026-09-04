@@ -43,18 +43,18 @@ function expectReview(request: UnifiedQuoteRequest, reasonCode: string) {
 function run() {
   expectAssigned(shipment(1, 500), 'Cargo Van', 'Van');
   expectAssigned(shipment(3, 3000), 'Cargo Van', 'Van');
-  expectAssigned(shipment(3, 3001), 'Box Truck', 'Van');
-  expectAssigned(shipment(3, 3450), 'Box Truck', 'Van');
+  expectAssigned(shipment(3, 3001), 'Straight Truck', 'Van');
+  expectAssigned(shipment(3, 3450), 'Straight Truck', 'Van');
 
   expectAssigned(shipment(4, 3000), 'Box Truck', 'Van');
-  expectAssigned(shipment(2, 4000), 'Box Truck', 'Van');
-  expectAssigned(shipment(6, 8000), 'Box Truck', 'Van');
+  expectAssigned(shipment(2, 4000), 'Straight Truck', 'Van');
+  expectAssigned(shipment(6, 8000), 'Straight Truck', 'Van');
   expectAssigned(shipment(2, 2000, { length: 73, width: 40, height: 48 }), 'Box Truck', 'Van');
 
   expectAssigned(shipment(7, 8000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(6, 8001), 'Straight Truck', 'Van');
-  expectAssigned(shipment(12, 10000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(13, 10000), 'Dry Van', 'Van');
+  expectAssigned(shipment(14, 8000), 'Straight Truck', 'Van');
+  expectAssigned(shipment(6, 8001), 'Dry Van', 'Van');
+  expectAssigned(shipment(15, 8000), 'Dry Van', 'Van');
   expectAssigned(shipment(5, 2500, undefined, { stackable: false }), 'Dry Van', 'Van');
 
   const reefer = expectAssigned(
@@ -65,7 +65,7 @@ function run() {
   assert.strictEqual(reefer.shipment.temperatureControlled, true);
   expectAssigned(
     shipment(4, 5000, undefined, { temperatureControlled: true }),
-    'Reefer Box Truck',
+    'Reefer Straight Truck',
     'Reefer'
   );
 

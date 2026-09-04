@@ -25,23 +25,23 @@ function recommendation(truckType: any) {
 }
 
 const deterministic = assignTruckType(shipment()).shipment;
-assert.equal(deterministic.truckType, 'Box Truck');
+assert.equal(deterministic.truckType, 'Straight Truck');
 
-const safe = applyModelRecommendation(deterministic, recommendation('Straight Truck'), 'test-model');
+const safe = applyModelRecommendation(deterministic, recommendation('Dry Van'), 'test-model');
 assert.equal(safe.advisor.accepted, true);
-assert.equal(safe.shipment.truckType, 'Straight Truck');
+assert.equal(safe.shipment.truckType, 'Dry Van');
 assert.equal(safe.shipment.truckAssignment?.source, 'ai');
 assert.equal(safe.shipment.datEquipmentType, 'Van');
 
 const undersized = applyModelRecommendation(deterministic, recommendation('Cargo Van'), 'test-model');
 assert.equal(undersized.advisor.accepted, false);
-assert.equal(undersized.shipment.truckType, 'Box Truck');
+assert.equal(undersized.shipment.truckType, 'Straight Truck');
 assert.match(undersized.advisor.risks[0], /safeguards/i);
 
 const refrigerated = assignTruckType(shipment({ temperatureControlled: true })).shipment;
 const dryMismatch = applyModelRecommendation(refrigerated, recommendation('Box Truck'), 'test-model');
 assert.equal(dryMismatch.advisor.accepted, false);
-assert.equal(dryMismatch.shipment.truckType, 'Reefer Box Truck');
+assert.equal(dryMismatch.shipment.truckType, 'Reefer Straight Truck');
 
 const staff = assignTruckType({
   ...shipment(),

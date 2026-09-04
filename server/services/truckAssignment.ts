@@ -1,6 +1,6 @@
 import { Piece, UnifiedQuoteRequest } from '../types/quote';
 
-export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v3';
+export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v4';
 
 export type TruckAssignmentStatus = 'assigned' | 'needs_review';
 export type TruckAssignmentSource = 'auto' | 'ai' | 'staff';
@@ -49,13 +49,13 @@ export const CAPACITY_RULES: TruckCapacityRule[] = [
   {
     baseTruckType: 'Box Truck',
     palletMax: 6,
-    weightMax: 8000,
+    weightMax: 3000,
     dimensions: { length: 96, width: 96, height: 96 }
   },
   {
     baseTruckType: 'Straight Truck',
-    palletMax: 12,
-    weightMax: 10000,
+    palletMax: 14,
+    weightMax: 8000,
     dimensions: { length: 120, width: 102, height: 110 }
   },
   {

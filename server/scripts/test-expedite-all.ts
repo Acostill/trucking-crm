@@ -76,7 +76,17 @@ async function run() {
     assert.strictEqual(overweightCargoVan.statusCode, 422);
     assert.strictEqual(
       (overweightCargoVan.data as any).error,
-      "Cargo Van exceeds ExpediteAll's 3,000 lb limit; Box Truck or larger equipment is required."
+      "Cargo Van exceeds ExpediteAll's 3,000 lb limit; Straight Truck or larger equipment is required."
+    );
+
+    const overweightBoxTruck = await callExpediteAllAPI({
+      truckType: 'Box Truck',
+      weight: { value: 3450, unit: 'lbs' }
+    });
+    assert.strictEqual(overweightBoxTruck.statusCode, 422);
+    assert.strictEqual(
+      (overweightBoxTruck.data as any).error,
+      "Box Truck exceeds ExpediteAll's 3,000 lb limit; Straight Truck or larger equipment is required."
     );
 
     const cleaned = prepareExpediteAllRequest({

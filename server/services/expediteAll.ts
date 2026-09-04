@@ -114,14 +114,21 @@ export function describeExpediteAllError(
   const providerCode = String(response && response.code || '').trim().toUpperCase();
   const truckType = String(body && body.truckType || '').trim();
   const weight = Number(body && body.weight && body.weight.value);
+  const baseTruckType = truckType.replace(/^Reefer\s+/i, '');
+  const providerLimits: Record<string, { weightMax: number; nextEquipment: string }> = {
+    'Cargo Van': { weightMax: 3000, nextEquipment: 'Straight Truck or larger equipment is required.' },
+    'Box Truck': { weightMax: 3000, nextEquipment: 'Straight Truck or larger equipment is required.' },
+    'Straight Truck': { weightMax: 8000, nextEquipment: 'Dry Van or larger equipment is required.' }
+  };
+  const providerLimit = providerLimits[baseTruckType];
 
   if (
     providerCode === 'LOAD_WEIGHT_OVER_LIMIT' &&
-    /cargo van/i.test(truckType) &&
+    providerLimit &&
     Number.isFinite(weight) &&
-    weight > 3000
+    weight > providerLimit.weightMax
   ) {
-    return `${truckType} exceeds ExpediteAll's 3,000 lb limit; Box Truck or larger equipment is required.`;
+    return `${truckType} exceeds ExpediteAll's ${providerLimit.weightMax.toLocaleString('en-US')} lb limit; ${providerLimit.nextEquipment}`;
   }
 
   return providerMessage || 'ExpediteAll rejected the rating request.';
