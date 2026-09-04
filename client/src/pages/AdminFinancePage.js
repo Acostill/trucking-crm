@@ -1,325 +1,222 @@
-import React, { useMemo } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  CircleDollarSign,
+  Clock3,
+  MailCheck,
+  RefreshCw,
+  Target,
+  Trophy,
+  UsersRound
+} from 'lucide-react';
 import Sidebar from '../components/Sidebar';
-import { useAuth } from '../context/AuthContext';
+import MobileMenuButton from '../components/MobileMenuButton';
 import AuthForm from '../components/AuthForm';
+import { useAuth } from '../context/AuthContext';
+import { buildApiUrl } from '../config';
+import { userCanManageQuotes } from '../utils/accessControl';
+import './ClientResultsPage.css';
 
-const FEE_RATE = 0.05;
-const COMMISSION_RATE = 0.1;
+const RANGE_OPTIONS = [
+  { value: '30', label: 'Last 30 days' },
+  { value: '90', label: 'Last 90 days' },
+  { value: '365', label: 'Last 12 months' },
+  { value: 'all', label: 'All time' }
+];
 
-function formatCurrency(value) {
-  if (value === null || value === undefined) return '-';
-  const num = Number(value);
-  if (Number.isNaN(num)) return '-';
-  return '$' + num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const PREVIEW_USER = { email: 'operations@truckfirstclass.com', firstName: 'Operations', roles: ['admin', 'quote_approver'] };
+const PREVIEW_DATA = {
+  summary: { requests: 52, sent: 38, awarded: 14, lost: 9, open: 15, followUpsDue: 4, quotedValue: 82450, awardedValue: 32750, lostValue: 18600, awardedGrossProfit: 6840, winRatePct: 60.9 },
+  customers: [
+    { customerEmail: 'shipping@acmefoods.com', customerName: 'Acme Foods', sent: 11, awarded: 5, lost: 2, open: 4, winRatePct: 71.4, awardedValue: 12800, lastActivityAt: '2026-09-04T15:00:00Z' },
+    { customerEmail: 'logistics@northstar.com', customerName: 'Northstar Imports', sent: 9, awarded: 3, lost: 3, open: 3, winRatePct: 50, awardedValue: 7600, lastActivityAt: '2026-09-03T15:00:00Z' },
+    { customerEmail: 'ops@freshmarket.com', customerName: 'Fresh Market', sent: 7, awarded: 3, lost: 1, open: 3, winRatePct: 75, awardedValue: 6850, lastActivityAt: '2026-09-02T15:00:00Z' },
+    { customerEmail: 'rfq@pacificair.com', customerName: 'Pacific Air Cargo', sent: 6, awarded: 2, lost: 2, open: 2, winRatePct: 50, awardedValue: 3800, lastActivityAt: '2026-08-31T15:00:00Z' },
+    { customerEmail: 'sales@metrotrade.com', customerName: 'Metro Trade', sent: 5, awarded: 1, lost: 1, open: 3, winRatePct: 50, awardedValue: 1700, lastActivityAt: '2026-08-28T15:00:00Z' }
+  ]
+};
+
+function currency(value) {
+  const amount = Number(value) || 0;
+  return amount.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0
+  });
 }
 
-function formatPercent(value) {
-  if (value === null || value === undefined) return '-';
-  const num = Number(value);
-  if (Number.isNaN(num)) return '-';
-  return (num * 100).toFixed(2) + '%';
+function dateLabel(value) {
+  if (!value) return 'No activity yet';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No activity yet';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function customerLabel(customer) {
+  if (!customer) return 'Unknown customer';
+  const name = String(customer.customerName || '').trim();
+  const email = String(customer.customerEmail || '').trim();
+  if (name && name.toLowerCase() !== email.toLowerCase()) return name;
+  return email || 'Unknown customer';
+}
+
+function MetricCard({ icon: Icon, tone, label, value, detail }) {
+  return (
+    <article className={'client-results-metric ' + tone}>
+      <div className="client-results-metric-icon"><Icon size={20} aria-hidden="true" /></div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <small>{detail}</small>
+      </div>
+    </article>
+  );
 }
 
 export default function AdminFinancePage() {
   const { user, checking, setUser } = useAuth();
+  const previewMode = process.env.NODE_ENV === 'development' && new URLSearchParams(window.location.search).get('preview') === '1';
+  const [range, setRange] = useState('90');
+  const [data, setData] = useState(previewMode ? PREVIEW_DATA : { summary: {}, customers: [] });
+  const [loading, setLoading] = useState(!previewMode);
+  const [error, setError] = useState('');
+  const canView = previewMode || userCanManageQuotes(user);
 
-  const isAdmin = user && Array.isArray(user.roles) && user.roles.indexOf('admin') > -1;
+  useEffect(function() {
+    if (previewMode || !user || !canView) return undefined;
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      setError('');
+      try {
+        const response = await fetch(
+          buildApiUrl('/api/operations/customer-performance?range=' + encodeURIComponent(range)),
+          { credentials: 'include', cache: 'no-store' }
+        );
+        const payload = await response.json().catch(function() { return null; });
+        if (!response.ok) throw new Error((payload && payload.error) || 'Could not load client results.');
+        if (!cancelled) setData(payload || { summary: {}, customers: [] });
+      } catch (err) {
+        if (!cancelled) setError(err && err.message ? err.message : 'Could not load client results.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return function() { cancelled = true; };
+  }, [user, canView, range, previewMode]);
 
-  const metrics = useMemo(() => {
-    const totalRevenue = 482500;
-    const totalFees = totalRevenue * FEE_RATE;
-    const profit = totalRevenue - totalFees;
-    const marginPct = totalRevenue > 0 ? profit / totalRevenue : 0;
-    const totalCommission = profit * COMMISSION_RATE;
-    const avgRate = 3850;
-    const shipmentCount = 125;
-
+  const summary = data.summary || {};
+  const customers = Array.isArray(data.customers) ? data.customers : [];
+  const decided = (Number(summary.awarded) || 0) + (Number(summary.lost) || 0);
+  const decisionMix = useMemo(function() {
+    if (!decided) return { won: 0, lost: 0 };
     return {
-      totalRevenue,
-      totalFees,
-      profit,
-      marginPct,
-      totalCommission,
-      avgRate,
-      shipmentCount,
-      deliveredPct: 87,
-      deliveredCount: 109,
-      staffCommission: [
-        { name: 'Alex Johnson', amount: 18250 },
-        { name: 'Samantha Lee', amount: 14600 },
-        { name: 'Marcus Hill', amount: 12800 },
-        { name: 'Priya Patel', amount: 9800 },
-        { name: 'Jordan Cruz', amount: 7600 }
-      ],
-      equipmentServiceMix: [
-        {
-          equipment: 'Dry Van',
-          services: { Expedite: 18, FTL: 24, LTL: 10 }
-        },
-        {
-          equipment: 'Reefer',
-          services: { Expedite: 12, FTL: 16, LTL: 6 }
-        },
-        {
-          equipment: 'Flatbed',
-          services: { Expedite: 8, FTL: 14, LTL: 4 }
-        }
-      ],
-      loadingTimeWeight: [
-        { label: 'Jan', minutes: 12, weight: 22 },
-        { label: 'Feb', minutes: 14, weight: 18 },
-        { label: 'Mar', minutes: 10, weight: 24 },
-        { label: 'Apr', minutes: 16, weight: 20 },
-        { label: 'May', minutes: 18, weight: 28 },
-        { label: 'Jun', minutes: 11, weight: 26 },
-        { label: 'Jul', minutes: 15, weight: 19 },
-        { label: 'Aug', minutes: 13, weight: 30 },
-        { label: 'Sep', minutes: 17, weight: 21 },
-        { label: 'Oct', minutes: 12, weight: 27 },
-        { label: 'Nov', minutes: 14, weight: 23 },
-        { label: 'Dec', minutes: 11, weight: 25 }
-      ]
+      won: ((Number(summary.awarded) || 0) / decided) * 100,
+      lost: ((Number(summary.lost) || 0) / decided) * 100
     };
-  }, []);
+  }, [summary.awarded, summary.lost, decided]);
 
-  const totalCommissionPool = metrics.staffCommission.reduce((sum, item) => sum + item.amount, 0);
-  const staffRows = metrics.staffCommission.map((item) => ({
-    ...item,
-    percent: totalCommissionPool ? Math.round((item.amount / totalCommissionPool) * 100) : 0
-  }));
-  const serviceKeys = ['Expedite', 'FTL', 'LTL'];
-  const serviceColors = {
-    Expedite: '#10b981',
-    FTL: '#6366f1',
-    LTL: '#f59e0b'
-  };
-  const equipmentSeries = metrics.equipmentServiceMix.map((row) => {
-    const total = serviceKeys.reduce((sum, key) => sum + (row.services[key] || 0), 0);
-    return {
-      equipment: row.equipment,
-      total,
-      segments: serviceKeys.map((key) => ({
-        key,
-        value: row.services[key] || 0,
-        widthPct: total ? Math.round(((row.services[key] || 0) / total) * 100) : 0
-      }))
-    };
-  });
-
-  const loadingMax = Math.max(1, ...metrics.loadingTimeWeight.map((item) => item.minutes));
-  const weightMax = Math.max(1, ...metrics.loadingTimeWeight.map((item) => item.weight));
-
-  if (checking) {
-    return (
-      <div className="app-layout">
-        <Sidebar />
-        <main className="app-main">
-          <div className="app-loading">Checking session…</div>
-        </main>
-      </div>
-    );
+  if (checking && !previewMode) {
+    return <div className="app-layout"><Sidebar /><main className="app-main"><div className="app-loading">Checking session…</div></main></div>;
   }
-
-  if (!user) {
-    return <AuthForm onAuthed={(u) => setUser(u)} />;
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className="app-layout">
-        <Sidebar />
-        <main className="app-main">
-          <div className="app-content">
-            <div className="card">
-              <div className="card-header">
-                <h2 className="title">Finance</h2>
-                <div className="subtitle">Admin access required.</div>
-              </div>
-              <div className="card-body">
-                <div className="admin-message error">You do not have access to the finance section.</div>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
+  if (!user && !previewMode) return <AuthForm onAuthed={function(authedUser) { setUser(authedUser); }} />;
 
   return (
     <div className="app-layout">
-      <Sidebar />
+      <Sidebar userOverride={previewMode ? PREVIEW_USER : undefined} linkSuffix={previewMode ? '?preview=1' : ''} />
+      <MobileMenuButton floating={true} />
       <main className="app-main">
-        <div className="app-blob app-blob-1" />
-        <div className="app-blob app-blob-2" />
-
-        <div className="app-content finance-page">
-          <div className="finance-header">
+        <div className="app-content client-results-page">
+          <header className="client-results-hero">
             <div>
-              <h1 className="finance-title">Finance preview</h1>
-              <p className="finance-subtitle">Preview the future accounting workspace layout.</p>
+              <span className="client-results-eyebrow">Commercial performance</span>
+              <h1>Client results</h1>
+              <p>See which customer offers were won, lost, or still open—and the value behind each outcome.</p>
             </div>
-          </div>
+            <label className="client-results-range">
+              <span>Reporting period</span>
+              <select value={range} onChange={function(event) { setRange(event.target.value); }}>
+                {RANGE_OPTIONS.map(function(option) {
+                  return <option value={option.value} key={option.value}>{option.label}</option>;
+                })}
+              </select>
+            </label>
+          </header>
 
-          <div className="finance-demo-banner" role="status">
-            <AlertTriangle size={20} aria-hidden="true" />
-            <div>
-              <strong>Demo data only — not connected to accounting</strong>
-              <span>Do not use these figures for billing, carrier payments, commissions, or financial decisions.</span>
-            </div>
-          </div>
+          {!canView ? (
+            <div className="client-results-state error"><AlertCircle size={20} />Quote-approver access is required to view client results.</div>
+          ) : error ? (
+            <div className="client-results-state error"><AlertCircle size={20} />{error}</div>
+          ) : (
+            <>
+              <section className="client-results-metrics" aria-label="Client outcome summary">
+                <MetricCard icon={MailCheck} tone="blue" label="Offers sent" value={loading ? '—' : summary.sent || 0} detail={currency(summary.quotedValue) + ' quoted'} />
+                <MetricCard icon={Trophy} tone="green" label="Won" value={loading ? '—' : summary.awarded || 0} detail={currency(summary.awardedValue) + ' awarded'} />
+                <MetricCard icon={ArrowDownRight} tone="rose" label="Lost" value={loading ? '—' : summary.lost || 0} detail={currency(summary.lostValue) + ' declined'} />
+                <MetricCard icon={Target} tone="navy" label="Win rate" value={loading ? '—' : (summary.winRatePct || 0) + '%'} detail="Won ÷ decided offers" />
+                <MetricCard icon={Clock3} tone="amber" label="Still open" value={loading ? '—' : summary.open || 0} detail={(summary.followUpsDue || 0) + ' follow-ups due'} />
+                <MetricCard icon={CircleDollarSign} tone="teal" label="Won gross profit" value={loading ? '—' : currency(summary.awardedGrossProfit)} detail="Client price minus carrier cost" />
+              </section>
 
-          <>
-            <div className="finance-kpi-grid">
-              <div className="finance-metric-card">
-                <div className="finance-label">Total Revenue</div>
-                <div className="finance-value">{formatCurrency(metrics.totalRevenue)}</div>
-                <div className="finance-sub">Shipments: {metrics.shipmentCount}</div>
-              </div>
-              <div className="finance-metric-card">
-                <div className="finance-label">Total Fees</div>
-                <div className="finance-value">{formatCurrency(metrics.totalFees)}</div>
-                <div className="finance-sub">Fee rate: {formatPercent(FEE_RATE)}</div>
-              </div>
-              <div className="finance-metric-card">
-                <div className="finance-label">Profit</div>
-                <div className="finance-value">{formatCurrency(metrics.profit)}</div>
-                <div className="finance-sub">Margin: {formatPercent(metrics.marginPct)}</div>
-              </div>
-              <div className="finance-metric-card">
-                <div className="finance-label">Commission</div>
-                <div className="finance-value">{formatCurrency(metrics.totalCommission)}</div>
-                <div className="finance-sub">Commission rate: {formatPercent(COMMISSION_RATE)}</div>
-              </div>
-              <div className="finance-metric-card">
-                <div className="finance-label">Average Rate</div>
-                <div className="finance-value">{formatCurrency(metrics.avgRate)}</div>
-                <div className="finance-sub">Per shipment</div>
-              </div>
-            </div>
-
-            <div className="finance-graphs-grid">
-              <div className="finance-graph-card finance-graph-span-2">
-                <div className="finance-chart-header">
-                  <div className="finance-chart-title">Loading Time & Weight</div>
-                  <div className="finance-chart-sub">Monthly averages</div>
+              <section className="client-results-panel client-results-outcome-panel">
+                <div className="client-results-panel-heading">
+                  <div><span>Decision overview</span><h2>Won vs. lost offers</h2></div>
+                  <small>{decided} decided offer{decided === 1 ? '' : 's'}</small>
                 </div>
-                <div className="finance-barline-chart">
-                  <div className="finance-barline-bars">
-                    {metrics.loadingTimeWeight.map((item) => (
-                      <div key={item.label} className="finance-barline-bar">
-                        <div
-                          className="finance-barline-bar-fill"
-                          style={{ height: `${Math.round((item.minutes / loadingMax) * 100)}%` }}
-                        />
-                        <div className="finance-barline-label">{item.label}</div>
-                      </div>
-                    ))}
+                {decided ? (
+                  <>
+                    <div className="client-results-outcome-bar" aria-label={(summary.winRatePct || 0) + '% won'}>
+                      <span className="won" style={{ width: decisionMix.won + '%' }} />
+                      <span className="lost" style={{ width: decisionMix.lost + '%' }} />
+                    </div>
+                    <div className="client-results-outcome-legend">
+                      <span><i className="won" />{summary.awarded || 0} won <strong>{Math.round(decisionMix.won)}%</strong></span>
+                      <span><i className="lost" />{summary.lost || 0} lost <strong>{Math.round(decisionMix.lost)}%</strong></span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="client-results-empty">Mark sent quotes as won or lost in Quote Inbox to build this view.</div>
+                )}
+              </section>
+
+              <section className="client-results-panel">
+                <div className="client-results-panel-heading">
+                  <div><span>Customer detail</span><h2>Performance by client</h2></div>
+                  <small><UsersRound size={15} /> {customers.length} client{customers.length === 1 ? '' : 's'}</small>
+                </div>
+                {loading ? (
+                  <div className="client-results-state"><RefreshCw className="spinning" size={20} />Loading live outcomes…</div>
+                ) : customers.length ? (
+                  <div className="client-results-table-wrap">
+                    <table className="client-results-table">
+                      <thead><tr><th>Client</th><th>Sent</th><th>Won</th><th>Lost</th><th>Open</th><th>Win rate</th><th>Awarded value</th><th>Last activity</th></tr></thead>
+                      <tbody>
+                        {customers.map(function(customer) {
+                          return (
+                            <tr key={customer.customerEmail}>
+                              <td><strong>{customerLabel(customer)}</strong><span>{customer.customerEmail !== 'unknown' ? customer.customerEmail : 'Email unavailable'}</span></td>
+                              <td>{customer.sent}</td>
+                              <td><span className="client-results-count won"><ArrowUpRight size={13} />{customer.awarded}</span></td>
+                              <td><span className="client-results-count lost"><ArrowDownRight size={13} />{customer.lost}</span></td>
+                              <td>{customer.open}</td>
+                              <td><strong>{customer.winRatePct}%</strong></td>
+                              <td>{currency(customer.awardedValue)}</td>
+                              <td>{dateLabel(customer.lastActivityAt)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="finance-barline-axis">
-                    <span>0</span>
-                    <span>{loadingMax} min</span>
-                    <span>{weightMax} tons</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="finance-graph-card">
-                <div className="finance-chart-header">
-                  <div className="finance-chart-title">Delivery Status</div>
-                  <div className="finance-chart-sub">Percent delivered on time</div>
-                </div>
-                <div className="finance-donut-wrap">
-                  <div
-                    className="finance-donut"
-                    style={{
-                      background: `conic-gradient(#6366f1 0 ${metrics.deliveredPct}%, #e2e8f0 ${metrics.deliveredPct}% 100%)`
-                    }}
-                  >
-                    <div className="finance-donut-center">
-                      <div className="finance-donut-value">{metrics.deliveredPct}%</div>
-                      <div className="finance-donut-label">Delivered</div>
-                    </div>
-                  </div>
-                  <div className="finance-donut-legend">
-                    <div className="finance-legend-row">
-                      <span className="finance-legend-dot finance-dot-primary" />
-                      Delivered
-                    </div>
-                    <div className="finance-legend-row">
-                      <span className="finance-legend-dot finance-dot-muted" />
-                      Other
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="finance-graph-card">
-                <div className="finance-chart-header">
-                  <div className="finance-chart-title">Service Mix by Equipment</div>
-                  <div className="finance-chart-sub">Shipments by truck type</div>
-                </div>
-                <div className="finance-stack-legend">
-                  {serviceKeys.map((key) => (
-                    <div key={key} className="finance-legend-row">
-                      <span className="finance-legend-dot" style={{ background: serviceColors[key] }} />
-                      {key}
-                    </div>
-                  ))}
-                </div>
-                <div className="finance-stack-list">
-                  {equipmentSeries.map((row) => (
-                    <div key={row.equipment} className="finance-stack-row">
-                      <div className="finance-bar-label">{row.equipment}</div>
-                      <div className="finance-stack-track">
-                        {row.segments.map((segment) => (
-                          <span
-                            key={segment.key}
-                            className="finance-stack-segment"
-                            style={{
-                              width: `${segment.widthPct}%`,
-                              background: serviceColors[segment.key]
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <div className="finance-bar-value">{row.total}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-
-            <div className="finance-section">
-              <div className="finance-graph-card">
-                <div className="finance-chart-header">
-                  <div className="finance-chart-title">Commission Breakdown (Staff)</div>
-                  <div className="finance-chart-sub">Monthly payout distribution</div>
-                </div>
-                <div className="finance-table-wrap">
-                  <table className="finance-table">
-                    <thead>
-                      <tr>
-                        <th>Staff</th>
-                        <th>Commission</th>
-                        <th>Share</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {staffRows.map((row) => (
-                        <tr key={row.name}>
-                          <td>{row.name}</td>
-                          <td>{formatCurrency(row.amount)}</td>
-                          <td>{row.percent}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </>
+                ) : (
+                  <div className="client-results-empty">No client quote activity was recorded in this reporting period.</div>
+                )}
+              </section>
+            </>
+          )}
         </div>
       </main>
     </div>

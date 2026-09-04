@@ -9,12 +9,12 @@ import {
   ShieldCheck,
   LogOut,
   Kanban,
-  DollarSign,
   Percent,
   MapPin,
   CircleDollarSign,
   MailSearch,
-  House
+  House,
+  Trophy
 } from 'lucide-react';
 
 function Sidebar(props) {
@@ -75,6 +75,7 @@ function Sidebar(props) {
     { id: '/loads', label: 'Shipments', icon: Package, path: '/loads' },
     { id: '/pipeline', label: 'Pipeline', icon: Kanban, path: '/pipeline' },
     ...(isQuoteApprover ? [{ id: '/email-quotes', label: 'Quote Inbox', icon: MailSearch, path: '/email-quotes' }] : []),
+    ...(isQuoteApprover ? [{ id: '/client-results', label: 'Client Results', icon: Trophy, path: '/client-results' }] : []),
     { id: '/map', label: 'Map', icon: MapPin, path: '/map' },
   ];
 
@@ -87,7 +88,6 @@ function Sidebar(props) {
 
   const adminItems = isAdmin ? [
     { id: '/admin-portal', label: 'Admin', icon: ShieldCheck, path: '/admin-portal' },
-    { id: '/admin-finance', label: 'Finance', icon: DollarSign, path: '/admin-finance' },
     { id: '/admin-profit-margin', label: 'Profit Margin', icon: Percent, path: '/admin-profit-margin' },
   ] : [];
 

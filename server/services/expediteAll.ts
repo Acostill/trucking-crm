@@ -33,8 +33,13 @@ function getExpediteAllConfig(): ExpediteAllConfig {
   }
 }
 
-function applyExpediteAllDefaults(body: UnifiedQuoteRequest): UnifiedQuoteRequest {
+export function prepareExpediteAllRequest(body: UnifiedQuoteRequest): UnifiedQuoteRequest {
   const cloned: UnifiedQuoteRequest = { ...body };
+  // Internal decision metadata stays in the CRM. The validated truckType and
+  // datEquipmentType remain in the carrier payload, while strict third-party
+  // schemas do not receive the full GPT narrative or assignment audit object.
+  delete cloned.aiRecommendation;
+  delete cloned.truckAssignment;
 
   const pickupDate = body.pickup && body.pickup.date;
   if (typeof pickupDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pickupDate)) {
@@ -117,7 +122,7 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
       return;
     }
 
-    const payload = JSON.stringify(applyExpediteAllDefaults(body || {} as UnifiedQuoteRequest) || {});
+    const payload = JSON.stringify(prepareExpediteAllRequest(body || {} as UnifiedQuoteRequest) || {});
     const options = {
       method: 'POST',
       hostname: config.endpoint.hostname,
@@ -135,8 +140,9 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
       let data = '';
       apiRes.on('data', function(chunk) { data += chunk; });
       apiRes.on('end', function() {
-        const contentType = (apiRes.headers && apiRes.headers['content-type']) || 'application/json';
-        if (contentType.indexOf('application/json') > -1) {
+        const contentType = String((apiRes.headers && apiRes.headers['content-type']) || '');
+        const looksLikeJson = /^[\s\r\n]*[\[{]/.test(data);
+        if (contentType.indexOf('application/json') > -1 || looksLikeJson) {
           try {
             const parsed = JSON.parse(data) as ExpediteAllResponse;
             // Log raw ExpediteAll response for debugging (full JSON, no [Object])
@@ -158,7 +164,15 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
             resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Failed to parse JSON response', raw: data } as ErrorResponse });
           }
         } else {
-          resolve({ statusCode: apiRes.statusCode || 500, data: { error: 'Non-JSON response received', raw: data } as ErrorResponse });
+          const statusCode = apiRes.statusCode || 500;
+          const route = config.endpoint ? config.endpoint.pathname : RATE_PATH;
+          resolve({
+            statusCode,
+            data: {
+              error: `ExpediteAll gateway returned an unexpected response (HTTP ${statusCode}) for ${route}. Verify the production base URL and API key.`,
+              raw: data.slice(0, 1000)
+            } as ErrorResponse
+          });
         }
       });
     });

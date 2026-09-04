@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { Mistral } from '@mistralai/mistralai';
 import { getGoogleOAuthCredentials, GoogleOAuthRole } from './googleOAuthCredentials';
 
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
@@ -25,6 +26,7 @@ interface GmailHeader {
 }
 
 interface GmailMessagePart {
+  filename?: string;
   mimeType?: string;
   headers?: GmailHeader[];
   body?: {
@@ -54,6 +56,13 @@ export interface GmailQuoteMessage {
   subject?: string;
   receivedAt?: string;
   rawText: string;
+  attachments?: Array<{
+    attachmentId?: string;
+    inlineData?: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  }>;
 }
 
 export interface GmailMailboxConfiguration {
@@ -356,6 +365,88 @@ function extractMessageBody(payload: GmailMessagePart | undefined): string {
   return decodeBase64Url(payload && payload.body && payload.body.data).trim();
 }
 
+function messageAttachments(payload: GmailMessagePart | undefined): NonNullable<GmailQuoteMessage['attachments']> {
+  const attachments: NonNullable<GmailQuoteMessage['attachments']> = [];
+  function visit(part: GmailMessagePart | undefined) {
+    if (!part) return;
+    const fileName = String(part.filename || '').trim();
+    if (fileName && part.body && (part.body.attachmentId || part.body.data)) {
+      attachments.push({
+        attachmentId: part.body.attachmentId,
+        inlineData: part.body.data,
+        fileName,
+        mimeType: String(part.mimeType || 'application/octet-stream'),
+        size: Number(part.body.size) || 0
+      });
+    }
+    (part.parts || []).forEach(visit);
+  }
+  visit(payload);
+  return attachments.slice(0, 5);
+}
+
+function extractOcrText(payload: any): string {
+  if (!payload) return '';
+  if (typeof payload === 'string') return payload;
+  if (Array.isArray(payload)) return payload.map(extractOcrText).filter(Boolean).join('\n');
+  if (typeof payload === 'object') {
+    if (typeof payload.markdown === 'string') return payload.markdown;
+    if (typeof payload.text === 'string') return payload.text;
+    if (payload.pages) return extractOcrText(payload.pages);
+  }
+  return '';
+}
+
+async function attachmentText(
+  messageId: string,
+  attachment: NonNullable<GmailQuoteMessage['attachments']>[number]
+): Promise<string> {
+  if (attachment.size > 8 * 1024 * 1024) return '[Attachment is larger than the 8 MB OCR limit]';
+  const attachmentPayload = attachment.inlineData
+    ? { data: attachment.inlineData }
+    : await gmailGet(
+      `/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(String(attachment.attachmentId || ''))}`
+    );
+  const encoded = String(attachmentPayload && attachmentPayload.data || '');
+  const buffer = Buffer.from(encoded.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+  if (!buffer.length) return '[Attachment content was empty]';
+  if (/^(text\/|application\/(json|xml))/i.test(attachment.mimeType)) {
+    return buffer.toString('utf8').slice(0, 30000);
+  }
+  const supportsOcr = /^(application\/pdf|image\/)/i.test(attachment.mimeType);
+  const ocrEnabled = String(process.env.GMAIL_ATTACHMENT_OCR_ENABLED || 'true').toLowerCase() !== 'false';
+  const apiKey = String(process.env.MISTRAL_API_KEY || '').trim();
+  if (!supportsOcr || !ocrEnabled || !apiKey) {
+    return '[Attachment content requires staff review; OCR is not enabled for this file type]';
+  }
+  const client = new Mistral({ apiKey });
+  const uploaded = await client.files.upload({
+    purpose: 'ocr',
+    file: { fileName: attachment.fileName, content: new Uint8Array(buffer) }
+  });
+  const response = await client.ocr.process({
+    model: process.env.MISTRAL_OCR_MODEL || 'mistral-ocr-latest',
+    document: { type: 'file', fileId: uploaded.id },
+    includeImageBase64: false
+  });
+  return extractOcrText(response).slice(0, 30000) || '[OCR returned no readable text]';
+}
+
+export async function hydrateGmailQuoteMessageAttachments(message: GmailQuoteMessage): Promise<GmailQuoteMessage> {
+  if (!message.attachments || !message.attachments.length) return message;
+  const sections: string[] = [];
+  for (const attachment of message.attachments) {
+    try {
+      const text = await attachmentText(message.externalMessageId, attachment);
+      sections.push(`ATTACHMENT: ${attachment.fileName} (${attachment.mimeType})\n${text}`);
+    } catch (error: any) {
+      console.error('[GmailQuoteInbox] Attachment extraction failed', attachment.fileName, error && error.message ? error.message : error);
+      sections.push(`ATTACHMENT: ${attachment.fileName} (${attachment.mimeType})\n[Attachment extraction failed; staff review required]`);
+    }
+  }
+  return { ...message, rawText: `${message.rawText}\n\n${sections.join('\n\n')}`.trim() };
+}
+
 function getHeader(headers: GmailHeader[] | undefined, name: string): string {
   const target = String(name).toLowerCase();
   const match = (headers || []).find(function(header) {
@@ -400,6 +491,7 @@ function mapGmailMessage(message: GmailMessageResource, mailboxAddress: string):
     return value || index === 3;
   }).join('\n').trim();
 
+  const attachments = messageAttachments(message.payload);
   return {
     externalMessageId: message.id,
     externalThreadId: message.threadId,
@@ -410,7 +502,8 @@ function mapGmailMessage(message: GmailMessageResource, mailboxAddress: string):
     recipientEmail: recipient.email || to || mailboxAddress,
     subject: subject || '(No subject)',
     receivedAt,
-    rawText
+    rawText,
+    ...(attachments.length ? { attachments } : {})
   };
 }
 

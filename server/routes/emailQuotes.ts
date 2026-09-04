@@ -1,4 +1,5 @@
 import express, { NextFunction, Request, Response } from 'express';
+import crypto from 'crypto';
 import db from '../db';
 import { getAuthenticatedUserFromRequest, userHasAnyRole } from '../utils/auth';
 import {
@@ -16,9 +17,20 @@ import {
   requestDatSearchLoadsLookup
 } from '../services/datRateViewJobs';
 import { sendGmailMessage } from '../services/gmailQuoteInbox';
+import { buildQuoteAdvisor } from '../services/quoteAdvisor';
 
 const router = express.Router();
 const QUOTE_APPROVER_ROLES = ['quote_approver'];
+
+function awardedLoadNumber(): string {
+  return `FCL-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${crypto.randomBytes(5).toString('hex').toUpperCase()}`;
+}
+
+function shipmentLocationLine(location: any): string {
+  return [location && location.city, location && location.state, location && (location.zip || location.zip_code)]
+    .filter(Boolean)
+    .join(', ');
+}
 
 function jsonValue(value: any, fallback: any) {
   if (value == null) return fallback;
@@ -49,6 +61,8 @@ function stripReplyForwardPrefix(subject: any): string {
 }
 
 function rowToEmailQuote(row: any, includeRaw = false) {
+  const shipment = jsonValue(row.shipment_request, {});
+  const carrierQuotes = jsonValue(row.carrier_quotes, []);
   return {
     id: row.id,
     mailboxAddress: row.mailbox_address,
@@ -64,8 +78,17 @@ function rowToEmailQuote(row: any, includeRaw = false) {
     receivedAt: row.received_at,
     ...(includeRaw ? { rawText: row.raw_text } : {}),
     parsedPayload: jsonValue(row.parsed_payload, null),
-    shipment: jsonValue(row.shipment_request, {}),
-    carrierQuotes: jsonValue(row.carrier_quotes, []),
+    shipment,
+    carrierQuotes,
+    advisor: buildQuoteAdvisor(shipment, carrierQuotes),
+    advisorAcknowledgedAt: row.advisor_acknowledged_at,
+    quoteValidUntil: row.quote_valid_until,
+    outcome: row.quote_outcome || 'open',
+    outcomeAt: row.outcome_at,
+    outcomeNotes: row.outcome_notes,
+    followUpAt: row.follow_up_at,
+    followUpStatus: row.follow_up_status || 'not_needed',
+    followUpNote: row.follow_up_note,
     recommendation: jsonValue(row.recommendation, null),
     status: row.status,
     processingError: row.processing_error,
@@ -165,10 +188,10 @@ router.get('/', async function(req: Request, res: Response, next: NextFunction) 
     const limit = Math.max(1, Math.min(100, Number(req.query.limit) || 50));
     const status = req.query.status ? String(req.query.status) : '';
     const params: any[] = [];
-    let query = 'SELECT * FROM public.email_quote_requests';
+    let query = 'SELECT * FROM public.email_quote_requests WHERE archived_at IS NULL';
     if (status) {
       params.push(status);
-      query += ` WHERE status = $${params.length}`;
+      query += ` AND status = $${params.length}`;
     }
     params.push(limit);
     query += ` ORDER BY COALESCE(received_at, created_at) DESC LIMIT $${params.length}`;
@@ -301,6 +324,15 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
     const staffNotes = req.body && req.body.staffNotes
       ? String(req.body.staffNotes).slice(0, 4000)
       : null;
+    if (!(req.body && req.body.advisorAcknowledged === true)) {
+      res.status(400).json({ error: 'Review and acknowledge the quote advisor before creating the client price' });
+      return;
+    }
+    const quoteValidUntil = String(req.body && req.body.quoteValidUntil || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(quoteValidUntil)) {
+      res.status(400).json({ error: 'Choose a valid quote expiration date' });
+      return;
+    }
     const shipment = jsonValue(row.shipment_request, {});
     const quoteId = row.quote_id || `quote-${row.id}`;
     const contactName = row.sender_name || row.sender_email || 'Email quote customer';
@@ -367,7 +399,10 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
              quote_id = $9,
              status = 'priced',
              priced_at = NOW(),
-             priced_by = $10
+             priced_by = $10,
+             advisor_acknowledged_at = NOW(),
+             advisor_acknowledged_by = $10,
+             quote_valid_until = $11
          WHERE id = $1
          RETURNING *`,
         [
@@ -380,13 +415,175 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
           clientPrice,
           staffNotes,
           quoteId,
-          userId
+          userId,
+          quoteValidUntil
         ]
       );
       return result.rows[0];
     }, userId);
 
     res.json(rowToEmailQuote(updated, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/:id/workflow', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = await requireOperationsUser(req, res);
+    if (!userId) return;
+    const outcome = String(req.body && req.body.outcome || 'open').toLowerCase();
+    const followUpStatus = String(req.body && req.body.followUpStatus || 'not_needed').toLowerCase();
+    if (!['open', 'awarded', 'lost'].includes(outcome)) {
+      res.status(400).json({ error: 'Outcome must be open, awarded, or lost' });
+      return;
+    }
+    if (!['not_needed', 'due', 'completed'].includes(followUpStatus)) {
+      res.status(400).json({ error: 'Follow-up status is invalid' });
+      return;
+    }
+    const outcomeNotes = req.body && req.body.outcomeNotes ? String(req.body.outcomeNotes).slice(0, 2000) : null;
+    const followUpNote = req.body && req.body.followUpNote ? String(req.body.followUpNote).slice(0, 2000) : null;
+    const followUpAt = req.body && req.body.followUpAt ? new Date(String(req.body.followUpAt)) : null;
+    if (followUpAt && Number.isNaN(followUpAt.getTime())) {
+      res.status(400).json({ error: 'Follow-up date is invalid' });
+      return;
+    }
+    const updated = await db.transactionWithUser(async function(client) {
+      const result = await client.query(
+        `UPDATE public.email_quote_requests
+         SET quote_outcome = $2,
+             outcome_at = CASE WHEN $2 = 'open' THEN NULL ELSE NOW() END,
+             outcome_by = CASE WHEN $2 = 'open' THEN NULL ELSE $3 END,
+             outcome_notes = $4,
+             follow_up_at = $5,
+             follow_up_status = $6,
+             follow_up_note = $7,
+             updated_at = NOW()
+         WHERE id = $1 AND archived_at IS NULL
+         RETURNING *`,
+        [req.params.id, outcome, userId, outcomeNotes, followUpAt ? followUpAt.toISOString() : null, followUpStatus, followUpNote]
+      );
+      if (!result.rows.length) return null;
+      const quoteId = result.rows[0].quote_id;
+      if (quoteId && outcome !== 'open') {
+        const quoteResult = await client.query('SELECT * FROM public.quotes WHERE id = $1 FOR UPDATE', [quoteId]);
+        const quote = quoteResult.rows[0];
+        if (quote && outcome === 'lost' && quote.status === 'approved') {
+          const error: any = new Error('An awarded quote with an operations load cannot be marked lost');
+          error.status = 409;
+          throw error;
+        }
+        if (quote) {
+          await client.query(
+            `UPDATE public.quotes
+             SET status = $2,
+                 approved_at = CASE WHEN $2 = 'approved' THEN COALESCE(approved_at, NOW()) ELSE approved_at END,
+                 approved_by = CASE WHEN $2 = 'approved' THEN COALESCE(approved_by, $3) ELSE approved_by END,
+                 rejected_at = CASE WHEN $2 = 'rejected' THEN COALESCE(rejected_at, NOW()) ELSE rejected_at END,
+                 rejected_by = CASE WHEN $2 = 'rejected' THEN COALESCE(rejected_by, $3) ELSE rejected_by END,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [quoteId, outcome === 'awarded' ? 'approved' : 'rejected', userId]
+          );
+        }
+        if (quote && outcome === 'awarded') {
+          const existingLoad = await client.query('SELECT id FROM public.loads WHERE source_quote_id = $1', [quoteId]);
+          if (!existingLoad.rows.length) {
+            const shipment = jsonValue(result.rows[0].shipment_request, {});
+            const pickup = shipment.pickup || {};
+            const delivery = shipment.delivery || {};
+            const pickupLocation = pickup.location || {};
+            const deliveryLocation = delivery.location || {};
+            await client.query(
+              `INSERT INTO public.loads (
+                 source_quote_id, customer, load_number, bill_to, dispatcher, status, type, rate, currency,
+                 carrier_or_driver, equipment_type, shipper, shipper_location, ship_date,
+                 show_ship_time, description, qty, weight, value, consignee, consignee_location,
+                 delivery_date, show_delivery_time, delivery_notes
+               ) VALUES (
+                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24
+               )`,
+              [
+                quoteId,
+                result.rows[0].quote_sent_to || result.rows[0].sender_name || result.rows[0].sender_email || 'Email quote customer',
+                awardedLoadNumber(),
+                result.rows[0].quote_sent_to || result.rows[0].sender_email || null,
+                null,
+                'Pending',
+                'Awarded Quote',
+                numericValue(result.rows[0].client_price),
+                'USD',
+                result.rows[0].selected_carrier_source || null,
+                shipment.truckType || null,
+                shipmentLocationLine(pickupLocation) || 'Pickup location pending',
+                shipmentLocationLine(pickupLocation) || null,
+                pickup.date || null,
+                true,
+                shipment.commodity || 'Awarded from email quote',
+                shipment.pieces && shipment.pieces.quantity || null,
+                shipment.weight && shipment.weight.value || null,
+                null,
+                shipmentLocationLine(deliveryLocation) || 'Delivery location pending',
+                shipmentLocationLine(deliveryLocation) || null,
+                delivery.date || null,
+                true,
+                result.rows[0].quote_sent_to || result.rows[0].sender_email || null
+              ]
+            );
+          }
+        }
+      }
+      return result.rows[0];
+    }, userId);
+    if (!updated) {
+      res.status(404).json({ error: 'Email quote request not found' });
+      return;
+    }
+    res.json(rowToEmailQuote(updated, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/archive-beta', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const user = await getAuthenticatedUserFromRequest(req);
+    if (!user) {
+      res.status(401).json({ error: 'Sign in to manage beta records' });
+      return;
+    }
+    if (!userHasAnyRole(user, ['admin'])) {
+      res.status(403).json({ error: 'Administrator access is required' });
+      return;
+    }
+    const ids = Array.isArray(req.body && req.body.ids)
+      ? req.body.ids.map(String).filter(Boolean).slice(0, 100)
+      : [];
+    if (!ids.length) {
+      res.status(400).json({ error: 'Provide the exact quote request IDs to archive' });
+      return;
+    }
+    const preview = await db.query(
+      `SELECT id, subject, sender_email, created_at
+       FROM public.email_quote_requests
+       WHERE id = ANY($1::text[]) AND archived_at IS NULL
+       ORDER BY created_at DESC`,
+      [ids]
+    );
+    if (req.body && req.body.confirm !== true) {
+      res.json({ archived: false, records: preview.rows });
+      return;
+    }
+    const result = await db.queryWithUser(
+      `UPDATE public.email_quote_requests
+       SET archived_at = NOW(), archived_by = $2, updated_at = NOW()
+       WHERE id = ANY($1::text[]) AND archived_at IS NULL
+       RETURNING id`,
+      [ids, user.id],
+      user.id
+    );
+    res.json({ archived: true, ids: result.rows.map(function(row) { return row.id; }) });
   } catch (err) {
     next(err);
   }

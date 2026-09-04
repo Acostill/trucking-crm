@@ -462,6 +462,126 @@
   background: linear-gradient(180deg, #fbfdfe, #f4f8fa);
 }
 
+.eq-advisor-section {
+  border-color: #bed9d1;
+  background: linear-gradient(180deg, #fbfefd, #f2f9f6);
+}
+
+.eq-ai-workflow-section {
+  border-color: #b9d8d3;
+  background: linear-gradient(180deg, #fbfefd, #f1f8f7);
+}
+
+.eq-ai-workflow-section .eq-ai-advisor {
+  margin-bottom: 0;
+}
+
+.eq-ai-advisor {
+  margin: 14px 0;
+  padding: 15px 17px;
+  border: 1px solid #c8ddea;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #f4fafc, #f8fbfc);
+  color: #38566b;
+}
+.eq-ai-advisor.complete { border-color: #badfd4; background: linear-gradient(135deg, #f1faf7, #f8fcfb); }
+.eq-ai-advisor-heading,.eq-ai-advisor-heading span,.eq-ai-advisor-equipment { display:flex; align-items:center; }
+.eq-ai-advisor-heading { justify-content:space-between; gap:12px; }
+.eq-ai-advisor-heading span { gap:7px; color:#1d5f78; }
+.eq-ai-advisor-heading em { padding:4px 8px; border-radius:999px; background:#e5f0f4; color:#587386; font-size:9px; font-style:normal; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+.eq-ai-advisor-equipment { gap:14px; margin:14px 0 10px; padding:12px; border-radius:10px; background:rgba(255,255,255,.8); }
+.eq-ai-advisor-equipment > div { display:grid; gap:3px; }
+.eq-ai-advisor-equipment small { color:#7890a0; font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.eq-ai-advisor-equipment strong { color:#17354a; font-size:12px; }
+.eq-ai-advisor-equipment > span { margin-left:auto; padding:5px 8px; border-radius:999px; background:#e6f3ee; color:#1b6e59; font-size:9px; font-weight:800; text-transform:capitalize; }
+.eq-ai-advisor > p { margin:8px 0; font-size:11px; line-height:1.55; }
+.eq-ai-advisor-list { margin-top:10px; }
+.eq-ai-advisor-list > strong { display:block; color:#2a4b61; font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
+.eq-ai-advisor-list ul { margin:6px 0 0; padding-left:18px; }
+.eq-ai-advisor-list li { margin:3px 0; font-size:10px; line-height:1.45; }
+.eq-ai-advisor-list.risks { color:#865c24; }
+.eq-ai-advisor-note { display:block; margin-top:10px; color:#6c8393; font-size:9px; font-weight:700; }
+
+@media (max-width: 700px) {
+  .eq-ai-advisor-equipment { align-items:flex-start; flex-wrap:wrap; }
+  .eq-ai-advisor-equipment > span { margin-left:0; }
+}
+
+.eq-advisor-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.eq-advisor-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #dbe5e9;
+  border-radius: 10px;
+  color: #496174;
+  background: #fff;
+}
+
+.eq-advisor-check.good { color: #176b59; border-color: #c5e1d8; }
+.eq-advisor-check.warning { color: #8a5b20; border-color: #ead4ac; background: #fffaf1; }
+.eq-advisor-check.info { color: #2d6688; border-color: #c8ddea; }
+
+.eq-advisor-check span,
+.eq-advisor-check strong,
+.eq-advisor-check small {
+  display: block;
+}
+
+.eq-advisor-check strong { color: #203548; font-size: 11px; }
+.eq-advisor-check small { margin-top: 3px; font-size: 10px; line-height: 1.45; }
+
+.eq-advisor-ack {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  color: #25465a;
+  background: #eaf5f1;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.eq-advisor-ack input { width: 16px; height: 16px; accent-color: #1b725e; }
+
+.eq-workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 11px;
+  margin-bottom: 12px;
+}
+
+.eq-workflow-grid label {
+  display: grid;
+  gap: 6px;
+  color: #617286;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.eq-workflow-grid input,
+.eq-workflow-grid select {
+  min-height: 39px;
+  padding: 0 10px;
+  border: 1px solid #cedbe4;
+  border-radius: 8px;
+  color: #1d3448;
+  background: #fff;
+  font: inherit;
+  font-size: 11px;
+  text-transform: none;
+}
+
 .eq-raw-email {
   max-height: 220px;
   margin: 0;
@@ -1492,7 +1612,9 @@
   .eq-field-grid.delivery,
   .eq-field-grid.freight,
   .eq-carrier-grid,
-  .eq-pricing-grid {
+  .eq-pricing-grid,
+  .eq-advisor-checks,
+  .eq-workflow-grid {
     grid-template-columns: 1fr;
   }
 

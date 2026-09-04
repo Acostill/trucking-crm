@@ -9,15 +9,22 @@ const router = express.Router();
 const SESSION_COOKIE = 'session_token';
 const SESSION_TTL_DAYS = 30;
 
-function makeCookieOptions() {
+export function makeCookieOptions() {
   const productionHttps =
-    process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+    process.env.NODE_ENV === 'production' ||
+    process.env.RENDER === 'true' ||
+    Boolean(process.env.RAILWAY_ENVIRONMENT);
+  const configuredSameSite = String(process.env.AUTH_COOKIE_SAME_SITE || '').trim().toLowerCase();
+  const sameSite = configuredSameSite === 'none' || configuredSameSite === 'strict' || configuredSameSite === 'lax'
+    ? configuredSameSite as 'none' | 'strict' | 'lax'
+    : 'lax';
   return {
     httpOnly: true,
-    // The production UI and API currently use different domains. Cross-site
-    // credentialed requests require SameSite=None and a Secure cookie.
-    sameSite: productionHttps ? ('none' as const) : ('lax' as const),
-    secure: productionHttps,
+    // The deployed CRM is served by the API on one Render origin, so Lax is
+    // the reliable default. Split-origin deployments can explicitly choose
+    // AUTH_COOKIE_SAME_SITE=none (which always requires Secure).
+    sameSite,
+    secure: productionHttps || sameSite === 'none',
     path: '/',
     maxAge: SESSION_TTL_DAYS * 24 * 60 * 60 * 1000
   };
@@ -95,6 +102,7 @@ async function revokeSession(token: string | undefined, userId?: string | null) 
 
 router.get('/me', async function(req: Request, res: Response, next: NextFunction) {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const token = req.cookies && req.cookies[SESSION_COOKIE];
     const user = await getUserFromToken(token);
     if (!user) return res.status(401).json({ error: 'Not authenticated' });
@@ -111,6 +119,7 @@ router.get('/me', async function(req: Request, res: Response, next: NextFunction
 
 router.post('/signup', async function(req: Request, res: Response, next: NextFunction) {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const body = req.body || {};
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
@@ -136,6 +145,7 @@ router.post('/signup', async function(req: Request, res: Response, next: NextFun
 
 router.post('/signin', async function(req: Request, res: Response, next: NextFunction) {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const body = req.body || {};
     const email = String(body.email || '').trim().toLowerCase();
     const password = String(body.password || '');
@@ -164,6 +174,7 @@ router.post('/signin', async function(req: Request, res: Response, next: NextFun
 
 router.post('/signout', async function(req: Request, res: Response, next: NextFunction) {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const token = req.cookies && req.cookies[SESSION_COOKIE];
     const userId = await getUserIdFromRequest(req);
     await revokeSession(token, userId);

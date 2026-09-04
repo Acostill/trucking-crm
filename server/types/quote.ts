@@ -62,6 +62,7 @@ export interface UnifiedQuoteRequest {
     reason?: string;
     baseTruckType?: string;
     serviceCategory?: 'dry' | 'reefer' | string;
+    fitSummary?: string;
     [key: string]: any;
   };
   hazardousMaterial?: {

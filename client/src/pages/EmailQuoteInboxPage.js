@@ -73,10 +73,35 @@ const TRUCK_TYPE_OPTIONS = [
   'Cargo Van',
   'Box Truck',
   'Straight Truck',
+  'Dry Van',
   'Reefer Cargo Van',
   'Reefer Box Truck',
-  'Reefer Straight Truck'
+  'Reefer Straight Truck',
+  'Reefer Dry Van'
 ];
+
+function defaultValidUntil() {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function fallbackAdvisor(quote) {
+  const shipment = (quote && quote.shipment) || {};
+  const options = quote && Array.isArray(quote.carrierQuotes) ? quote.carrierQuotes : [];
+  const connected = options.filter(function(option) {
+    return option.available && option.selectable !== false && option.benchmark !== true && option.cost != null;
+  });
+  const hasDat = options.some(function(option) { return ['datRateView', 'datSpot', 'datContract'].includes(option.key) && option.available; });
+  return {
+    reviewRequired: !shipment.truckType || !connected.length,
+    checks: [
+      { tone: shipment.truckType ? 'good' : 'warning', label: 'Equipment fit', detail: shipment.truckType ? shipment.truckType + ' matches the current shipment data.' : 'Staff must confirm the equipment type.' },
+      { tone: connected.length ? 'good' : 'warning', label: 'Bookable pricing', detail: connected.length + ' connected carrier rate' + (connected.length === 1 ? '' : 's') + ' available.' },
+      { tone: hasDat ? 'info' : 'warning', label: 'DAT market check', detail: hasDat ? 'DAT market context is available for comparison.' : 'DAT market context is not ready.' }
+    ]
+  };
+}
 
 function calendarDateInTimezone(date, timeZone) {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -128,9 +153,20 @@ const PREVIEW_QUOTES = [
       truckType: 'Cargo Van',
       truckAssignment: {
         status: 'assigned',
-        source: 'auto',
-        ruleVersion: 'fct-truck-assignment-v1',
-        reason: 'Smallest truck within 3 pallets, 3,000 lb, and the v1 dimension guard.'
+        source: 'ai',
+        ruleVersion: 'fct-truck-assignment-v2',
+        reason: 'Cargo Van fits the shipment and passed the CRM capacity safeguards.'
+      },
+      aiRecommendation: {
+        status: 'completed',
+        model: 'OpenAI',
+        recommendedTruckType: 'Cargo Van',
+        appliedTruckType: 'Cargo Van',
+        accepted: true,
+        confidence: 'high',
+        fitAnalysis: 'One 48 × 40 × 48 in pallet at 500 lb fits within the Cargo Van capacity and dimension guards.',
+        suggestions: ['Confirm pickup hours and loading access.', 'Verify the medical equipment is secured and non-hazardous.'],
+        risks: []
       },
       datEquipmentType: 'Van'
     },
@@ -382,22 +418,25 @@ function nlToBr(value) {
 
 const EMAIL_FONT_SANS = "'Inter','SuisseIntl',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 // Matches the sidebar's "First Class CRM Brand Refresh" tokens in App.css (--fct-*).
-const EMAIL_BG_TOP = '#050505';
-const EMAIL_BG_BOTTOM = '#0f172a';
+const EMAIL_BG_TOP = '#f4f7fb';
+const EMAIL_BG_BOTTOM = '#e8eef6';
 const EMAIL_ACCENT = '#1e3a8a';
-const EMAIL_ACCENT_LIGHT = '#93c5fd';
-const EMAIL_LINE = 'rgba(255,255,255,.12)';
-const EMAIL_TEXT = 'rgba(255,255,255,.92)';
-const EMAIL_TEXT_MUTED = 'rgba(255,255,255,.62)';
-const EMAIL_TEXT_FAINT = 'rgba(255,255,255,.42)';
+const EMAIL_ACCENT_LIGHT = '#2563a7';
+const EMAIL_LINE = '#d7e0ea';
+const EMAIL_TEXT = '#172b3f';
+const EMAIL_TEXT_MUTED = '#53687d';
+const EMAIL_TEXT_FAINT = '#718398';
 
-function buildQuoteEmailHtml(quote, noteText) {
+function buildQuoteEmailHtml(quote, noteText, validUntil) {
   const shipment = (quote && quote.shipment) || {};
   const pickup = shipment.pickup || {};
   const pickupLocation = pickup.location || {};
   const delivery = shipment.delivery || {};
   const deliveryLocation = delivery.location || {};
   const selection = (quote && quote.selection) || {};
+  const selectedCarrier = quote && Array.isArray(quote.carrierQuotes)
+    ? quote.carrierQuotes.find(function(option) { return option.key === selection.carrierKey; })
+    : null;
   const forwarded = extractForwardedContacts(quote && quote.rawText);
   const recipientName = forwarded.toName
     || (!forwarded.to && quote && quote.sender && (quote.sender.name || quote.sender.email))
@@ -406,7 +445,12 @@ function buildQuoteEmailHtml(quote, noteText) {
 
   const detailRows = [
     ['Pickup', locationLine(pickupLocation) + (pickup.date ? ' · ' + formatDateTime(pickup.date) : '')],
-    ['Delivery', locationLine(deliveryLocation)]
+    ['Delivery', locationLine(deliveryLocation)],
+    ['Equipment', shipment.truckType || 'To be confirmed'],
+    ['Estimated transit', selectedCarrier && selectedCarrier.transitTime
+      ? selectedCarrier.transitTime + ' business day' + (Number(selectedCarrier.transitTime) === 1 ? '' : 's')
+      : 'Confirm with dispatch'],
+    ['Quote valid through', validUntil ? new Date(validUntil + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '7 days from issue']
   ];
 
   const rowsHtml = detailRows.map(function(row) {
@@ -435,7 +479,7 @@ function buildQuoteEmailHtml(quote, noteText) {
     + '<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3;font-weight:700;color:' + EMAIL_TEXT + ';">Thank you for choosing First Class Trucking!</h1>'
     + (firstName ? '<p style="margin:0 0 18px;font-size:14px;color:' + EMAIL_TEXT_MUTED + ';">Hi ' + escapeHtml(firstName) + ',</p>' : '')
     + noteHtml
-    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:rgba(255,255,255,.08);border:1px solid ' + EMAIL_LINE + ';border-left:3px solid ' + EMAIL_ACCENT + ';border-radius:8px;padding:20px 22px;margin-bottom:22px;">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid ' + EMAIL_LINE + ';border-left:3px solid ' + EMAIL_ACCENT + ';border-radius:8px;padding:20px 22px;margin-bottom:22px;">'
     + rowsHtml
     + '<tr>'
     + '<td style="padding:14px 0 0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';">Total price</td>'
@@ -443,6 +487,7 @@ function buildQuoteEmailHtml(quote, noteText) {
     + '</tr>'
     + '</table>'
     + '<p style="margin:0 0 26px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT_MUTED + ';">Reply to this email to confirm and we\'ll get your shipment scheduled.</p>'
+    + '<p style="margin:0 0 26px;font-size:12px;line-height:1.6;color:' + EMAIL_TEXT_FAINT + ';">Rate is subject to equipment availability and the shipment details shown above. Fuel surcharges and any accessorial services not included in the request may change the final amount.</p>'
     + '<p style="margin:0 0 34px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT + ';">Thank you,<br />First Class Trucking</p>'
     + '</td></tr>'
     + '<tr><td style="padding:20px 8px 0;border-top:1px solid ' + EMAIL_LINE + ';font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';">'
@@ -539,7 +584,7 @@ function buildShipment(editor, existing) {
     shipment.truckAssignment = {
       status: 'assigned',
       source: 'staff',
-      ruleVersion: 'fct-truck-assignment-v1',
+      ruleVersion: 'fct-truck-assignment-v2',
       reason: 'Truck type confirmed by staff.'
     };
   }
@@ -600,6 +645,13 @@ export default function EmailQuoteInboxPage() {
   const [emailCc, setEmailCc] = useState('');
   const [emailNote, setEmailNote] = useState('');
   const [sendingQuoteEmail, setSendingQuoteEmail] = useState(false);
+  const [advisorAcknowledged, setAdvisorAcknowledged] = useState(false);
+  const [quoteValidUntil, setQuoteValidUntil] = useState(defaultValidUntil());
+  const [outcome, setOutcome] = useState('open');
+  const [followUpAt, setFollowUpAt] = useState('');
+  const [followUpStatus, setFollowUpStatus] = useState('not_needed');
+  const [outcomeNotes, setOutcomeNotes] = useState('');
+  const [savingWorkflow, setSavingWorkflow] = useState(false);
 
   async function requestJson(path, options) {
     const response = await fetch(buildApiUrl(path), {
@@ -629,6 +681,12 @@ export default function EmailQuoteInboxPage() {
     setCarrierKey(recommendedKey);
     setMarginPct(String(recommendedMargin));
     setStaffNotes((detail && detail.staffNotes) || '');
+    setAdvisorAcknowledged(Boolean(detail && detail.advisorAcknowledgedAt));
+    setQuoteValidUntil((detail && detail.quoteValidUntil && String(detail.quoteValidUntil).slice(0, 10)) || defaultValidUntil());
+    setOutcome((detail && detail.outcome) || 'open');
+    setFollowUpAt((detail && detail.followUpAt && String(detail.followUpAt).slice(0, 10)) || '');
+    setFollowUpStatus((detail && detail.followUpStatus) || 'not_needed');
+    setOutcomeNotes((detail && detail.outcomeNotes) || '');
 
     const options = detail && Array.isArray(detail.carrierQuotes) ? detail.carrierQuotes : [];
     const carrier = options.find(function(option) { return option.key === recommendedKey; });
@@ -753,14 +811,19 @@ export default function EmailQuoteInboxPage() {
     return options.find(function(option) { return option.key === carrierKey; }) || null;
   }, [selected, carrierKey]);
 
+  const quoteAdvisor = useMemo(function() {
+    return selected && selected.advisor ? selected.advisor : fallbackAdvisor(selected);
+  }, [selected]);
+  const shipmentAI = selected && selected.shipment && selected.shipment.aiRecommendation;
+
   const marginAmount = useMemo(function() {
     if (!selectedCarrier || selectedCarrier.cost == null || clientPrice === '') return null;
     return Number(clientPrice) - Number(selectedCarrier.cost);
   }, [selectedCarrier, clientPrice]);
 
   const emailHtml = useMemo(function() {
-    return buildQuoteEmailHtml(selected, emailNote);
-  }, [selected, emailNote]);
+    return buildQuoteEmailHtml(selected, emailNote, quoteValidUntil);
+  }, [selected, emailNote, quoteValidUntil]);
 
   function chooseCarrier(option) {
     if (!option.available || option.selectable === false || option.benchmark === true) return;
@@ -934,6 +997,8 @@ export default function EmailQuoteInboxPage() {
         ...selected,
         status: 'priced',
         quoteId: 'quote-preview-1048',
+        advisorAcknowledgedAt: new Date().toISOString(),
+        quoteValidUntil,
         staffNotes,
         selection: {
           carrierKey,
@@ -962,7 +1027,9 @@ export default function EmailQuoteInboxPage() {
           carrierKey,
           marginPct: Number(marginPct),
           clientPrice: Number(clientPrice),
-          staffNotes
+          staffNotes,
+          advisorAcknowledged,
+          quoteValidUntil
         })
       });
       applyDetail(detail);
@@ -972,6 +1039,32 @@ export default function EmailQuoteInboxPage() {
       setError(requestError.message || 'Unable to save the client price');
     } finally {
       setSavingPrice(false);
+    }
+  }
+
+  async function saveCustomerWorkflow() {
+    if (!selected) return;
+    if (previewMode) {
+      const updated = { ...selected, outcome, outcomeNotes, followUpAt, followUpStatus };
+      applyDetail(updated);
+      setNotice('Demo customer outcome and follow-up saved.');
+      return;
+    }
+    setSavingWorkflow(true);
+    setError('');
+    try {
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/workflow', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome, outcomeNotes, followUpAt: followUpAt || null, followUpStatus })
+      });
+      applyDetail(detail);
+      setNotice('Customer outcome and follow-up saved.');
+      await loadWorkspace(detail.id);
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to save customer follow-up');
+    } finally {
+      setSavingWorkflow(false);
     }
   }
 
@@ -1289,6 +1382,41 @@ export default function EmailQuoteInboxPage() {
                     </div>
                   </section>
 
+                  <section className="eq-section eq-ai-workflow-section">
+                    <div className="eq-section-heading">
+                      <div><Sparkles size={18} /><span><strong>Shipment advisor</strong><small>Reviews the parsed freight details and validates equipment before carrier pricing begins.</small></span></div>
+                      <span className={'eq-status ' + (shipmentAI && shipmentAI.status === 'completed' ? 'ready' : 'working')}>
+                        {shipmentAI && shipmentAI.status === 'completed' ? 'Recommendation ready' : shipmentAI ? 'Safeguards applied' : 'Runs during rating'}
+                      </span>
+                    </div>
+                    <div className={'eq-ai-advisor ' + (shipmentAI && shipmentAI.status === 'completed' ? 'complete' : 'fallback')}>
+                      <div className="eq-ai-advisor-heading">
+                        <span><Sparkles size={16} /><strong>Equipment recommendation</strong></span>
+                        <em>OpenAI advisor</em>
+                      </div>
+                      {shipmentAI ? (
+                        <>
+                          <div className="eq-ai-advisor-equipment">
+                            <div><small>Advisor recommendation</small><strong>{shipmentAI.recommendedTruckType || 'Review needed'}</strong></div>
+                            <ArrowRight size={17} aria-hidden="true" />
+                            <div><small>Sent to carrier rating</small><strong>{shipmentAI.appliedTruckType || (selected.shipment && selected.shipment.truckType) || 'Review needed'}</strong></div>
+                            <span>{shipmentAI.status === 'completed' ? (shipmentAI.confidence || '—') + ' confidence' : 'Deterministic fallback'}</span>
+                          </div>
+                          <p>{shipmentAI.fitAnalysis || shipmentAI.note || 'Shipment dimensions and capacity rules were evaluated.'}</p>
+                          {(Array.isArray(shipmentAI.suggestions) && shipmentAI.suggestions.length > 0) && (
+                            <div className="eq-ai-advisor-list"><strong>Suggestions</strong><ul>{shipmentAI.suggestions.map(function(item) { return <li key={item}>{item}</li>; })}</ul></div>
+                          )}
+                          {(Array.isArray(shipmentAI.risks) && shipmentAI.risks.length > 0) && (
+                            <div className="eq-ai-advisor-list risks"><strong>Review</strong><ul>{shipmentAI.risks.map(function(item) { return <li key={item}>{item}</li>; })}</ul></div>
+                          )}
+                          {shipmentAI.note && <small className="eq-ai-advisor-note">{shipmentAI.note}</small>}
+                        </>
+                      ) : (
+                        <p>Shipment guidance will appear automatically after the request is parsed and rated. Deterministic capacity safeguards always validate the final truck.</p>
+                      )}
+                    </div>
+                  </section>
+
                   <section className="eq-section eq-route-section">
                     <div className="eq-section-heading">
                       <div><MapPin size={18} /><span><strong>Route map + nearby major cities</strong><small>See the shipment lane and useful metro context before pricing.</small></span></div>
@@ -1459,6 +1587,29 @@ export default function EmailQuoteInboxPage() {
                     )}
                   </section>
 
+                  <section className="eq-section eq-advisor-section">
+                    <div className="eq-section-heading">
+                      <div><Sparkles size={18} /><span><strong>Quote advisor</strong><small>Second-view checks for equipment, connected pricing, DAT context, and dangerous goods.</small></span></div>
+                      <span className={'eq-status ' + (quoteAdvisor.reviewRequired ? 'attention' : 'ready')}>
+                        {quoteAdvisor.reviewRequired ? 'Review flags' : 'Checks ready'}
+                      </span>
+                    </div>
+                    <div className="eq-advisor-checks">
+                      {quoteAdvisor.checks.map(function(check) {
+                        return (
+                          <div className={'eq-advisor-check ' + check.tone} key={check.label}>
+                            {check.tone === 'good' ? <CheckCircle2 size={17} /> : check.tone === 'warning' ? <AlertCircle size={17} /> : <Sparkles size={17} />}
+                            <span><strong>{check.label}</strong><small>{check.detail}</small></span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <label className="eq-advisor-ack">
+                      <input type="checkbox" checked={advisorAcknowledged} onChange={function(e) { setAdvisorAcknowledged(e.target.checked); }} />
+                      <span>I reviewed the shipment, equipment recommendation, carrier rates, and DAT context.</span>
+                    </label>
+                  </section>
+
                   <section className="eq-section pricing">
                     <div className="eq-section-heading">
                       <div><CircleDollarSign size={18} /><span><strong>Set the client price</strong><small>Staff controls the final margin and amount charged.</small></span></div>
@@ -1483,6 +1634,10 @@ export default function EmailQuoteInboxPage() {
                         <strong>{marginAmount != null ? formatMoney(marginAmount) : '—'}</strong>
                         <span>{marginPct ? Number(marginPct).toFixed(2) + '% margin' : 'No margin entered'}</span>
                       </div>
+                      <label className="eq-money-field">
+                        <span><CalendarDays size={14} /> Quote valid through</span>
+                        <div><input type="date" value={quoteValidUntil} onChange={function(e) { setQuoteValidUntil(e.target.value); }} /></div>
+                      </label>
                     </div>
                     <label className="eq-notes-field">
                       Staff notes
@@ -1490,7 +1645,7 @@ export default function EmailQuoteInboxPage() {
                     </label>
                     <div className="eq-pricing-footer">
                       <p><CheckCircle2 size={15} /> Saving creates a pending client quote in the CRM pipeline.</p>
-                      <button type="button" className="eq-save-price" onClick={saveClientPrice} disabled={!selectedCarrier || !clientPrice || savingPrice}>
+                      <button type="button" className="eq-save-price" onClick={saveClientPrice} disabled={!selectedCarrier || !clientPrice || !quoteValidUntil || !advisorAcknowledged || savingPrice}>
                         <Save size={16} /> {savingPrice ? 'Creating quote...' : selected.quoteId ? 'Update client quote' : 'Create client quote'}
                       </button>
                     </div>
@@ -1545,6 +1700,42 @@ export default function EmailQuoteInboxPage() {
                           disabled={!emailTo.trim() || !emailHtml.trim() || sendingQuoteEmail}
                         >
                           <Send size={15} /> {sendingQuoteEmail ? 'Sending...' : selected.status === 'sent' ? 'Resend Quote' : 'Send Quote'}
+                        </button>
+                      </div>
+                    </section>
+                  )}
+
+                  {selected.status === 'sent' && (
+                    <section className="eq-section eq-customer-workflow">
+                      <div className="eq-section-heading">
+                        <div><CheckCircle2 size={18} /><span><strong>Customer outcome + follow-up</strong><small>Close the sales loop so awards, losses, and next actions appear on the dashboard.</small></span></div>
+                      </div>
+                      <div className="eq-workflow-grid">
+                        <label>Outcome
+                          <select value={outcome} onChange={function(e) { setOutcome(e.target.value); }}>
+                            <option value="open">Open / awaiting customer</option>
+                            <option value="awarded">Awarded</option>
+                            <option value="lost">Lost</option>
+                          </select>
+                        </label>
+                        <label>Follow-up status
+                          <select value={followUpStatus} onChange={function(e) { setFollowUpStatus(e.target.value); }}>
+                            <option value="not_needed">No follow-up scheduled</option>
+                            <option value="due">Follow-up due</option>
+                            <option value="completed">Follow-up completed</option>
+                          </select>
+                        </label>
+                        <label>Follow-up date
+                          <input type="date" value={followUpAt} onChange={function(e) { setFollowUpAt(e.target.value); }} />
+                        </label>
+                      </div>
+                      <label className="eq-notes-field">Outcome / follow-up notes
+                        <textarea value={outcomeNotes} onChange={function(e) { setOutcomeNotes(e.target.value); }} placeholder="Customer response, loss reason, or next action..." />
+                      </label>
+                      <div className="eq-pricing-footer">
+                        <p><Clock3 size={15} /> Open follow-ups due today will appear on the operations dashboard.</p>
+                        <button type="button" className="eq-save-price" onClick={saveCustomerWorkflow} disabled={savingWorkflow}>
+                          <Save size={16} /> {savingWorkflow ? 'Saving...' : 'Save outcome'}
                         </button>
                       </div>
                     </section>

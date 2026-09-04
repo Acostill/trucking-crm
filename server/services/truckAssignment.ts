@@ -1,10 +1,19 @@
 import { Piece, UnifiedQuoteRequest } from '../types/quote';
 
-export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v1';
+export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v2';
 
 export type TruckAssignmentStatus = 'assigned' | 'needs_review';
-export type TruckAssignmentSource = 'auto' | 'staff';
+export type TruckAssignmentSource = 'auto' | 'ai' | 'staff';
 export type TruckServiceCategory = 'dry' | 'reefer';
+export type SupportedTruckType =
+  | 'Cargo Van'
+  | 'Box Truck'
+  | 'Straight Truck'
+  | 'Dry Van'
+  | 'Reefer Cargo Van'
+  | 'Reefer Box Truck'
+  | 'Reefer Straight Truck'
+  | 'Reefer Dry Van';
 
 export interface TruckAssignmentMetadata {
   status: TruckAssignmentStatus;
@@ -14,6 +23,7 @@ export interface TruckAssignmentMetadata {
   reason: string;
   baseTruckType?: string;
   serviceCategory?: TruckServiceCategory;
+  fitSummary?: string;
 }
 
 export interface TruckAssignmentResult {
@@ -22,31 +32,37 @@ export interface TruckAssignmentResult {
   metadata: TruckAssignmentMetadata;
 }
 
-interface TruckCapacityRule {
-  baseTruckType: 'Cargo Van' | 'Box Truck' | 'Straight Truck';
+export interface TruckCapacityRule {
+  baseTruckType: 'Cargo Van' | 'Box Truck' | 'Straight Truck' | 'Dry Van';
   palletMax: number;
   weightMax: number;
   dimensions: { length: number; width: number; height: number };
 }
 
-const CAPACITY_RULES: TruckCapacityRule[] = [
+export const CAPACITY_RULES: TruckCapacityRule[] = [
   {
     baseTruckType: 'Cargo Van',
     palletMax: 3,
-    weightMax: 3000,
+    weightMax: 3500,
     dimensions: { length: 72, width: 52, height: 70 }
   },
   {
     baseTruckType: 'Box Truck',
     palletMax: 6,
-    weightMax: 6000,
+    weightMax: 8000,
     dimensions: { length: 96, width: 96, height: 96 }
   },
   {
     baseTruckType: 'Straight Truck',
-    palletMax: 14,
-    weightMax: 8000,
+    palletMax: 12,
+    weightMax: 10000,
     dimensions: { length: 120, width: 102, height: 110 }
+  },
+  {
+    baseTruckType: 'Dry Van',
+    palletMax: 26,
+    weightMax: 45000,
+    dimensions: { length: 636, width: 102, height: 110 }
   }
 ];
 
@@ -54,10 +70,14 @@ const STAFF_TRUCK_TYPES = new Set([
   'Cargo Van',
   'Box Truck',
   'Straight Truck',
+  'Dry Van',
   'Reefer Cargo Van',
   'Reefer Box Truck',
-  'Reefer Straight Truck'
+  'Reefer Straight Truck',
+  'Reefer Dry Van'
 ]);
+
+export const SUPPORTED_TRUCK_TYPES = Array.from(STAFF_TRUCK_TYPES) as SupportedTruckType[];
 
 function finitePositive(value: any): number | null {
   const number = Number(value);
@@ -219,25 +239,28 @@ export function assignTruckType(shipment: UnifiedQuoteRequest): TruckAssignmentR
     );
   }
 
-  if (pallets > 14 || weight > 8000) {
+  if (pallets > 26 || weight > 45000) {
     return reviewResult(
       shipment,
       'CAPACITY_OUT_OF_RANGE',
-      'This shipment exceeds the automatic limit of 14 pallets or 8,000 lb.'
+      'This shipment exceeds the automatic enclosed-trailer limit of 26 pallets or 45,000 lb.'
     );
   }
 
-  const selected = CAPACITY_RULES.find(function(rule) {
+  const eligibleRules = shipment.stackable === false
+    ? CAPACITY_RULES.filter(function(rule) { return rule.baseTruckType === 'Dry Van'; })
+    : CAPACITY_RULES;
+  const selected = eligibleRules.find(function(rule) {
     return pallets <= rule.palletMax && weight <= rule.weightMax && partsFit(parts, rule);
   });
   if (!selected) {
-    const straight = CAPACITY_RULES[CAPACITY_RULES.length - 1];
-    const oversized = !partsFit(parts, straight);
+    const dryVan = CAPACITY_RULES[CAPACITY_RULES.length - 1];
+    const oversized = !partsFit(parts, dryVan);
     return reviewResult(
       shipment,
       oversized ? 'OVERSIZED_ENCLOSED_FREIGHT' : 'FIT_REQUIRES_STAFF_VALIDATION',
       oversized
-        ? 'The freight dimensions exceed the automatic Straight Truck fit guard.'
+        ? 'The freight dimensions exceed the automatic Dry Van fit guard.'
         : 'The freight does not fit one automatic truck rule and requires staff review.'
     );
   }
@@ -249,9 +272,12 @@ export function assignTruckType(shipment: UnifiedQuoteRequest): TruckAssignmentR
     status: 'assigned',
     source: 'auto',
     ruleVersion: TRUCK_ASSIGNMENT_RULE_VERSION,
-    reason: `Smallest truck within ${selected.palletMax} pallets, ${selected.weightMax.toLocaleString('en-US')} lb, and the v1 dimension guard.`,
+    reason: shipment.stackable === false
+      ? 'A Dry Van is recommended because the freight is marked non-stackable.'
+      : `Smallest truck within ${selected.palletMax} pallets, ${selected.weightMax.toLocaleString('en-US')} lb, and the v2 dimension guard.`,
     baseTruckType: selected.baseTruckType,
-    serviceCategory: temperature.category
+    serviceCategory: temperature.category,
+    fitSummary: `${pallets} pallet${pallets === 1 ? '' : 's'} · ${weight.toLocaleString('en-US')} lb · largest piece ${Math.max(...parts.map(function(part) { return Number(part.length); }))}×${Math.max(...parts.map(function(part) { return Number(part.width); }))}×${Math.max(...parts.map(function(part) { return Number(part.height); }))} in`
   };
   const next: UnifiedQuoteRequest = {
     ...shipment,
@@ -265,4 +291,77 @@ export function assignTruckType(shipment: UnifiedQuoteRequest): TruckAssignmentR
 
 export function isStaffTruckType(value: any): boolean {
   return STAFF_TRUCK_TYPES.has(String(value || '').trim());
+}
+
+export interface AITruckValidationResult {
+  accepted: boolean;
+  shipment: UnifiedQuoteRequest;
+  reason: string;
+}
+
+/**
+ * Applies a model recommendation only when it passes the same hard capacity,
+ * dimension, stackability, and temperature-service rules used by the CRM.
+ * Staff choices always remain authoritative.
+ */
+export function applyValidatedAITruckRecommendation(
+  shipment: UnifiedQuoteRequest,
+  recommendedTruckType: any,
+  modelReason?: string
+): AITruckValidationResult {
+  const current = assignTruckType(shipment).shipment;
+  const prior = current.truckAssignment as TruckAssignmentMetadata | undefined;
+  if (prior && prior.source === 'staff') {
+    return {
+      accepted: false,
+      shipment: current,
+      reason: 'Staff-confirmed equipment was preserved.'
+    };
+  }
+
+  const truckType = String(recommendedTruckType || '').trim() as SupportedTruckType;
+  if (!STAFF_TRUCK_TYPES.has(truckType)) {
+    return { accepted: false, shipment: current, reason: 'The AI recommendation is not a supported truck type.' };
+  }
+
+  const pallets = positiveInteger(current.pieces && current.pieces.quantity);
+  const weight = finitePositive(current.weight && current.weight.value);
+  const parts = validParts(current);
+  const service = temperatureCategory(current);
+  const isReefer = /^Reefer\b/i.test(truckType);
+  const baseTruckType = truckType.replace(/^Reefer\s+/i, '') as TruckCapacityRule['baseTruckType'];
+  const rule = CAPACITY_RULES.find(function(candidate) {
+    return candidate.baseTruckType === baseTruckType;
+  });
+
+  if (
+    !rule || pallets == null || weight == null || !parts || !hasCanonicalUnits(current) ||
+    !service.category || isReefer !== (service.category === 'reefer') ||
+    (current.stackable === false && baseTruckType !== 'Dry Van') ||
+    pallets > rule.palletMax || weight > rule.weightMax || !partsFit(parts, rule)
+  ) {
+    return {
+      accepted: false,
+      shipment: current,
+      reason: 'The AI recommendation did not pass the deterministic capacity and service safeguards.'
+    };
+  }
+
+  const next: UnifiedQuoteRequest = {
+    ...current,
+    truckType,
+    datEquipmentType: datEquipmentFor(truckType),
+    temperatureControlled: service.category === 'reefer'
+  };
+  const metadata: TruckAssignmentMetadata = {
+    status: 'assigned',
+    source: 'ai',
+    ruleVersion: TRUCK_ASSIGNMENT_RULE_VERSION,
+    reason: modelReason || 'OpenAI recommended this equipment and the CRM capacity safeguards confirmed the fit.',
+    baseTruckType,
+    serviceCategory: service.category,
+    fitSummary: prior && prior.fitSummary
+  };
+  next.truckAssignment = metadata;
+  return { accepted: true, shipment: next, reason: metadata.reason };
 }

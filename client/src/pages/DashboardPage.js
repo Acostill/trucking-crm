@@ -100,6 +100,7 @@ export default function DashboardPage() {
   const [loads, setLoads] = useState([]);
   const [quotes, setQuotes] = useState([]);
   const [operationsHealth, setOperationsHealth] = useState(null);
+  const [customerPerformance, setCustomerPerformance] = useState({ summary: {}, customers: [] });
   const [loading, setLoading] = useState(true);
   const [refreshWarning, setRefreshWarning] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -125,6 +126,7 @@ export default function DashboardPage() {
       ];
       if (canManageQuotes) {
         requests.push(requestJson('/api/email-quotes?limit=75'));
+        requests.push(requestJson('/api/operations/customer-performance'));
       }
 
       const results = await Promise.allSettled(requests);
@@ -138,6 +140,9 @@ export default function DashboardPage() {
       }
       if (canManageQuotes && results[2] && results[2].status === 'fulfilled' && Array.isArray(results[2].value)) {
         setQuotes(results[2].value);
+      }
+      if (canManageQuotes && results[3] && results[3].status === 'fulfilled') {
+        setCustomerPerformance(results[3].value || { summary: {}, customers: [] });
       }
       if (results.some(function(result) { return result.status === 'rejected'; })) {
         setRefreshWarning('Some live counts could not be refreshed. Open the related workspace for the latest status.');
@@ -180,6 +185,8 @@ export default function DashboardPage() {
   }, [loads, quotes]);
 
   const actionableQuotes = summary.quoteAttention + summary.quoteWorking + summary.readyToPrice;
+  const customerSummary = customerPerformance.summary || {};
+  const topCustomers = Array.isArray(customerPerformance.customers) ? customerPerformance.customers.slice(0, 8) : [];
   const recentQuotes = quotes.slice(0, 4);
   const recentLoads = loads.slice(0, 4);
   const mailbox = operationsHealth && operationsHealth.gmail;
@@ -359,10 +366,34 @@ export default function DashboardPage() {
                     tone="blue"
                   />
                   <DashboardMetric
+                    icon={Send}
+                    label="Quotes sent"
+                    value={loading ? '—' : (customerSummary.sent || 0)}
+                    detail="Customer offers delivered"
+                    to="/email-quotes"
+                    tone="blue"
+                  />
+                  <DashboardMetric
+                    icon={CheckCircle2}
+                    label="Awarded"
+                    value={loading ? '—' : (customerSummary.awarded || 0)}
+                    detail="Customer wins"
+                    to="/email-quotes"
+                    tone="green"
+                  />
+                  <DashboardMetric
                     icon={CircleDollarSign}
-                    label="Ready to price"
-                    value={loading ? '—' : summary.readyToPrice}
-                    detail="Carrier comparison next"
+                    label="Lost"
+                    value={loading ? '—' : (customerSummary.lost || 0)}
+                    detail="Recorded losses"
+                    to="/email-quotes"
+                    tone="slate"
+                  />
+                  <DashboardMetric
+                    icon={Clock3}
+                    label="Follow-ups due"
+                    value={loading ? '—' : (customerSummary.followUpsDue || 0)}
+                    detail="Customer action needed"
                     to="/email-quotes"
                     tone="amber"
                   />
@@ -387,23 +418,34 @@ export default function DashboardPage() {
                   />
                 </>
               )}
-              <DashboardMetric
-                icon={Truck}
-                label="In transit"
-                value={loading ? '—' : summary.inTransit}
-                detail="Active shipments"
-                to="/loads"
-                tone="green"
-              />
-              <DashboardMetric
-                icon={CheckCircle2}
-                label="Completed"
-                value={loading ? '—' : summary.delivered}
-                detail="Delivered or closed"
-                to="/pipeline"
-                tone="slate"
-              />
+              {!canManageQuotes && <DashboardMetric icon={Truck} label="In transit" value={loading ? '—' : summary.inTransit} detail="Active shipments" to="/loads" tone="green" />}
+              {!canManageQuotes && <DashboardMetric icon={CheckCircle2} label="Completed" value={loading ? '—' : summary.delivered} detail="Delivered or closed" to="/pipeline" tone="slate" />}
             </section>
+
+            {canManageQuotes && (
+              <section className="ops-dashboard-section">
+                <div className="ops-dashboard-section-heading row">
+                  <div>
+                    <span className="ops-dashboard-section-kicker">Customer performance</span>
+                    <h2>Quotes, wins, losses, and follow-ups</h2>
+                    <p>One view of quoting activity by customer.</p>
+                  </div>
+                </div>
+                {topCustomers.length ? (
+                  <div className="ops-customer-table-wrap">
+                    <table className="ops-customer-table">
+                      <thead><tr><th>Customer</th><th>Sent</th><th>Awarded</th><th>Lost</th><th>Win rate</th><th>Follow-ups</th></tr></thead>
+                      <tbody>{topCustomers.map(function(customer) {
+                        return <tr key={customer.customerEmail}>
+                          <td><strong>{customer.customerName || customer.customerEmail}</strong><span>{customer.customerEmail}</span></td>
+                          <td>{customer.sent}</td><td>{customer.awarded}</td><td>{customer.lost}</td><td>{customer.winRatePct}%</td><td>{customer.followUpsDue}</td>
+                        </tr>;
+                      })}</tbody>
+                    </table>
+                  </div>
+                ) : <div className="ops-dashboard-empty"><Inbox size={20} /><span>Customer results will appear after the team sends and updates quotes.</span></div>}
+              </section>
+            )}
 
             <section className="ops-dashboard-section">
               <div className="ops-dashboard-section-heading">

@@ -32,7 +32,18 @@ export default function AuthForm(props) {
       if (!resp.ok) {
         throw new Error((data && data.error) || 'Authentication failed');
       }
-      if (onAuthed) onAuthed(data.user || null);
+      // Confirm the browser actually retained the HttpOnly session cookie.
+      // This prevents a successful password check from looking like an
+      // authorization failure on the very next protected request.
+      var sessionResp = await fetch(buildApiUrl('/api/auth/me'), {
+        credentials: 'include',
+        cache: 'no-store'
+      });
+      var sessionData = await sessionResp.json().catch(function(){ return null; });
+      if (!sessionResp.ok || !sessionData || !sessionData.user) {
+        throw new Error('Your password was accepted, but the browser did not retain the secure session. Refresh the page and allow cookies for this site.');
+      }
+      if (onAuthed) onAuthed(sessionData.user);
     } catch (err) {
       setError(err && err.message ? err.message : String(err));
     } finally {

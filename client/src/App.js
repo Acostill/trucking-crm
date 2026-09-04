@@ -5,11 +5,10 @@ import NewLoadModal from './components/NewLoadModal';
 import LoadsTable from './components/LoadsTable';
 import AuthForm from './components/AuthForm';
 import Sidebar from './components/Sidebar';
-import EmailPastePage from './pages/EmailPastePage';
 import CalculateRatePage from './pages/CalculateRatePage';
 import AdminPortalPage from './pages/AdminPortalPage';
-import AdminFinancePage from './pages/AdminFinancePage';
 import AdminProfitMarginPage from './pages/AdminProfitMarginPage';
+import AdminFinancePage from './pages/AdminFinancePage';
 import DashboardPage from './pages/DashboardPage';
 import PipelinePage from './pages/PipelinePage';
 import QuoteViewPage from './pages/QuoteViewPage';
@@ -165,10 +164,11 @@ function AppRoutes() {
       <Route path="/portal/quote" element={<CustomerPortalPage />} />
       <Route path="/dashboard" element={<OperationsRoute><DashboardPage /></OperationsRoute>} />
       <Route path="/calculate-rate" element={<CalculateRatePage />} />
-      <Route path="/email-paste" element={<OperationsRoute><EmailPastePage /></OperationsRoute>} />
+      <Route path="/email-paste" element={<Navigate to="/dashboard" replace />} />
       <Route path="/email-quotes" element={<OperationsRoute allowPreview requiredRole="quote_approver"><EmailQuoteInboxPage /></OperationsRoute>} />
       <Route path="/admin-portal" element={<OperationsRoute requiredRole="admin"><AdminPortalPage /></OperationsRoute>} />
-      <Route path="/admin-finance" element={<OperationsRoute requiredRole="admin"><AdminFinancePage /></OperationsRoute>} />
+      <Route path="/client-results" element={<OperationsRoute allowPreview requiredRole="quote_approver"><AdminFinancePage /></OperationsRoute>} />
+      <Route path="/admin-finance" element={<Navigate to="/client-results" replace />} />
       <Route path="/admin-profit-margin" element={<OperationsRoute requiredRole="admin"><AdminProfitMarginPage /></OperationsRoute>} />
       <Route path="/pipeline" element={<OperationsRoute><PipelinePage /></OperationsRoute>} />
       <Route path="/loads" element={<OperationsRoute><DashboardApp /></OperationsRoute>} />

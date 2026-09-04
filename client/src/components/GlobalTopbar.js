@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../context/SidebarContext';
-import { Truck, LogOut, User, Sparkles, ShieldCheck, Menu } from 'lucide-react';
+import { Truck, LogOut, User, ShieldCheck, Menu } from 'lucide-react';
 
 function GlobalTopbar() {
   const auth = useAuth();
@@ -87,14 +87,6 @@ function GlobalTopbar() {
           >
             <Truck size={16} />
             Loads
-          </Link>
-          <Link 
-            to="/email-paste" 
-            style={location.pathname === '/email-paste' ? activeLinkStyle : linkStyle}
-            className="nav-link"
-          >
-            <Sparkles size={16} />
-            Email AI
           </Link>
           {isAdmin && (
             <Link 

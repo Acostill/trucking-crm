@@ -42,16 +42,18 @@ function expectReview(request: UnifiedQuoteRequest, reasonCode: string) {
 
 function run() {
   expectAssigned(shipment(1, 500), 'Cargo Van', 'Van');
-  expectAssigned(shipment(3, 3000), 'Cargo Van', 'Van');
+  expectAssigned(shipment(3, 3500), 'Cargo Van', 'Van');
 
   expectAssigned(shipment(4, 3000), 'Box Truck', 'Van');
   expectAssigned(shipment(2, 4000), 'Box Truck', 'Van');
-  expectAssigned(shipment(6, 6000), 'Box Truck', 'Van');
+  expectAssigned(shipment(6, 8000), 'Box Truck', 'Van');
   expectAssigned(shipment(2, 2000, { length: 73, width: 40, height: 48 }), 'Box Truck', 'Van');
 
-  expectAssigned(shipment(7, 6000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(6, 6001), 'Straight Truck', 'Van');
-  expectAssigned(shipment(14, 8000), 'Straight Truck', 'Van');
+  expectAssigned(shipment(7, 8000), 'Straight Truck', 'Van');
+  expectAssigned(shipment(6, 8001), 'Straight Truck', 'Van');
+  expectAssigned(shipment(12, 10000), 'Straight Truck', 'Van');
+  expectAssigned(shipment(13, 10000), 'Dry Van', 'Van');
+  expectAssigned(shipment(5, 2500, undefined, { stackable: false }), 'Dry Van', 'Van');
 
   const reefer = expectAssigned(
     shipment(3, 3000, undefined, { temperatureControl: { minC: 2, maxC: 8 } }),
@@ -65,9 +67,9 @@ function run() {
     'Reefer'
   );
 
-  expectReview(shipment(15, 7000), 'CAPACITY_OUT_OF_RANGE');
-  expectReview(shipment(10, 8001), 'CAPACITY_OUT_OF_RANGE');
-  expectReview(shipment(2, 2000, { length: 121, width: 40, height: 48 }), 'OVERSIZED_ENCLOSED_FREIGHT');
+  expectReview(shipment(27, 7000), 'CAPACITY_OUT_OF_RANGE');
+  expectReview(shipment(10, 45001), 'CAPACITY_OUT_OF_RANGE');
+  expectReview(shipment(2, 2000, { length: 637, width: 40, height: 48 }), 'OVERSIZED_ENCLOSED_FREIGHT');
   expectReview({ pieces: { quantity: 2, parts: [{}] }, weight: { value: 2000 } }, 'MISSING_REQUIRED_FREIGHT_DATA');
   expectReview({
     ...shipment(2, 2000),

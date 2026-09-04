@@ -1,7 +1,7 @@
 import assert from 'assert';
 import { EventEmitter } from 'events';
 import https from 'https';
-import { callExpediteAllAPI } from '../services/expediteAll';
+import { callExpediteAllAPI, prepareExpediteAllRequest } from '../services/expediteAll';
 
 async function run() {
   const originalBaseUrl = process.env.EXPEDITEALL_BASE_URL;
@@ -50,6 +50,33 @@ async function run() {
     assert.strictEqual(parsedPayload.shipmentId, '1');
     assert.strictEqual(parsedPayload.referenceNumber, 'Reference12345');
     assert.strictEqual(parsedPayload.pickup.date, '2026-09-08T00:00:00.000Z');
+
+    const cleaned = prepareExpediteAllRequest({
+      hazardousMaterial: { unNumbers: ['', '  '] },
+      accessorialCodes: ['', 'NONE']
+    });
+    assert.strictEqual(cleaned.hazardousMaterial, undefined);
+    assert.deepStrictEqual(cleaned.accessorialCodes, ['NONE']);
+
+    capturedPayload = '';
+    (https as any).request = function(_options: any, callback: (response: EventEmitter & any) => void) {
+      const response: EventEmitter & any = new EventEmitter();
+      response.statusCode = 200;
+      response.headers = { 'content-type': 'text/plain' };
+      callback(response);
+      const request: EventEmitter & any = new EventEmitter();
+      request.write = function() {};
+      request.end = function() {
+        process.nextTick(function() {
+          response.emit('data', JSON.stringify({ priceTotal: 640, truckType: 'Box Truck' }));
+          response.emit('end');
+        });
+      };
+      return request;
+    };
+    const mislabeledJson = await callExpediteAllAPI({});
+    assert.strictEqual(mislabeledJson.statusCode, 200);
+    assert.strictEqual((mislabeledJson.data as any).priceTotal, 640);
 
     console.log('ExpediteAll production configuration tests passed.');
   } finally {

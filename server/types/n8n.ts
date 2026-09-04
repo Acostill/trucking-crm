@@ -3,6 +3,8 @@
  */
 
 export interface PickupLocation {
+  location_code?: string;
+  airport_code?: string;
   city?: string;
   state?: string;
   zip?: string;
@@ -36,6 +38,11 @@ export interface Dimension {
   length_in?: number;
   width_in?: number;
   height_in?: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  unit?: string;
+  dimension_unit?: string;
   count?: number;
   pallets?: number;
   quantity?: number;
@@ -46,6 +53,10 @@ export interface ShipmentInfo {
   dimensions?: Dimension[];
   total_weight_lbs?: number;
   weight_lbs?: number;
+  total_weight?: number;
+  weight?: number;
+  weight_unit?: string;
+  unit_of_weight?: string;
   commodity?: string;
   stackable?: boolean;
   temperature_control?: {
@@ -129,4 +140,3 @@ export interface N8nEmailPasteResponse {
   truck_type?: string;
   output?: N8nEmailPasteResponse;
 }
-

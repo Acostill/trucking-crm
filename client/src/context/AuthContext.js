@@ -17,7 +17,7 @@ export function AuthProvider(props) {
   var refresh = useCallback(async function() {
     setChecking(true);
     try {
-      var resp = await fetch(buildApiUrl('/api/auth/me'), { credentials: 'include' });
+      var resp = await fetch(buildApiUrl('/api/auth/me'), { credentials: 'include', cache: 'no-store' });
       if (resp.ok) {
         var data = await resp.json().catch(function(){ return null; });
         setUser(data && data.user ? data.user : null);
@@ -63,4 +63,3 @@ export function AuthProvider(props) {
 export function useAuth() {
   return useContext(AuthContext);
 }
-

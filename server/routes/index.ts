@@ -19,6 +19,7 @@ import { generatePDFFromHTML } from '../services/pdfGenerator';
 import { getUnifiedQuotes } from '../services/unifiedQuoteService';
 import { searchZipcodebase, searchCityZipcodebase, ZipcodebaseError } from '../services/zipcodebase';
 import { UnifiedQuoteRequest } from '../types/quote';
+import { normalizeAirportLocation } from '../services/shipmentNormalization';
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ const AIRPORT_CODES: Record<string, { city: string; state: string; zip: string }
   'DFW': { city: 'Dallas', state: 'TX', zip: '75261' },
   'DAL': { city: 'Dallas', state: 'TX', zip: '75235' },
   'ATL': { city: 'Atlanta', state: 'GA', zip: '30320' },
-  'MIA': { city: 'Miami', state: 'FL', zip: '33126' },
+  'MIA': { city: 'Miami', state: 'FL', zip: '33142' },
   'FLL': { city: 'Fort Lauderdale', state: 'FL', zip: '33315' },
   'SEA': { city: 'Seattle', state: 'WA', zip: '98158' },
   'SFO': { city: 'San Francisco', state: 'CA', zip: '94128' },
@@ -57,38 +58,15 @@ const AIRPORT_CODES: Record<string, { city: string; state: string; zip: string }
   'PDX': { city: 'Portland', state: 'OR', zip: '97218' },
   'STL': { city: 'St. Louis', state: 'MO', zip: '63145' },
   'MCI': { city: 'Kansas City', state: 'MO', zip: '64153' },
-  'FCO': { city: 'El Paso', state: 'TX', zip: '79925' } // Fort Bliss/El Paso area
+  'BNA': { city: 'Nashville', state: 'TN', zip: '37214' },
+  'MCO': { city: 'Orlando', state: 'FL', zip: '32827' },
+  'SAN': { city: 'San Diego', state: 'CA', zip: '92101' }
 };
 
 // Helper function to resolve airport codes in location data
 function resolveAirportCode(location: any): any {
   if (!location || typeof location !== 'object') return location;
-  
-  const city = location.city || '';
-  const upperCity = city.toUpperCase().trim();
-  
-  // Extract airport code if it's in format like "IAH airport" or just "IAH"
-  let airportCode = upperCity;
-  if (upperCity.includes(' ')) {
-    // Try to extract 3-letter code from the beginning
-    const match = upperCity.match(/^([A-Z]{3})\s/);
-    if (match) {
-      airportCode = match[1];
-    }
-  }
-  
-  // Check if city matches an airport code
-  if (AIRPORT_CODES[airportCode]) {
-    const airportInfo = AIRPORT_CODES[airportCode];
-    return {
-      ...location,
-      city: airportInfo.city,
-      state: location.state || airportInfo.state,
-      zip: location.zip || airportInfo.zip
-    };
-  }
-  
-  return location;
+  return { ...location, ...normalizeAirportLocation(location) };
 }
 
 function generateLoadNumber() {
@@ -139,7 +117,7 @@ export async function parseEmailWithOpenRouter(emailContent: string): Promise<N8
     '    "greeting": string,',
     '    "message": string,',
     '    "shipment_details": {',
-    '      "pickup": { "city": string, "state": string, "zip": string, "pickup_date": string, "pickup_ready_time": string, "pickup_close_time": string },',
+    '      "pickup": { "location_code": string, "city": string, "state": string, "zip": string, "pickup_date": string, "pickup_ready_time": string, "pickup_close_time": string },',
     '      "delivery_options": [',
     '        { "location_code": string, "city": string, "state": string, "type": string, "zip_code": string, "requested_delivery_date": string, "delivery_time_window_start": string, "delivery_time_window_end": string }',
     '      ],',
@@ -168,6 +146,10 @@ export async function parseEmailWithOpenRouter(emailContent: string): Promise<N8
     '}',
     'If a list has no items, return an empty array.',
     'Do not include any additional keys.',
+    'Convert all shipment dimensions to inches before returning length_in, width_in, and height_in.',
+    'Convert total shipment weight to pounds before returning total_weight_lbs (1 kg = 2.2046226218 lb).',
+    'Preserve a three-letter US airport code in location_code. If it is the only location supplied, also resolve it to its airport city/state/ZIP when known.',
+    'Only add a dangerous-goods compliance flag when the email explicitly supplies a UN#### code or explicitly says the shipment is hazardous. Do not infer hazardous status from a commodity keyword alone.',
     '',
     'EMAIL TEXT:',
     emailContent

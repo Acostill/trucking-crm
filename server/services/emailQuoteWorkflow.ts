@@ -8,7 +8,7 @@ import {
   getUnifiedQuotes,
   UnifiedQuoteResponse
 } from './unifiedQuoteService';
-import { GmailQuoteMessage } from './gmailQuoteInbox';
+import { GmailQuoteMessage, hydrateGmailQuoteMessageAttachments } from './gmailQuoteInbox';
 import {
   buildCarrierRecommendation,
   CarrierQuoteOption
@@ -20,6 +20,12 @@ import {
   queueAutomaticDatLookups
 } from './datRateViewJobs';
 import { assignTruckType } from './truckAssignment';
+import { adviseShipmentWithOpenAI } from './shipmentAIAdvisor';
+import {
+  dimensionToInches,
+  normalizeAirportLocation,
+  weightToPounds
+} from './shipmentNormalization';
 
 export interface ShipmentValidation {
   valid: boolean;
@@ -96,11 +102,18 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
     })
     .filter(Boolean);
   const parts = dimensions.map(function(dimension: any) {
+    const sourceUnit = dimension.dimension_unit || dimension.unit || shipmentInfo.dimension_unit || 'in';
     return {
       count: finiteNumber(dimension.count || dimension.quantity) || 1,
-      length: finiteNumber(dimension.length_in || dimension.length),
-      width: finiteNumber(dimension.width_in || dimension.width),
-      height: finiteNumber(dimension.height_in || dimension.height)
+      length: dimension.length_in != null
+        ? finiteNumber(dimension.length_in)
+        : dimensionToInches(dimension.length, sourceUnit),
+      width: dimension.width_in != null
+        ? finiteNumber(dimension.width_in)
+        : dimensionToInches(dimension.width, sourceUnit),
+      height: dimension.height_in != null
+        ? finiteNumber(dimension.height_in)
+        : dimensionToInches(dimension.height, sourceUnit)
     };
   });
   const inferredQuantity =
@@ -108,21 +121,20 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
     finiteNumber(shipmentDetails.pallets) ||
     parts.reduce(function(sum, part) { return sum + Number(part.count || 1); }, 0) ||
     undefined;
-  const totalWeight =
+  const canonicalWeight =
     finiteNumber(shipmentInfo.total_weight_lbs) ||
     finiteNumber(shipmentInfo.weight_lbs) ||
-    finiteNumber(shipmentDetails.shipment_weight_lbs) ||
-    finiteNumber(shipmentDetails.weight);
+    finiteNumber(shipmentDetails.shipment_weight_lbs);
+  const sourceWeight = shipmentInfo.total_weight ?? shipmentInfo.weight ?? shipmentDetails.weight;
+  const totalWeight = canonicalWeight || weightToPounds(
+    sourceWeight,
+    shipmentInfo.weight_unit || shipmentInfo.unit_of_weight || shipmentDetails.weight_unit || 'lbs'
+  );
 
   const temperatureControl = shipmentInfo.temperature_control;
   const shipment: UnifiedQuoteRequest = {
     pickup: {
-      location: {
-        city: pickup.city || undefined,
-        state: pickup.state || undefined,
-        zip: pickup.zip || pickup.zip_code || undefined,
-        country: 'US'
-      },
+      location: normalizeAirportLocation(pickup),
       date: normalizedDate(
         pickup.pickup_date ||
         pickup.requested_date_time ||
@@ -132,12 +144,7 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
       )
     },
     delivery: {
-      location: {
-        city: delivery.city || undefined,
-        state: delivery.state || undefined,
-        zip: delivery.zip_code || delivery.zip || undefined,
-        country: 'US'
-      },
+      location: normalizeAirportLocation(delivery),
       date: normalizedDate(
         delivery.requested_delivery_date ||
         delivery.expected_date ||
@@ -325,23 +332,30 @@ export async function rateEmailQuoteRequest(
     return result.rows[0];
   }
 
+  // GPT adds operational advice and recommends equipment, while the CRM's
+  // deterministic capacity rules retain final safety authority. The resulting
+  // truckType/datEquipmentType is the same payload sent to connected carriers
+  // and queued for DAT.
+  const aiResult = await adviseShipmentWithOpenAI(shipment);
+  const advisedShipment = aiResult.shipment;
+
   await db.query(
     `UPDATE public.email_quote_requests
      SET shipment_request = $2::jsonb,
          status = 'rating',
          processing_error = NULL
      WHERE id = $1`,
-    [id, JSON.stringify(shipment)]
+    [id, JSON.stringify(advisedShipment)]
   );
 
-  const unified = await getUnifiedQuotes(shipment, {
+  const unified = await getUnifiedQuotes(advisedShipment, {
     includeDat: false,
     applyDefaultMargin: false
   });
   const connectedCarrierQuotes = mapCarrierQuotes(unified);
   let datOptions: CarrierQuoteOption[];
   try {
-    datOptions = await prepareDatRateViewOptions(id, shipment);
+    datOptions = await prepareDatRateViewOptions(id, advisedShipment);
   } catch (err: any) {
     // Keep connected carrier rating available even when the separate worker queue is unavailable.
     console.error('DAT RateView preparation failed:', err && err.message ? err.message : err);
@@ -457,6 +471,7 @@ export async function ingestGmailQuoteMessage(message: GmailQuoteMessage): Promi
       return { created: false, record: existingThread.rows[0] };
     }
   }
+  const hydratedMessage = await hydrateGmailQuoteMessageAttachments(message);
   const id = generateEmailQuoteId();
   const inserted = await db.query(
     `INSERT INTO public.email_quote_requests (
@@ -469,16 +484,16 @@ export async function ingestGmailQuoteMessage(message: GmailQuoteMessage): Promi
      RETURNING *`,
     [
       id,
-      message.mailboxAddress,
-      message.externalMessageId,
-      message.externalThreadId || null,
-      message.internetMessageId || null,
-      message.senderName || null,
-      message.senderEmail || null,
-      message.recipientEmail || null,
-      message.subject || null,
-      message.receivedAt || new Date().toISOString(),
-      message.rawText
+      hydratedMessage.mailboxAddress,
+      hydratedMessage.externalMessageId,
+      hydratedMessage.externalThreadId || null,
+      hydratedMessage.internetMessageId || null,
+      hydratedMessage.senderName || null,
+      hydratedMessage.senderEmail || null,
+      hydratedMessage.recipientEmail || null,
+      hydratedMessage.subject || null,
+      hydratedMessage.receivedAt || new Date().toISOString(),
+      hydratedMessage.rawText
     ]
   );
   if (!inserted.rows.length) {
