@@ -42,7 +42,9 @@ function expectReview(request: UnifiedQuoteRequest, reasonCode: string) {
 
 function run() {
   expectAssigned(shipment(1, 500), 'Cargo Van', 'Van');
-  expectAssigned(shipment(3, 3500), 'Cargo Van', 'Van');
+  expectAssigned(shipment(3, 3000), 'Cargo Van', 'Van');
+  expectAssigned(shipment(3, 3001), 'Box Truck', 'Van');
+  expectAssigned(shipment(3, 3450), 'Box Truck', 'Van');
 
   expectAssigned(shipment(4, 3000), 'Box Truck', 'Van');
   expectAssigned(shipment(2, 4000), 'Box Truck', 'Van');

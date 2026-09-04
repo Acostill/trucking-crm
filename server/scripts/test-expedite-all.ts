@@ -51,6 +51,34 @@ async function run() {
     assert.strictEqual(parsedPayload.referenceNumber, 'Reference12345');
     assert.strictEqual(parsedPayload.pickup.date, '2026-09-08T00:00:00.000Z');
 
+    (https as any).request = function(_options: any, callback: (response: EventEmitter & any) => void) {
+      const response: EventEmitter & any = new EventEmitter();
+      response.statusCode = 422;
+      response.headers = { 'content-type': 'application/json' };
+      callback(response);
+      const request: EventEmitter & any = new EventEmitter();
+      request.write = function() {};
+      request.end = function() {
+        process.nextTick(function() {
+          response.emit('data', JSON.stringify({
+            message: 'The weight of the load exceeds the limit.',
+            code: 'LOAD_WEIGHT_OVER_LIMIT'
+          }));
+          response.emit('end');
+        });
+      };
+      return request;
+    };
+    const overweightCargoVan = await callExpediteAllAPI({
+      truckType: 'Cargo Van',
+      weight: { value: 3450, unit: 'lbs' }
+    });
+    assert.strictEqual(overweightCargoVan.statusCode, 422);
+    assert.strictEqual(
+      (overweightCargoVan.data as any).error,
+      "Cargo Van exceeds ExpediteAll's 3,000 lb limit; Box Truck or larger equipment is required."
+    );
+
     const cleaned = prepareExpediteAllRequest({
       hazardousMaterial: { unNumbers: ['', '  '] },
       accessorialCodes: ['', 'NONE']

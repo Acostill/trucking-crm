@@ -106,6 +106,27 @@ export interface ExpediteAllResponse {
   [key: string]: any; // Allow additional properties from API
 }
 
+export function describeExpediteAllError(
+  body: UnifiedQuoteRequest,
+  response: any
+): string {
+  const providerMessage = String(response && (response.message || response.error) || '').trim();
+  const providerCode = String(response && response.code || '').trim().toUpperCase();
+  const truckType = String(body && body.truckType || '').trim();
+  const weight = Number(body && body.weight && body.weight.value);
+
+  if (
+    providerCode === 'LOAD_WEIGHT_OVER_LIMIT' &&
+    /cargo van/i.test(truckType) &&
+    Number.isFinite(weight) &&
+    weight > 3000
+  ) {
+    return `${truckType} exceeds ExpediteAll's 3,000 lb limit; Box Truck or larger equipment is required.`;
+  }
+
+  return providerMessage || 'ExpediteAll rejected the rating request.';
+}
+
 /**
  * Calls the external ExpediteAll API
  * @param body - The request body to send to the API
@@ -149,11 +170,10 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
             console.log('[ExpediteAll] Raw response:', JSON.stringify({ statusCode: apiRes.statusCode, data: parsed }, null, 2));
             const statusCode = apiRes.statusCode || 500;
             if (statusCode < 200 || statusCode >= 300) {
-              const providerMessage = (parsed as any).message || (parsed as any).error;
               resolve({
                 statusCode,
                 data: {
-                  error: providerMessage || `ExpediteAll returned HTTP ${statusCode}`,
+                  error: describeExpediteAllError(body, parsed) || `ExpediteAll returned HTTP ${statusCode}`,
                   raw: data
                 } as ErrorResponse
               });
