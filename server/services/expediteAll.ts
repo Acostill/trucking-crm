@@ -3,6 +3,35 @@ import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote'
 
 const DEFAULT_SHIPMENT_ID = '1';
 const DEFAULT_REFERENCE_NUMBER = 'Reference12345';
+const RATE_PATH = 'calculate-rate';
+
+interface ExpediteAllConfig {
+  endpoint?: URL;
+  apiKey?: string;
+  error?: string;
+}
+
+function getExpediteAllConfig(): ExpediteAllConfig {
+  const baseUrl = (process.env.EXPEDITEALL_BASE_URL || '').trim();
+  const apiKey = (process.env.EXPEDITEALL_API_KEY || '').trim();
+
+  if (!baseUrl || !apiKey) {
+    return {
+      error: 'ExpediteAll is not configured. Set EXPEDITEALL_BASE_URL and EXPEDITEALL_API_KEY on the server.'
+    };
+  }
+
+  try {
+    const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    const endpoint = new URL(RATE_PATH, normalizedBaseUrl);
+    if (endpoint.protocol !== 'https:') {
+      return { error: 'EXPEDITEALL_BASE_URL must use HTTPS.' };
+    }
+    return { endpoint, apiKey };
+  } catch (_error) {
+    return { error: 'EXPEDITEALL_BASE_URL is not a valid URL.' };
+  }
+}
 
 function applyExpediteAllDefaults(body: UnifiedQuoteRequest): UnifiedQuoteRequest {
   const cloned: UnifiedQuoteRequest = { ...body };
@@ -71,16 +100,26 @@ export interface ExpediteAllResponse {
  */
 export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIResponse<ExpediteAllResponse | ErrorResponse>> {
   return new Promise((resolve, reject) => {
+    const config = getExpediteAllConfig();
+    if (!config.endpoint || !config.apiKey) {
+      resolve({
+        statusCode: 503,
+        data: { error: config.error || 'ExpediteAll is not configured.' } as ErrorResponse
+      });
+      return;
+    }
+
     const payload = JSON.stringify(applyExpediteAllDefaults(body || {} as UnifiedQuoteRequest) || {});
     const options = {
       method: 'POST',
-      hostname: 'stage-lb-public-api-back.rhinocodes.org',
-      path: '/api/v2/calculate-rate',
+      hostname: config.endpoint.hostname,
+      port: config.endpoint.port || undefined,
+      path: `${config.endpoint.pathname}${config.endpoint.search}`,
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
-        'X-API-Key': 'S7RcSvj5jAhl.2c7e2ZXsOQQqsW0zQedWlRfrDcJ1BPWa'
+        'X-API-Key': config.apiKey
       }
     };
 

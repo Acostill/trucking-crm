@@ -17,6 +17,7 @@
     "test:auto-dat-queue": "ts-node ./scripts/test-auto-dat-queue.ts",
     "test:dat-worker-state": "ts-node ./scripts/test-dat-worker-state-machine.ts",
     "test:truck-assignment": "ts-node ./scripts/test-truck-assignment.ts",
+    "test:expedite-all": "ts-node ./scripts/test-expedite-all.ts",
     "test:phase1-hardening": "ts-node ./scripts/test-phase1-hardening.ts",
     "test:phase1-quote-routes": "ts-node ./scripts/test-phase1-quote-routes.ts",
     "test:admin-users": "ts-node ./scripts/test-admin-user-management.ts",
