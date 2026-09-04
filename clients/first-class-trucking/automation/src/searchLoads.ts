@@ -879,6 +879,11 @@ export async function collectCompleteDirectRows(
         datLoadId: id,
         sourceOrder: collected.size,
       });
+      // DAT can render direct rows and its Similar Results batch in one DOM
+      // snapshot even while the separate direct-result counter is smaller.
+      // Direct rows precede the observed similar-results separator, so stop
+      // exactly at the independently verified direct count.
+      if (collected.size >= expectedCount) break;
     }
     if (collected.size === lastSize) unchangedPasses += 1;
     else unchangedPasses = 0;

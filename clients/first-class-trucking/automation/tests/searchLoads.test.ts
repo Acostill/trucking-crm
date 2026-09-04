@@ -149,6 +149,36 @@ test("snapshots a full DAT row batch atomically when one row has no offer elemen
   }
 });
 
+test("stops at DAT's verified direct count when the same DOM batch also contains similar rows", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const rows = Array.from({ length: 46 }, (_, index) => `
+      <div class="row-container" id="table-row-${index + 1}">
+        <div class="cell-rate"><dat-rate><span class="offer">$${2000 - index * 10}</span><span>$2.50/mi</span></dat-rate></div>
+        <div class="cell-route"><dat-route>Selma, CA Los Angeles, CA 233 mi</dat-route></div>
+        <div class="cell-timing"><dat-timing>Sep 8</dat-timing></div>
+        <div class="cell-equipment"><dat-equipment>V 1,900 lbs 53 ft - Full</dat-equipment></div>
+        <div class="cell-company"><dat-company>Carrier ${index + 1}</dat-company></div>
+        <div class="cell-credit"><dat-credit>95 CS 20 DTP</dat-credit></div>
+      </div>
+    `).join("");
+    await page.setContent(`
+      <cdk-virtual-scroll-viewport class="table-rows-container">
+        ${rows}
+      </cdk-virtual-scroll-viewport>
+    `);
+
+    const candidates = await collectCompleteDirectRows(page, 14, 2000);
+
+    assert.equal(candidates.length, 14);
+    assert.equal(candidates[0].datLoadId, "table-row-1");
+    assert.equal(candidates[13].datLoadId, "table-row-14");
+  } finally {
+    await browser.close();
+  }
+});
+
 const equipmentCases: Array<{
   requestLabel: SearchLoadsRequest["equipmentType"];
   uiLabel: string;

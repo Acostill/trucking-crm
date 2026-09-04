@@ -21,17 +21,39 @@ function perMile(value: string, field: string): number {
     .replace(/[\u00a0\u202f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  const match = normalized.match(
-    /^\(?\s*\$([\d,]+(?:\.\d+)?)\s*(?:(?:\/\s*|per\s+)(?:mi|mile))?\s*\)?$/i,
+  const numericTokens = normalized.match(/[\d,]+(?:\.\d+)?/g) || [];
+  const numericToken = numericTokens.length === 1 ? numericTokens[0] : null;
+  const numericTokenIsValid = numericToken !== null && (
+    /^\d+(?:\.\d+)?$/.test(numericToken) ||
+    /^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/.test(numericToken)
   );
-  if (!match) {
+  const residue = numericToken
+    ? normalized
+      .replace(numericToken, "")
+      .replace(/\b(?:usd|per|mi|mile|miles|rpm|average|avg)\b/gi, "")
+      .replace(/[\s$()\[\]{}\/*.\-_:;†‡*•·]/g, "")
+    : normalized;
+  const parsed = numericTokenIsValid
+    ? Number(numericToken?.replaceAll(",", ""))
+    : Number.NaN;
+  if (residue || !Number.isFinite(parsed) || parsed <= 0) {
     throw new WorkflowError(
       "EXTRACTION_UNVERIFIED",
-      `Could not parse ${field}.`,
+      `Could not parse ${field} (format ${rateFormatSignature(normalized)}).`,
       "RV-100",
     );
   }
-  return Number(match[1].replaceAll(",", ""));
+  return parsed;
+}
+
+export function rateFormatSignature(value: string): string {
+  return value
+    .replace(/[\u00a0\u202f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120)
+    .replace(/\d/g, "#")
+    .replace(/[A-Za-z]+/g, "A");
 }
 
 const RANGE_NUMBER = "([\\d,]+(?:\\.\\d+)?)";
