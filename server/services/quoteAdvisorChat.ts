@@ -273,7 +273,8 @@ export async function answerQuoteAdvisorQuestion(args: {
     const response: any = await (openai.responses as any).create({
       model,
       store: false,
-      max_output_tokens: 1100,
+      reasoning: { effort: 'low' },
+      max_output_tokens: 3500,
       max_tool_calls: webSearchEnabled ? 4 : undefined,
       safety_identifier: safetyIdentifier,
       tools: webSearchEnabled
