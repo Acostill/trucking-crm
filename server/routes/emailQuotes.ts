@@ -18,6 +18,7 @@ import {
 } from '../services/datRateViewJobs';
 import { sendGmailMessage } from '../services/gmailQuoteInbox';
 import { buildQuoteAdvisor } from '../services/quoteAdvisor';
+import { answerQuoteAdvisorQuestion } from '../services/quoteAdvisorChat';
 
 const router = express.Router();
 const QUOTE_APPROVER_ROLES = ['quote_approver'];
@@ -48,6 +49,19 @@ function numericValue(value: any): number | null {
   if (value == null || value === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function rowToAdvisorExchange(row: any) {
+  return {
+    id: row.id,
+    question: row.question,
+    answer: row.answer,
+    sources: jsonValue(row.sources, []),
+    usedWebSearch: Boolean(row.used_web_search),
+    model: row.model || null,
+    createdAt: row.created_at,
+    createdBy: row.created_by_name || null
+  };
 }
 
 function stripReplyForwardPrefix(subject: any): string {
@@ -214,6 +228,87 @@ router.get('/:id', async function(req: Request, res: Response, next: NextFunctio
       return;
     }
     res.json(rowToEmailQuote(result.rows[0], true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/:id/advisor-conversation', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!await requireOperationsUser(req, res)) return;
+    const quote = await db.query(
+      'SELECT id FROM public.email_quote_requests WHERE id = $1 AND archived_at IS NULL',
+      [req.params.id]
+    );
+    if (!quote.rows.length) {
+      res.status(404).json({ error: 'Email quote request not found' });
+      return;
+    }
+    const history = await db.query(
+      `SELECT exchange.*,
+              NULLIF(TRIM(CONCAT(COALESCE(users.first_name, ''), ' ', COALESCE(users.last_name, ''))), '') AS created_by_name
+       FROM public.email_quote_advisor_exchanges exchange
+       LEFT JOIN public.users users ON users.id = exchange.created_by
+       WHERE exchange.email_quote_request_id = $1
+       ORDER BY exchange.created_at ASC
+       LIMIT 30`,
+      [req.params.id]
+    );
+    res.json({ exchanges: history.rows.map(rowToAdvisorExchange) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/advisor-conversation', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = await requireOperationsUser(req, res);
+    if (!userId) return;
+    const question = String(req.body && req.body.question || '').trim();
+    if (!question || question.length > 2000) {
+      res.status(400).json({ error: 'Enter a question of 2,000 characters or fewer' });
+      return;
+    }
+    const quote = await db.query(
+      'SELECT * FROM public.email_quote_requests WHERE id = $1 AND archived_at IS NULL',
+      [req.params.id]
+    );
+    if (!quote.rows.length) {
+      res.status(404).json({ error: 'Email quote request not found' });
+      return;
+    }
+    const recent = await db.query(
+      `SELECT question, answer
+       FROM public.email_quote_advisor_exchanges
+       WHERE email_quote_request_id = $1
+       ORDER BY created_at DESC
+       LIMIT 6`,
+      [req.params.id]
+    );
+    const advisor = await answerQuoteAdvisorQuestion({
+      row: quote.rows[0],
+      question,
+      history: recent.rows.reverse(),
+      userId
+    });
+    const inserted = await db.queryWithUser(
+      `INSERT INTO public.email_quote_advisor_exchanges (
+         email_quote_request_id, question, answer, sources,
+         used_web_search, model, created_by
+       ) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7)
+       RETURNING *`,
+      [
+        req.params.id,
+        question,
+        advisor.answer,
+        JSON.stringify(advisor.sources),
+        advisor.usedWebSearch,
+        advisor.model,
+        userId
+      ],
+      userId
+    );
+    res.status(201).json({ exchange: rowToAdvisorExchange(inserted.rows[0]) });
   } catch (err) {
     next(err);
   }

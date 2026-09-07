@@ -7,13 +7,16 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Clock3,
+  ExternalLink,
   Inbox,
   Mail,
   MapPin,
+  MessageCircle,
   Package,
   Percent,
   RefreshCw,
   Save,
+  Search,
   Send,
   Sparkles,
   Truck,
@@ -79,6 +82,54 @@ const TRUCK_TYPE_OPTIONS = [
   'Reefer Straight Truck',
   'Reefer Dry Van'
 ];
+
+const ADVISOR_QUICK_QUESTIONS = [
+  'Check the equipment and dimensions for this shipment.',
+  'Explain the best available rate per mile using the quote facts.',
+  'Search for current route, weather, or disruption risks.',
+  'What should staff verify before sending this quote?'
+];
+
+function buildPreviewAdvisorExchange(quote, question) {
+  const shipment = (quote && quote.shipment) || {};
+  const pieces = shipment.pieces || {};
+  const part = Array.isArray(pieces.parts) ? pieces.parts[0] : null;
+  const options = quote && Array.isArray(quote.carrierQuotes) ? quote.carrierQuotes : [];
+  const connected = options
+    .filter(function(option) {
+      return option.available && option.selectable !== false && option.benchmark !== true && Number(option.cost) > 0;
+    })
+    .sort(function(a, b) { return Number(a.cost) - Number(b.cost); });
+  const benchmark = options.find(function(option) { return option.key === 'datSpot' && Number(option.miles) > 0; });
+  const miles = benchmark && Number(benchmark.miles);
+  const best = connected[0];
+  const derivedRpm = best && miles ? Number(best.cost) / miles : null;
+  const dimensions = part && part.length && part.width && part.height
+    ? `${part.count || pieces.quantity || 1} × ${part.length} × ${part.width} × ${part.height} in`
+    : 'not fully supplied';
+  const weight = shipment.weight && shipment.weight.value;
+
+  return {
+    id: 'preview-advisor-' + Date.now(),
+    question,
+    answer:
+      `Saved quote facts: ${dimensions}, ${weight ? Number(weight).toLocaleString() + ' lb' : 'weight missing'}, ` +
+      `${shipment.truckType || 'equipment not assigned'}. ` +
+      (best
+        ? `${best.source} is the lowest connected carrier cost at ${formatMoney(best.cost)}` +
+          (derivedRpm ? `, or ${formatMoney(derivedRpm)}/mi over ${miles.toLocaleString()} carrier-reported miles. ` : '. ')
+        : 'No connected carrier cost is available yet. ') +
+      (benchmark
+        ? `DAT Spot is ${formatMoney(benchmark.ratePerMile)}/mi for comparison; it is market context, not a bookable carrier quote. `
+        : '') +
+      'This preview demonstrates the quote analysis. Live web research runs after signing into the deployed CRM.',
+    sources: [],
+    usedWebSearch: false,
+    model: 'Preview',
+    createdAt: new Date().toISOString(),
+    createdBy: 'Quote Desk'
+  };
+}
 
 function defaultValidUntil() {
   const date = new Date();
@@ -652,6 +703,10 @@ export default function EmailQuoteInboxPage() {
   const [followUpStatus, setFollowUpStatus] = useState('not_needed');
   const [outcomeNotes, setOutcomeNotes] = useState('');
   const [savingWorkflow, setSavingWorkflow] = useState(false);
+  const [advisorThreads, setAdvisorThreads] = useState({});
+  const [advisorQuestion, setAdvisorQuestion] = useState('');
+  const [advisorLoading, setAdvisorLoading] = useState(false);
+  const [advisorError, setAdvisorError] = useState('');
 
   async function requestJson(path, options) {
     const response = await fetch(buildApiUrl(path), {
@@ -718,11 +773,42 @@ export default function EmailQuoteInboxPage() {
     setEmailNote(buildDefaultQuoteNote(detail));
   }
 
-  async function loadDetail(id, silent) {
+  async function loadAdvisorConversation(id) {
     if (!id) return;
     if (previewMode) {
+      setAdvisorThreads(function(current) {
+        return Object.prototype.hasOwnProperty.call(current, id)
+          ? current
+          : { ...current, [id]: [] };
+      });
+      return;
+    }
+    setAdvisorLoading(true);
+    setAdvisorError('');
+    try {
+      const result = await requestJson('/api/email-quotes/' + id + '/advisor-conversation');
+      setAdvisorThreads(function(current) {
+        return { ...current, [id]: Array.isArray(result.exchanges) ? result.exchanges : [] };
+      });
+    } catch (requestError) {
+      setAdvisorError(requestError.message || 'Unable to load the quote assistant history');
+    } finally {
+      setAdvisorLoading(false);
+    }
+  }
+
+  async function loadDetail(id, silent) {
+    if (!id) return;
+    if (!silent) {
+      setAdvisorQuestion('');
+      setAdvisorError('');
+    }
+    if (previewMode) {
       const detail = quotes.find(function(quote) { return quote.id === id; });
-      if (detail) applyDetail(detail);
+      if (detail) {
+        applyDetail(detail);
+        await loadAdvisorConversation(id);
+      }
       return;
     }
     if (!silent) setDetailLoading(true);
@@ -730,6 +816,7 @@ export default function EmailQuoteInboxPage() {
     try {
       const detail = await requestJson('/api/email-quotes/' + id);
       applyDetail(detail);
+      if (!silent) await loadAdvisorConversation(id);
     } catch (requestError) {
       setError(requestError.message || 'Unable to load the email quote');
     } finally {
@@ -766,6 +853,7 @@ export default function EmailQuoteInboxPage() {
       setMailbox(PREVIEW_MAILBOX);
       setQuotes(PREVIEW_QUOTES);
       applyDetail(PREVIEW_QUOTES[0]);
+      loadAdvisorConversation(PREVIEW_QUOTES[0].id);
       setLoading(false);
     } else if (user) {
       loadWorkspace();
@@ -824,6 +912,32 @@ export default function EmailQuoteInboxPage() {
   const emailHtml = useMemo(function() {
     return buildQuoteEmailHtml(selected, emailNote, quoteValidUntil);
   }, [selected, emailNote, quoteValidUntil]);
+
+  async function askQuoteAdvisor(questionOverride) {
+    if (!selected) return;
+    const question = String(questionOverride || advisorQuestion || '').trim();
+    if (!question || question.length > 2000 || advisorLoading) return;
+    const quoteId = selected.id;
+    setAdvisorLoading(true);
+    setAdvisorError('');
+    try {
+      const exchange = previewMode
+        ? buildPreviewAdvisorExchange(selected, question)
+        : (await requestJson('/api/email-quotes/' + quoteId + '/advisor-conversation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+          })).exchange;
+      setAdvisorThreads(function(current) {
+        return { ...current, [quoteId]: [...(current[quoteId] || []), exchange] };
+      });
+      setAdvisorQuestion('');
+    } catch (requestError) {
+      setAdvisorError(requestError.message || 'The quote assistant could not answer that question');
+    } finally {
+      setAdvisorLoading(false);
+    }
+  }
 
   function chooseCarrier(option) {
     if (!option.available || option.selectable === false || option.benchmark === true) return;
@@ -1167,6 +1281,7 @@ export default function EmailQuoteInboxPage() {
   });
   const mailboxReady = mailbox && ['online', 'checking'].indexOf(mailbox.state) > -1;
   const datReady = previewMode || (datHealth && ['online', 'working'].indexOf(datHealth.state) > -1);
+  const advisorExchanges = selected ? (advisorThreads[selected.id] || []) : [];
 
   return (
     <div className="app-layout">
@@ -1417,6 +1532,80 @@ export default function EmailQuoteInboxPage() {
                     </div>
                   </section>
 
+                  <section className="eq-section eq-quote-assistant-section">
+                    <div className="eq-section-heading">
+                      <div><MessageCircle size={18} /><span><strong>Quote assistant</strong><small>Ask about this shipment's dimensions, equipment, rate per mile, market facts, and route risks.</small></span></div>
+                      <span className="eq-assistant-badge"><Search size={13} /> Live web + quote data</span>
+                    </div>
+
+                    <div className="eq-assistant-intro">
+                      <Sparkles size={17} />
+                      <p><strong>Built for this quote.</strong> The assistant reads the saved shipment, connected carrier rates, and DAT results. It searches the web when current facts matter and links every web source it uses.</p>
+                    </div>
+
+                    <div className="eq-assistant-quick-actions" aria-label="Suggested quote questions">
+                      {ADVISOR_QUICK_QUESTIONS.map(function(question) {
+                        return <button type="button" key={question} onClick={function() { askQuoteAdvisor(question); }} disabled={advisorLoading}>{question}</button>;
+                      })}
+                    </div>
+
+                    <div className="eq-assistant-thread" aria-live="polite">
+                      {!advisorLoading && advisorExchanges.length === 0 && (
+                        <div className="eq-assistant-empty">
+                          <MessageCircle size={23} />
+                          <div><strong>Ask a question about this load</strong><span>Try equipment fit, pallet math, $/mile, nearby freight markets, weather, or what is missing before pricing.</span></div>
+                        </div>
+                      )}
+                      {advisorExchanges.map(function(exchange) {
+                        return (
+                          <div className="eq-assistant-turn" key={exchange.id}>
+                            <div className="eq-assistant-message user">
+                              <span>Staff</span>
+                              <p>{exchange.question}</p>
+                            </div>
+                            <div className="eq-assistant-message assistant">
+                              <span><Sparkles size={13} /> Quote assistant</span>
+                              <p>{exchange.answer}</p>
+                              {Array.isArray(exchange.sources) && exchange.sources.length > 0 && (
+                                <div className="eq-assistant-sources">
+                                  <strong>Sources</strong>
+                                  <div>{exchange.sources.map(function(source) {
+                                    return <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}<ExternalLink size={11} /></a>;
+                                  })}</div>
+                                </div>
+                              )}
+                              <small>{exchange.usedWebSearch ? 'Web researched' : 'Quote data only'}{exchange.createdAt ? ' · ' + formatDateTime(exchange.createdAt) : ''}{exchange.createdBy ? ' · ' + exchange.createdBy : ''}</small>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {advisorLoading && (
+                        <div className="eq-assistant-thinking"><RefreshCw size={15} className="spinning" /><span>Reviewing the quote and checking current sources...</span></div>
+                      )}
+                    </div>
+
+                    {advisorError && <div className="eq-assistant-error"><AlertCircle size={15} /> {advisorError}</div>}
+
+                    <div className="eq-assistant-composer">
+                      <textarea
+                        value={advisorQuestion}
+                        maxLength={2000}
+                        onChange={function(event) { setAdvisorQuestion(event.target.value); }}
+                        onKeyDown={function(event) {
+                          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                            event.preventDefault();
+                            askQuoteAdvisor();
+                          }
+                        }}
+                        placeholder="Ask about dimensions, equipment fit, rate per mile, lane conditions, or what staff should verify..."
+                      />
+                      <button type="button" onClick={function() { askQuoteAdvisor(); }} disabled={!advisorQuestion.trim() || advisorLoading}>
+                        <Send size={15} /> {advisorLoading ? 'Researching...' : 'Ask assistant'}
+                      </button>
+                    </div>
+                    <p className="eq-assistant-footnote">Advisory only. Connected carrier rates and DAT remain the pricing sources of record; staff confirms equipment, service, margin, and the final customer price.</p>
+                  </section>
+
                   <section className="eq-section eq-route-section">
                     <div className="eq-section-heading">
                       <div><MapPin size={18} /><span><strong>Route map + nearby major cities</strong><small>See the shipment lane and useful metro context before pricing.</small></span></div>
@@ -1589,7 +1778,7 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section eq-advisor-section">
                     <div className="eq-section-heading">
-                      <div><Sparkles size={18} /><span><strong>Quote advisor</strong><small>Second-view checks for equipment, connected pricing, DAT context, and dangerous goods.</small></span></div>
+                      <div><Sparkles size={18} /><span><strong>Final quote checks</strong><small>Required second-view checks for equipment, connected pricing, DAT context, and dangerous goods.</small></span></div>
                       <span className={'eq-status ' + (quoteAdvisor.reviewRequired ? 'attention' : 'ready')}>
                         {quoteAdvisor.reviewRequired ? 'Review flags' : 'Checks ready'}
                       </span>
