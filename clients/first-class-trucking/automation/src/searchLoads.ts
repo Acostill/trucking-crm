@@ -746,6 +746,22 @@ export async function verifySearchLoadsForm(
       ? element.value : (element as HTMLElement).innerText)
     : "";
   const similar = page.getByRole("switch", { name: /Include Similar Results/i });
+  const similarCount = await similar.count();
+  let directOnlyScopeVerified = similarCount === 1 && await similar.getAttribute("aria-checked") === "false";
+  if (similarCount === 0) {
+    // Observed 2026-09-09: DAT can omit the old toggle and instead expose
+    // separate direct/Similar counters. In that layout false is our extraction
+    // policy, verified by the split counters and enforced by the row boundary.
+    const directCounter = page.locator('[data-test="results-counter"]');
+    const similarCounter = page.locator('[data-test="similar-results-counter"]');
+    if (await directCounter.count() === 1 && await similarCounter.count() === 1 &&
+      await directCounter.isVisible() && await similarCounter.isVisible()) {
+      const directCount = parseDirectResultCountText(await directCounter.textContent());
+      const match = (await similarCounter.textContent() || "").replace(/\s+/g, "").match(/^\+?(\d[\d,]*)SimilarResults?$/i);
+      const similarResultCount = match ? Number(match[1].replace(/,/g, "")) : NaN;
+      directOnlyScopeVerified = directCount !== null && Number.isSafeInteger(similarResultCount) && similarResultCount >= 0;
+    }
+  }
   const [year, month, day] = request.pickupDate.split("-");
   const dates = new Set([request.pickupDate, `${Number(month)}/${Number(day)}/${year}`, `${month}/${day}/${year}`]);
   const comparisons = {
@@ -758,7 +774,7 @@ export async function verifySearchLoadsForm(
     loadType: searchLoadsLabelsEqual(readLoadType, request.loadType),
     startDate: dates.has(await readInput(controls.startDate)),
     endDate: dates.has(await readInput(controls.endDate)),
-    includeSimilarResults: await similar.count() === 1 && await similar.getAttribute("aria-checked") === "false",
+    includeSimilarResults: directOnlyScopeVerified,
     searchEnabled: await controls.search.count() === 1 && await controls.search.isEnabled(),
   };
   if (Object.values(comparisons).some((value) => !value)) {
@@ -774,6 +790,7 @@ function firstMatch(value: string | null, pattern: RegExp): string | null {
 
 async function snapshotVisibleRows(rows: Locator): Promise<RawSearchLoadCandidate[]> {
   const snapshots = await rows.evaluateAll((elements) => {
+    const separator = document.querySelector("#table-row-similar-matches-separator");
     const removableSelector = [
       'a[href^="tel:"]',
       'a[href^="mailto:"]',
@@ -784,7 +801,9 @@ async function snapshotVisibleRows(rows: Locator): Promise<RawSearchLoadCandidat
       '[aria-label*="contact" i]',
       '[aria-label*="call" i]',
     ].join(",");
-    return elements.map((element) => {
+    return elements.filter((element) => !separator || Boolean(
+      element.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING,
+    )).map((element) => {
       const cellTexts = [
         { selector: ".cell-rate dat-rate .offer" },
         { selector: '[data-test="load-rate-cell"]' },

@@ -86,6 +86,41 @@ test("final readback checks every approved filter and fails closed on a missing 
   } finally { await browser.close(); }
 });
 
+test("absent Similar switch requires separate valid counters; present on or ambiguous switches still reject", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.route("**/*", (route) => route.abort());
+    for (const mode of ["split", "malformed", "ambiguous-counter", "on", "ambiguous-switch"] as const) {
+      await page.setContent(`${scopeFormFixture()}
+        <div data-test="results-counter">201Results</div>
+        <div data-test="similar-results-counter">${mode === "malformed" ? "Similar Results" : "+1796Similar Results"}</div>`);
+      const similar = page.getByRole("switch", { name: "Include Similar Results" });
+      if (mode === "on") await similar.evaluate((element) => element.setAttribute("aria-checked", "true"));
+      else if (mode === "ambiguous-switch") await similar.evaluate((element) => element.after(element.cloneNode(true)));
+      else await similar.evaluate((element) => element.remove());
+      if (mode === "ambiguous-counter") await page.locator('[data-test="results-counter"]').evaluate((element) => element.after(element.cloneNode(true)));
+      if (mode === "split") assert.equal((await verifySearchLoadsForm(page, scopeControls(page), scopeRequest)).includeSimilarResults, true);
+      else await assert.rejects(verifySearchLoadsForm(page, scopeControls(page), scopeRequest),
+        (error: unknown) => error instanceof WorkflowError && error.category === "FORM_VALUE_REJECTED");
+    }
+  } finally { await browser.close(); }
+});
+
+test("a visible Similar separator prevents returning a Similar row even when the direct counter is wrong", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.route("**/*", (route) => route.abort());
+    await page.setContent(`<div class="row-container" id="table-row-direct"></div>
+      <div class="row-container" id="table-row-similar-matches-separator"></div>
+      <div class="row-container" id="table-row-similar"></div>`);
+    assert.equal((await collectCompleteDirectRows(page, 1, 500))[0].datLoadId, "table-row-direct");
+    await assert.rejects(collectCompleteDirectRows(page, 2, 500),
+      (error: unknown) => error instanceof WorkflowError && error.category === "RESULT_SCOPE_UNVERIFIED");
+  } finally { await browser.close(); }
+});
+
 function scopeResultFixture(mode: "stale" | "delayed" | "wrong-lane" | "empty" | "changes-during-sort"): string {
   return `${scopeFormFixture()}
     <div data-test="search-tab-group">
