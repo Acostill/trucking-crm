@@ -102,7 +102,9 @@ function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
     return { source: 'ForwardAir', error: data.error };
   }
 
-  const quoteResponse = data.QuoteResponse || {};
+  // Support historical flattened XML results while the Forward Air client
+  // preserves its XML root for every newly fetched production quote.
+  const quoteResponse = data.QuoteResponse || data || {};
   const lineHaul = findNumberByKeys(quoteResponse, ['linehaul', 'line_haul', 'base', 'basecharge']);
   const total = findNumberByKeys(quoteResponse, ['quoteamount', 'totalcharges', 'total', 'grandtotal', 'amountdue']);
 

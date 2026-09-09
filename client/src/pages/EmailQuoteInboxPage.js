@@ -45,6 +45,7 @@ const EMPTY_EDITOR = {
   width: '',
   height: '',
   totalWeight: '',
+  forwardAirFreightClass: '',
   commodity: '',
   temperatureControlled: false,
   truckType: '',
@@ -469,6 +470,7 @@ function shipmentToEditor(shipment) {
     width: firstPart.width != null ? String(firstPart.width) : '',
     height: firstPart.height != null ? String(firstPart.height) : '',
     totalWeight: weight.value != null ? String(weight.value) : '',
+    forwardAirFreightClass: (shipment && shipment.forwardAirFreightClass) || '',
     commodity: (shipment && shipment.commodity) || '',
     temperatureControlled: Boolean(shipment && shipment.temperatureControlled),
     truckType: (shipment && shipment.truckType) || '',
@@ -520,6 +522,7 @@ function buildShipment(editor, existing) {
       unit: 'lbs'
     },
     commodity: editor.commodity.trim(),
+    forwardAirFreightClass: editor.forwardAirFreightClass.trim(),
     temperatureControlled: Boolean(editor.temperatureControlled),
     truckType: editor.truckType,
     datEquipmentType: editor.datEquipmentType
@@ -1322,6 +1325,7 @@ export default function EmailQuoteInboxPage() {
                         <label>Width (in)<input type="number" value={editor.width} onChange={function(e) { setEditor({ ...editor, width: e.target.value }); }} /></label>
                         <label>Height (in)<input type="number" value={editor.height} onChange={function(e) { setEditor({ ...editor, height: e.target.value }); }} /></label>
                         <label><span><Weight size={13} /> Total weight (lb)</span><input type="number" value={editor.totalWeight} onChange={function(e) { setEditor({ ...editor, totalWeight: e.target.value }); }} /></label>
+                        <label>LTL freight class<input inputMode="decimal" placeholder="Required for Forward Air" value={editor.forwardAirFreightClass} onChange={function(e) { setEditor({ ...editor, forwardAirFreightClass: e.target.value }); }} /></label>
                         <label className="commodity">Commodity<input value={editor.commodity} onChange={function(e) { setEditor({ ...editor, commodity: e.target.value }); }} /></label>
                         <label className="temperature-control">
                           Temperature service
