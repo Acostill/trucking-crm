@@ -2622,11 +2622,7 @@ label {
   display: grid;
   place-items: center;
   padding: 32px;
-  background:
-    linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px),
-    linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
-  background-size: 36px 36px, 36px 36px, auto;
+  background: var(--bg);
   position: relative;
 }
 
@@ -7112,12 +7108,7 @@ label {
 }
 
 .app-layout {
-  background:
-    linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px),
-    radial-gradient(circle at 18% 8%, rgba(30, 64, 175, 0.16), transparent 30%),
-    linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
-  background-size: 36px 36px, 36px 36px, auto, auto;
+  background: var(--bg);
 }
 
 .app-main {
