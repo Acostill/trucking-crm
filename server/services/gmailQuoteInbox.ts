@@ -1,16 +1,11 @@
 import crypto from 'crypto';
 import { Mistral } from '@mistralai/mistralai';
 import { getGoogleOAuthCredentials, GoogleOAuthRole } from './googleOAuthCredentials';
+import { ALLOWED_SENDER_EMAILS, buildGmailQuoteQuery } from '../config/quoteInboxSenders';
 
 const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const DEFAULT_MAILBOX = 'emailbot@optimation.io';
-const ALLOWED_SENDER_EMAILS = [
-  'gerson@optimation.io',
-  'david@optimation.io',
-  'jack@truckfirstclass.com',
-  'dispatch@truckfirstclass.com'
-];
 const ALLOWED_SENDER_EMAIL_SET = new Set(
   ALLOWED_SENDER_EMAILS.map(function(email) { return email.toLowerCase(); })
 );
@@ -112,10 +107,9 @@ export function getGmailMailboxConfiguration(): GmailMailboxConfiguration {
   return {
     configured: missing.length === 0,
     mailboxAddress,
-    query: process.env.GMAIL_QUOTE_QUERY ||
-      `to:${mailboxAddress} in:inbox newer_than:30d (${ALLOWED_SENDER_EMAILS
-        .map(function(email) { return `from:${email}`; })
-        .join(' OR ')})`,
+    query: buildGmailQuoteQuery(
+      process.env.GMAIL_QUOTE_QUERY || `to:${mailboxAddress} in:inbox newer_than:30d`
+    ),
     pollIntervalMs: Number.isFinite(rawInterval) && rawInterval >= 15000 ? rawInterval : 60000,
     missing
   };
