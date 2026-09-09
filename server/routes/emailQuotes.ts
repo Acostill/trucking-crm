@@ -250,11 +250,11 @@ router.get('/:id/advisor-conversation', async function(req: Request, res: Respon
        FROM public.email_quote_advisor_exchanges exchange
        LEFT JOIN public.users users ON users.id = exchange.created_by
        WHERE exchange.email_quote_request_id = $1
-       ORDER BY exchange.created_at ASC
+       ORDER BY exchange.created_at DESC, exchange.id DESC
        LIMIT 30`,
       [req.params.id]
     );
-    res.json({ exchanges: history.rows.map(rowToAdvisorExchange) });
+    res.json({ exchanges: history.rows.reverse().map(rowToAdvisorExchange) });
   } catch (err) {
     next(err);
   }

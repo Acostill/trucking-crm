@@ -1,0 +1,97 @@
+.shipment-chat {
+  position: fixed;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 1100;
+  color: #25292d;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.shipment-chat *, .shipment-chat *::before, .shipment-chat *::after { box-sizing: border-box; }
+.shipment-chat button, .shipment-chat textarea { font: inherit; }
+.shipment-chat button { cursor: pointer; }
+.shipment-chat button:disabled { opacity: .45; cursor: not-allowed; }
+.shipment-chat button:focus-visible, .shipment-chat summary:focus-visible, .shipment-chat a:focus-visible { outline: 2px solid #3b6474; outline-offset: 3px; }
+.shipment-chat-launcher { display: flex; align-items: center; justify-content: center; gap: 9px; margin-left: auto; min-height: 46px; padding: 0 17px; border: 1px solid #27333b; border-radius: 24px; background: #27333b; color: white; box-shadow: 0 3px 12px #00000018; font-weight: 600 !important; }
+.shipment-chat-launcher:hover { background: #17232c; }
+.shipment-chat-panel { display: flex; flex-direction: column; width: 410px; height: 650px; max-height: calc(100dvh - 104px); margin-bottom: 12px; overflow: hidden; border: 1px solid #d6d9da; border-radius: 12px; background: white; box-shadow: 0 12px 45px #15202b26, 0 2px 8px #15202b0a; }
+.shipment-chat-header { display: flex; align-items: center; flex-shrink: 0; gap: 11px; padding: 17px 18px; border-bottom: 1px solid #ececed; }
+.shipment-chat-header img { object-fit: contain; padding: 3px; background: #25292d; border-radius: 3px; }
+.shipment-chat-header h2 { margin: 0; color: #25292d; font-size: 15px; font-weight: 650; letter-spacing: -.2px; line-height: 1.4; }
+.shipment-chat-header p { margin: 2px 0 0; color: #73797e; font-size: 11px; }
+.shipment-chat-icon-button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; margin-left: auto; padding: 0; border: 0; border-radius: 5px; color: #686f75; background: transparent; }
+.shipment-chat-icon-button:hover { background: #f2f3f4; }
+.shipment-chat-lane { display: grid; gap: 2px; flex-shrink: 0; padding: 13px 18px 11px; background: #fafafa; overflow-wrap: anywhere; }
+.shipment-chat-lane small { color: #767d82; font-size: 10px; }
+.shipment-chat-lane strong { font-size: 13px; font-weight: 600; }
+.shipment-chat-lane > span { color: #646b70; font-size: 11px; }
+.shipment-chat-tabs { display: flex; gap: 20px; flex-shrink: 0; padding: 0 18px; border-bottom: 1px solid #e5e7e8; }
+.shipment-chat-tabs button { display: flex; align-items: center; gap: 7px; padding: 11px 0 10px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; color: #6c7378; background: transparent; font-size: 12px; }
+.shipment-chat-tabs button[aria-pressed="true"] { border-bottom-color: #303e48; color: #25292d; font-weight: 600; }
+.shipment-chat-review-dot { display: inline-block; flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: #c68d36; }
+.shipment-chat-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 0 18px 20px; overflow-wrap: anywhere; }
+.shipment-chat-context { margin: 0 0 21px; border-bottom: 1px solid #e9ebed; font-size: 11px; }
+.shipment-chat-context summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 13px 0; color: #646b70; cursor: pointer; list-style: none; }
+.shipment-chat-context summary::-webkit-details-marker { display: none; }
+.shipment-chat-context[open] summary svg { transform: rotate(180deg); }
+.shipment-chat-context > p { margin: 12px 0; color: #73797e; }
+.shipment-chat dl { display: grid; gap: 9px; margin: 0 0 16px; }
+.shipment-chat dl > div { display: grid; grid-template-columns: 85px minmax(0, 1fr); gap: 12px; }
+.shipment-chat dt { color: #767d82; }
+.shipment-chat dd { margin: 0; }
+.shipment-chat dd > span { display: block; }
+.shipment-chat-intro h3 { margin: 0 0 9px; font-size: 16px; font-weight: 600; letter-spacing: -.25px; }
+.shipment-chat-intro p { margin: 0; color: #687078; line-height: 1.7; }
+.shipment-chat-prompts { display: flex; flex-wrap: wrap; gap: 7px; margin: 19px 0 8px; }
+.shipment-chat-prompts button { min-height: 34px; padding: 6px 10px; border: 1px solid #dce0e2; border-radius: 6px; background: white; color: #465059; font-size: 11px; }
+.shipment-chat-prompts button:hover:not(:disabled) { background: #f5f6f7; border-color: #aab3ba; }
+.shipment-chat-exchange { display: grid; gap: 17px; margin-top: 22px; }
+.shipment-chat-message > small { display: block; color: #717980; font-size: 10px; }
+.shipment-chat-message > p { margin: 5px 0 0; white-space: pre-wrap; }
+.shipment-chat-message.user { justify-self: end; max-width: 90%; padding: 10px 13px; border-radius: 9px 9px 2px 9px; background: #f0f2f3; }
+.shipment-chat-message.assistant { padding: 0 0 13px; }
+.shipment-chat-citation-note { display: block; margin-top: 12px; color: #7c8389; font-size: 10px; }
+.shipment-chat-sources { display: grid; gap: 6px; padding-top: 12px; font-size: 11px; }
+.shipment-chat-sources strong { color: #717980; font-weight: 500; }
+.shipment-chat-sources a { display: flex; align-items: center; gap: 6px; color: #36586b; }
+.shipment-chat-sources a svg { flex-shrink: 0; }
+.shipment-chat-status { margin: 17px 0; color: #697780; font-size: 12px; }
+.shipment-chat-error { margin-top: 15px; padding: 11px; border: 1px solid #e5d1cb; border-radius: 5px; background: #fdf8f6; color: #834735; font-size: 12px; }
+.shipment-chat-error p { margin: 0 0 8px; }
+.shipment-chat-error button { border: 0; padding: 0; color: inherit; background: transparent; text-decoration: underline; }
+.shipment-chat-composer { flex-shrink: 0; padding: 12px 14px 10px; border-top: 1px solid #e7e9ea; background: white; }
+.shipment-chat-composer > div { display: flex; align-items: flex-end; padding: 6px; border: 1px solid #cfd4d8; border-radius: 8px; }
+.shipment-chat-composer > div:focus-within { border-color: #748a98; box-shadow: 0 0 0 2px #748a9815; }
+.shipment-chat-composer textarea { flex: 1; width: 0; min-width: 0; min-height: 49px; max-height: 120px; padding: 6px; border: 0; outline: 0; resize: vertical; background: transparent; color: #303a41; line-height: 1.6; box-shadow: none; }
+.shipment-chat-composer textarea::placeholder { color: #8a9299; }
+.shipment-chat-composer button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: #27333b; color: white; }
+.shipment-chat-composer > small { display: block; margin-top: 7px; color: #858c92; font-size: 9px; text-align: center; }
+.shipment-chat-unsaved { margin: 0 0 9px; color: #886426; font-size: 11px; }
+.shipment-chat-review section { margin: 0 0 23px; }
+.shipment-chat-review h3 { margin: 0 0 13px; font-size: 13px; font-weight: 650; }
+.shipment-chat-review h4 { margin: 14px 0 5px; font-size: 12px; font-weight: 600; }
+.shipment-chat-review p { margin: 9px 0; color: #657078; font-size: 12px; }
+.shipment-chat-review dl { font-size: 12px; }
+.shipment-chat-review ul { padding-left: 18px; margin: 5px 0; font-size: 12px; }
+.shipment-chat-review li { margin: 5px 0; }
+.shipment-chat-review .shipment-chat-flags { padding-left: 10px; border-left: 2px solid #c68d36; color: #825f28; }
+.shipment-chat-review .shipment-chat-checks { list-style: none; padding: 0; }
+.shipment-chat-checks li { display: flex; align-items: flex-start; gap: 9px; padding: 10px 0; border-bottom: 1px solid #eef0f1; }
+.shipment-chat-checks li > svg { flex-shrink: 0; margin-top: 2px; color: #608478; }
+.shipment-chat-checks li.needs-review > svg { color: #b28139; }
+.shipment-chat-checks strong { font-size: 12px; font-weight: 600; }
+.shipment-chat-checks p { margin: 3px 0 0; }
+.shipment-chat-review .shipment-chat-disclaimer { font-size: 11px; color: #858c92; }
+@media (max-width: 520px) {
+  .shipment-chat { right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); }
+  .shipment-chat-panel { width: calc(100vw - 24px); max-height: calc(100dvh - 84px); margin-bottom: 10px; }
+  .shipment-chat-launcher { min-height: 42px; }
+  .shipment-chat-composer textarea { font-size: 16px; }
+}
+@media (max-height: 500px) {
+  .shipment-chat-launcher.is-open { display: none; }
+  .shipment-chat-panel { height: calc(100dvh - 32px); max-height: calc(100dvh - 32px); margin-bottom: 0; }
+  .shipment-chat-lane { padding-top: 6px; padding-bottom: 6px; }
+  .shipment-chat-header { padding-top: 9px; padding-bottom: 9px; }
+}

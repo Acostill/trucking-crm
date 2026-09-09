@@ -161,7 +161,10 @@ export function buildQuoteAdvisorContext(row: any) {
       id: row && row.id || null,
       subject: row && row.subject || null,
       status: row && row.status || null,
+      reference: row && row.quote_id || null,
       receivedAt: row && row.received_at || null,
+      validUntil: row && row.quote_valid_until || null,
+      staffNotes: row && row.staff_notes || null,
       originalRequest: String(row && row.raw_text || '').slice(0, 6000)
     },
     route: {

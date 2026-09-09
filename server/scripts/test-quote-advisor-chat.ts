@@ -8,6 +8,9 @@ const context: any = buildQuoteAdvisorContext({
   id: 'quote-test',
   subject: 'Test lane',
   status: 'ready',
+  quote_id: 'FCT-1048',
+  quote_valid_until: '2026-09-16',
+  staff_notes: 'Customer needs liftgate delivery. Confirm with carrier.',
   raw_text: 'Please quote this shipment.',
   shipment_request: {
     pickup: { location: { city: 'Miami', state: 'FL', zip: '33166' } },
@@ -28,6 +31,9 @@ assert.equal(context.freight.calculatedFootprintSquareFeet, 13.33);
 assert.equal(context.freight.calculatedDensityLbPerCubicFoot, 9.38);
 assert.equal(context.pricing.carrierAndMarketOptions[0].derivedRatePerMile, 1.87);
 assert.equal(context.equipment.assignedTruckType, 'Cargo Van');
+assert.equal(context.quote.reference, 'FCT-1048');
+assert.equal(context.quote.validUntil, '2026-09-16');
+assert.equal(context.quote.staffNotes, 'Customer needs liftgate delivery. Confirm with carrier.');
 
 const sources = extractQuoteAdvisorSources({
   output: [

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -7,18 +7,16 @@ import {
   CheckCircle2,
   CircleDollarSign,
   Clock3,
-  ExternalLink,
   Inbox,
   Mail,
   MapPin,
-  MessageCircle,
+  Monitor,
   Package,
   Percent,
   RefreshCw,
   Save,
-  Search,
   Send,
-  Sparkles,
+  Smartphone,
   Truck,
   User,
   Weight,
@@ -28,8 +26,10 @@ import {
 import Sidebar from '../components/Sidebar';
 import AuthForm from '../components/AuthForm';
 import QuoteRouteMap from '../components/QuoteRouteMap';
+import ShipmentChatbot from '../components/ShipmentChatbot';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../config';
+import { buildQuoteEmailHtml } from '../utils/quoteEmailTemplate';
 import './EmailQuoteInboxPage.css';
 
 const EMPTY_EDITOR = {
@@ -83,13 +83,6 @@ const TRUCK_TYPE_OPTIONS = [
   'Reefer Dry Van'
 ];
 
-const ADVISOR_QUICK_QUESTIONS = [
-  'Check the equipment and dimensions for this shipment.',
-  'Explain the best available rate per mile using the quote facts.',
-  'Search for current route, weather, or disruption risks.',
-  'What should staff verify before sending this quote?'
-];
-
 function buildPreviewAdvisorExchange(quote, question) {
   const shipment = (quote && quote.shipment) || {};
   const pieces = shipment.pieces || {};
@@ -113,6 +106,7 @@ function buildPreviewAdvisorExchange(quote, question) {
     id: 'preview-advisor-' + Date.now(),
     question,
     answer:
+      `${locationLine(shipment.pickup && shipment.pickup.location)} → ${locationLine(shipment.delivery && shipment.delivery.location)}.\n\n` +
       `Saved quote facts: ${dimensions}, ${weight ? Number(weight).toLocaleString() + ' lb' : 'weight missing'}, ` +
       `${shipment.truckType || 'equipment not assigned'}. ` +
       (best
@@ -450,104 +444,8 @@ function buildDefaultQuoteNote(quote) {
   const shipment = (quote && quote.shipment) || {};
   const pickupCity = shipment.pickup && shipment.pickup.location && shipment.pickup.location.city;
   const deliveryCity = shipment.delivery && shipment.delivery.location && shipment.delivery.location.city;
-  const lane = pickupCity && deliveryCity ? ` for your shipment from ${pickupCity} to ${deliveryCity}` : '';
-  return `Here's your quote${lane}. Reply to this email to confirm and we'll get it scheduled, or let us know if you have any questions.`;
-}
-
-function escapeHtml(value) {
-  return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function nlToBr(value) {
-  return escapeHtml(value).split('\n').map(function(line) { return line || '&nbsp;'; }).join('<br />');
-}
-
-const EMAIL_FONT_SANS = "'Inter','SuisseIntl',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
-// Matches the sidebar's "First Class CRM Brand Refresh" tokens in App.css (--fct-*).
-const EMAIL_BG_TOP = '#f4f7fb';
-const EMAIL_BG_BOTTOM = '#e8eef6';
-const EMAIL_ACCENT = '#1e3a8a';
-const EMAIL_ACCENT_LIGHT = '#2563a7';
-const EMAIL_LINE = '#d7e0ea';
-const EMAIL_TEXT = '#172b3f';
-const EMAIL_TEXT_MUTED = '#53687d';
-const EMAIL_TEXT_FAINT = '#718398';
-
-function buildQuoteEmailHtml(quote, noteText, validUntil) {
-  const shipment = (quote && quote.shipment) || {};
-  const pickup = shipment.pickup || {};
-  const pickupLocation = pickup.location || {};
-  const delivery = shipment.delivery || {};
-  const deliveryLocation = delivery.location || {};
-  const selection = (quote && quote.selection) || {};
-  const selectedCarrier = quote && Array.isArray(quote.carrierQuotes)
-    ? quote.carrierQuotes.find(function(option) { return option.key === selection.carrierKey; })
-    : null;
-  const forwarded = extractForwardedContacts(quote && quote.rawText);
-  const recipientName = forwarded.toName
-    || (!forwarded.to && quote && quote.sender && (quote.sender.name || quote.sender.email))
-    || '';
-  const firstName = recipientName ? String(recipientName).split(' ')[0] : '';
-
-  const detailRows = [
-    ['Pickup', locationLine(pickupLocation) + (pickup.date ? ' · ' + formatDateTime(pickup.date) : '')],
-    ['Delivery', locationLine(deliveryLocation)],
-    ['Equipment', shipment.truckType || 'To be confirmed'],
-    ['Estimated transit', selectedCarrier && selectedCarrier.transitTime
-      ? selectedCarrier.transitTime + ' business day' + (Number(selectedCarrier.transitTime) === 1 ? '' : 's')
-      : 'Confirm with dispatch'],
-    ['Quote valid through', validUntil ? new Date(validUntil + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '7 days from issue']
-  ];
-
-  const rowsHtml = detailRows.map(function(row) {
-    return '<tr>'
-      + '<td style="padding:9px 0;border-top:1px solid ' + EMAIL_LINE + ';font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';white-space:nowrap;">' + escapeHtml(row[0]) + '</td>'
-      + '<td style="padding:9px 0 9px 16px;border-top:1px solid ' + EMAIL_LINE + ';font-size:14px;color:' + EMAIL_TEXT + ';text-align:right;">' + escapeHtml(row[1]) + '</td>'
-      + '</tr>';
-  }).join('');
-
-  const noteHtml = noteText && noteText.trim()
-    ? '<p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT_MUTED + ';">' + nlToBr(noteText) + '</p>'
-    : '';
-
-  return '<!doctype html>'
-    + '<html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />'
-    + '<title>Your First Class Trucking quote</title></head>'
-    + '<body style="margin:0;padding:0;background:' + EMAIL_BG_TOP + ';">'
-    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:linear-gradient(180deg,' + EMAIL_BG_TOP + ' 0%,' + EMAIL_BG_BOTTOM + ' 100%);background-color:' + EMAIL_BG_TOP + ';padding:32px 16px;">'
-    + '<tr><td align="center">'
-    + '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:100%;font-family:' + EMAIL_FONT_SANS + ';">'
-    + '<tr><td style="padding:0 8px 24px;">'
-    + '<span style="display:inline-block;font-size:13px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:' + EMAIL_TEXT + ';">First Class Trucking</span>'
-    + '<div style="width:32px;height:3px;margin-top:8px;background:' + EMAIL_ACCENT_LIGHT + ';border-radius:2px;"></div>'
-    + '</td></tr>'
-    + '<tr><td style="padding:0 8px;">'
-    + '<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3;font-weight:700;color:' + EMAIL_TEXT + ';">Thank you for choosing First Class Trucking!</h1>'
-    + (firstName ? '<p style="margin:0 0 18px;font-size:14px;color:' + EMAIL_TEXT_MUTED + ';">Hi ' + escapeHtml(firstName) + ',</p>' : '')
-    + noteHtml
-    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid ' + EMAIL_LINE + ';border-left:3px solid ' + EMAIL_ACCENT + ';border-radius:8px;padding:20px 22px;margin-bottom:22px;">'
-    + rowsHtml
-    + '<tr>'
-    + '<td style="padding:14px 0 0;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';">Total price</td>'
-    + '<td style="padding:14px 0 0 16px;font-size:22px;font-weight:700;color:' + EMAIL_ACCENT_LIGHT + ';text-align:right;">' + escapeHtml(formatMoney(selection.clientPrice)) + '</td>'
-    + '</tr>'
-    + '</table>'
-    + '<p style="margin:0 0 26px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT_MUTED + ';">Reply to this email to confirm and we\'ll get your shipment scheduled.</p>'
-    + '<p style="margin:0 0 26px;font-size:12px;line-height:1.6;color:' + EMAIL_TEXT_FAINT + ';">Rate is subject to equipment availability and the shipment details shown above. Fuel surcharges and any accessorial services not included in the request may change the final amount.</p>'
-    + '<p style="margin:0 0 34px;font-size:14px;line-height:1.7;color:' + EMAIL_TEXT + ';">Thank you,<br />First Class Trucking</p>'
-    + '</td></tr>'
-    + '<tr><td style="padding:20px 8px 0;border-top:1px solid ' + EMAIL_LINE + ';font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:' + EMAIL_TEXT_FAINT + ';">'
-    + 'First Class Trucking'
-    + '</td></tr>'
-    + '</table>'
-    + '</td></tr>'
-    + '</table>'
-    + '</body></html>';
+  const lane = pickupCity && deliveryCity ? ` your shipment from ${pickupCity} to ${deliveryCity}` : '';
+  return `Thank you for the opportunity to quote${lane || ' your shipment'}. Your rate and shipment details are outlined below.`;
 }
 
 function shipmentToEditor(shipment) {
@@ -695,6 +593,8 @@ export default function EmailQuoteInboxPage() {
   const [emailTo, setEmailTo] = useState('');
   const [emailCc, setEmailCc] = useState('');
   const [emailNote, setEmailNote] = useState('');
+  const [emailRateDrafts, setEmailRateDrafts] = useState({});
+  const [emailPreviewDevice, setEmailPreviewDevice] = useState('desktop');
   const [sendingQuoteEmail, setSendingQuoteEmail] = useState(false);
   const [advisorAcknowledged, setAdvisorAcknowledged] = useState(false);
   const [quoteValidUntil, setQuoteValidUntil] = useState(defaultValidUntil());
@@ -703,10 +603,10 @@ export default function EmailQuoteInboxPage() {
   const [followUpStatus, setFollowUpStatus] = useState('not_needed');
   const [outcomeNotes, setOutcomeNotes] = useState('');
   const [savingWorkflow, setSavingWorkflow] = useState(false);
-  const [advisorThreads, setAdvisorThreads] = useState({});
-  const [advisorQuestion, setAdvisorQuestion] = useState('');
-  const [advisorLoading, setAdvisorLoading] = useState(false);
-  const [advisorError, setAdvisorError] = useState('');
+  const [chatView, setChatView] = useState(null);
+  const detailRequest = useRef(0);
+  const requestedQuoteId = useRef(null);
+  const detailPending = useRef(false);
 
   async function requestJson(path, options) {
     const response = await fetch(buildApiUrl(path), {
@@ -773,54 +673,30 @@ export default function EmailQuoteInboxPage() {
     setEmailNote(buildDefaultQuoteNote(detail));
   }
 
-  async function loadAdvisorConversation(id) {
-    if (!id) return;
-    if (previewMode) {
-      setAdvisorThreads(function(current) {
-        return Object.prototype.hasOwnProperty.call(current, id)
-          ? current
-          : { ...current, [id]: [] };
-      });
-      return;
-    }
-    setAdvisorLoading(true);
-    setAdvisorError('');
-    try {
-      const result = await requestJson('/api/email-quotes/' + id + '/advisor-conversation');
-      setAdvisorThreads(function(current) {
-        return { ...current, [id]: Array.isArray(result.exchanges) ? result.exchanges : [] };
-      });
-    } catch (requestError) {
-      setAdvisorError(requestError.message || 'Unable to load the quote assistant history');
-    } finally {
-      setAdvisorLoading(false);
-    }
-  }
-
   async function loadDetail(id, silent) {
     if (!id) return;
+    // A late detail response or background refresh must not switch the chat
+    // back to a shipment the operator has already left.
+    if (silent && (requestedQuoteId.current !== id || detailPending.current)) return;
+    requestedQuoteId.current = id;
+    const requestVersion = ++detailRequest.current;
     if (!silent) {
-      setAdvisorQuestion('');
-      setAdvisorError('');
+      detailPending.current = true;
+      setDetailLoading(true);
+      setError('');
     }
-    if (previewMode) {
-      const detail = quotes.find(function(quote) { return quote.id === id; });
-      if (detail) {
-        applyDetail(detail);
-        await loadAdvisorConversation(id);
-      }
-      return;
-    }
-    if (!silent) setDetailLoading(true);
-    if (!silent) setError('');
     try {
-      const detail = await requestJson('/api/email-quotes/' + id);
-      applyDetail(detail);
-      if (!silent) await loadAdvisorConversation(id);
+      const detail = previewMode
+        ? quotes.find(function(quote) { return quote.id === id; })
+        : await requestJson('/api/email-quotes/' + id);
+      if (requestVersion === detailRequest.current && detail) applyDetail(detail);
     } catch (requestError) {
-      setError(requestError.message || 'Unable to load the email quote');
+      if (requestVersion === detailRequest.current) setError(requestError.message || 'Unable to load the email quote');
     } finally {
-      if (!silent) setDetailLoading(false);
+      if (requestVersion === detailRequest.current) {
+        detailPending.current = false;
+        setDetailLoading(false);
+      }
     }
   }
 
@@ -853,7 +729,7 @@ export default function EmailQuoteInboxPage() {
       setMailbox(PREVIEW_MAILBOX);
       setQuotes(PREVIEW_QUOTES);
       applyDetail(PREVIEW_QUOTES[0]);
-      loadAdvisorConversation(PREVIEW_QUOTES[0].id);
+      requestedQuoteId.current = PREVIEW_QUOTES[0].id;
       setLoading(false);
     } else if (user) {
       loadWorkspace();
@@ -902,42 +778,48 @@ export default function EmailQuoteInboxPage() {
   const quoteAdvisor = useMemo(function() {
     return selected && selected.advisor ? selected.advisor : fallbackAdvisor(selected);
   }, [selected]);
-  const shipmentAI = selected && selected.shipment && selected.shipment.aiRecommendation;
+
 
   const marginAmount = useMemo(function() {
     if (!selectedCarrier || selectedCarrier.cost == null || clientPrice === '') return null;
     return Number(clientPrice) - Number(selectedCarrier.cost);
   }, [selectedCarrier, clientPrice]);
 
-  const emailHtml = useMemo(function() {
-    return buildQuoteEmailHtml(selected, emailNote, quoteValidUntil);
-  }, [selected, emailNote, quoteValidUntil]);
+  // Inclusions belong to this priced revision. A new quote or repricing starts
+  // unconfirmed; background refreshes of the same quote keep the current draft.
+  const emailRateDraftKey = JSON.stringify([
+    selected && selected.id,
+    selected && selected.pricedAt,
+    selected && selected.selection && selected.selection.carrierKey,
+    selected && selected.selection && selected.selection.clientPrice
+  ]);
+  const emailFuelSurcharge = (emailRateDrafts[emailRateDraftKey] || {}).fuelSurcharge || 'unconfirmed';
+  const emailIncludedServices = (emailRateDrafts[emailRateDraftKey] || {}).includedServices || '';
 
-  async function askQuoteAdvisor(questionOverride) {
-    if (!selected) return;
-    const question = String(questionOverride || advisorQuestion || '').trim();
-    if (!question || question.length > 2000 || advisorLoading) return;
-    const quoteId = selected.id;
-    setAdvisorLoading(true);
-    setAdvisorError('');
-    try {
-      const exchange = previewMode
-        ? buildPreviewAdvisorExchange(selected, question)
-        : (await requestJson('/api/email-quotes/' + quoteId + '/advisor-conversation', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question })
-          })).exchange;
-      setAdvisorThreads(function(current) {
-        return { ...current, [quoteId]: [...(current[quoteId] || []), exchange] };
-      });
-      setAdvisorQuestion('');
-    } catch (requestError) {
-      setAdvisorError(requestError.message || 'The quote assistant could not answer that question');
-    } finally {
-      setAdvisorLoading(false);
-    }
+  function updateEmailRateDraft(changes) {
+    setEmailRateDrafts(function(current) {
+      return { ...current, [emailRateDraftKey]: { ...current[emailRateDraftKey], ...changes } };
+    });
   }
+
+  const emailHtml = useMemo(function() {
+    const forwarded = extractForwardedContacts(selected && selected.rawText);
+    const sourceEmail = forwarded.to || (selected && selected.sender && selected.sender.email) || '';
+    const recipientName = sourceEmail.toLowerCase() === emailTo.trim().toLowerCase()
+      ? forwarded.toName || (!forwarded.to && selected && selected.sender && selected.sender.name) || ''
+      : '';
+    return buildQuoteEmailHtml({
+      quote: selected,
+      note: emailNote,
+      validUntil: quoteValidUntil,
+      recipientName,
+      recipientEmail: emailTo.trim(),
+      fuelSurcharge: emailFuelSurcharge,
+      includedServices: emailIncludedServices,
+      // Email recipients need an absolute, publicly served image URL.
+      logoUrl: new URL('/brand/logo.png', window.location.origin).href
+    });
+  }, [selected, emailNote, quoteValidUntil, emailTo, emailFuelSurcharge, emailIncludedServices]);
 
   function chooseCarrier(option) {
     if (!option.available || option.selectable === false || option.benchmark === true) return;
@@ -1111,6 +993,7 @@ export default function EmailQuoteInboxPage() {
         ...selected,
         status: 'priced',
         quoteId: 'quote-preview-1048',
+        pricedAt: new Date().toISOString(),
         advisorAcknowledgedAt: new Date().toISOString(),
         quoteValidUntil,
         staffNotes,
@@ -1281,7 +1164,13 @@ export default function EmailQuoteInboxPage() {
   });
   const mailboxReady = mailbox && ['online', 'checking'].indexOf(mailbox.state) > -1;
   const datReady = previewMode || (datHealth && ['online', 'working'].indexOf(datHealth.state) > -1);
-  const advisorExchanges = selected ? (advisorThreads[selected.id] || []) : [];
+  const hasUnsavedShipment = selected && JSON.stringify(editor) !== JSON.stringify(shipmentToEditor(selected.shipment));
+  const hasUnsavedPricingNotes = selected && staffNotes !== (selected.staffNotes || '');
+  const hasUnsavedPrice = selected && selected.selection && selected.selection.clientPrice != null && (
+    carrierKey !== selected.selection.carrierKey ||
+    Number(clientPrice) !== Number(selected.selection.clientPrice) ||
+    Number(marginPct) !== Number(selected.selection.marginPct)
+  );
 
   return (
     <div className="app-layout">
@@ -1292,7 +1181,7 @@ export default function EmailQuoteInboxPage() {
             <div>
               <p className="eq-eyebrow"><Inbox size={14} /> Email quote operations</p>
               <h1>Quote Inbox</h1>
-              <p>Parse customer emails, compare connected carrier costs, and set the client price.</p>
+              <p>Review shipment details, compare rates, and send your quote.</p>
             </div>
             <button type="button" className="eq-check-button" onClick={checkInbox} disabled={polling}>
               <RefreshCw size={16} className={polling ? 'spinning' : ''} />
@@ -1384,7 +1273,7 @@ export default function EmailQuoteInboxPage() {
                       <p><User size={14} /> {(selected.sender && (selected.sender.name || selected.sender.email)) || 'Unknown sender'} <span>·</span> <Clock3 size={14} /> {formatDateTime(selected.receivedAt)}</p>
                     </div>
                     <button type="button" className="eq-secondary-button" onClick={reprocessEmail} disabled={reprocessing}>
-                      <Sparkles size={15} /> {reprocessing ? 'Parsing...' : 'Parse email again'}
+                      <RefreshCw size={15} /> {reprocessing ? 'Parsing...' : 'Parse email again'}
                     </button>
                   </div>
 
@@ -1395,16 +1284,14 @@ export default function EmailQuoteInboxPage() {
                     </div>
                   )}
 
-                  <section className="eq-section">
-                    <div className="eq-section-heading">
-                      <div><Mail size={18} /><span><strong>Original email</strong><small>The message as received, before parsing.</small></span></div>
-                    </div>
+                  <details className="eq-section eq-original-email" key={'email-' + selected.id}>
+                    <summary><Mail size={16} /><strong>Original email</strong><span>View message</span></summary>
                     <pre className="eq-raw-email">{selected.rawText || 'Original email text is not available for this request.'}</pre>
-                  </section>
+                  </details>
 
                   <section className="eq-section">
                     <div className="eq-section-heading">
-                      <div><MapPin size={18} /><span><strong>Parsed shipment</strong><small>Correct anything the email parser missed before rating.</small></span></div>
+                      <div><MapPin size={18} /><span><strong>Shipment details</strong><small>Confirm the details before requesting rates.</small></span></div>
                       <span className="eq-route-summary">{locationLine(pickupLocation)} <ArrowRight size={13} /> {locationLine(deliveryLocation)}</span>
                     </div>
 
@@ -1480,13 +1367,6 @@ export default function EmailQuoteInboxPage() {
                         </label>
                         <label className="dat-equipment">DAT equipment<select value={editor.datEquipmentType} onChange={function(e) { setEditor({ ...editor, datEquipmentType: e.target.value }); }}><option value="">Choose equipment</option><option value="Van">Van</option><option value="Flatbed">Flatbed</option><option value="Reefer">Reefer</option></select></label>
                       </div>
-                      <div className={'eq-assignment-note ' + (((selected.shipment || {}).truckAssignment || {}).status === 'needs_review' ? 'review' : '')}>
-                        <Truck size={15} />
-                        <div>
-                          <strong>{((selected.shipment || {}).truckType) || 'Automatic truck assignment pending'}</strong>
-                          <span>{(((selected.shipment || {}).truckAssignment || {}).reason) || 'The smallest safe truck will be assigned from pallets, weight, dimensions, and temperature service when you save.'}</span>
-                        </div>
-                      </div>
                     </div>
 
                     <div className="eq-section-actions">
@@ -1495,115 +1375,6 @@ export default function EmailQuoteInboxPage() {
                         {savingShipment ? 'Refreshing pricing...' : 'Save details & refresh pricing'}
                       </button>
                     </div>
-                  </section>
-
-                  <section className="eq-section eq-ai-workflow-section">
-                    <div className="eq-section-heading">
-                      <div><Sparkles size={18} /><span><strong>Shipment advisor</strong><small>Reviews the parsed freight details and validates equipment before carrier pricing begins.</small></span></div>
-                      <span className={'eq-status ' + (shipmentAI && shipmentAI.status === 'completed' ? 'ready' : 'working')}>
-                        {shipmentAI && shipmentAI.status === 'completed' ? 'Recommendation ready' : shipmentAI ? 'Safeguards applied' : 'Runs during rating'}
-                      </span>
-                    </div>
-                    <div className={'eq-ai-advisor ' + (shipmentAI && shipmentAI.status === 'completed' ? 'complete' : 'fallback')}>
-                      <div className="eq-ai-advisor-heading">
-                        <span><Sparkles size={16} /><strong>Equipment recommendation</strong></span>
-                        <em>OpenAI advisor</em>
-                      </div>
-                      {shipmentAI ? (
-                        <>
-                          <div className="eq-ai-advisor-equipment">
-                            <div><small>Advisor recommendation</small><strong>{shipmentAI.recommendedTruckType || 'Review needed'}</strong></div>
-                            <ArrowRight size={17} aria-hidden="true" />
-                            <div><small>Sent to carrier rating</small><strong>{shipmentAI.appliedTruckType || (selected.shipment && selected.shipment.truckType) || 'Review needed'}</strong></div>
-                            <span>{shipmentAI.status === 'completed' ? (shipmentAI.confidence || '—') + ' confidence' : 'Deterministic fallback'}</span>
-                          </div>
-                          <p>{shipmentAI.fitAnalysis || shipmentAI.note || 'Shipment dimensions and capacity rules were evaluated.'}</p>
-                          {(Array.isArray(shipmentAI.suggestions) && shipmentAI.suggestions.length > 0) && (
-                            <div className="eq-ai-advisor-list"><strong>Suggestions</strong><ul>{shipmentAI.suggestions.map(function(item) { return <li key={item}>{item}</li>; })}</ul></div>
-                          )}
-                          {(Array.isArray(shipmentAI.risks) && shipmentAI.risks.length > 0) && (
-                            <div className="eq-ai-advisor-list risks"><strong>Review</strong><ul>{shipmentAI.risks.map(function(item) { return <li key={item}>{item}</li>; })}</ul></div>
-                          )}
-                          {shipmentAI.note && <small className="eq-ai-advisor-note">{shipmentAI.note}</small>}
-                        </>
-                      ) : (
-                        <p>Shipment guidance will appear automatically after the request is parsed and rated. Deterministic capacity safeguards always validate the final truck.</p>
-                      )}
-                    </div>
-                  </section>
-
-                  <section className="eq-section eq-quote-assistant-section">
-                    <div className="eq-section-heading">
-                      <div><MessageCircle size={18} /><span><strong>Quote assistant</strong><small>Ask about this shipment's dimensions, equipment, rate per mile, market facts, and route risks.</small></span></div>
-                      <span className="eq-assistant-badge"><Search size={13} /> Live web + quote data</span>
-                    </div>
-
-                    <div className="eq-assistant-intro">
-                      <Sparkles size={17} />
-                      <p><strong>Built for this quote.</strong> The assistant reads the saved shipment, connected carrier rates, and DAT results. It searches the web when current facts matter and links every web source it uses.</p>
-                    </div>
-
-                    <div className="eq-assistant-quick-actions" aria-label="Suggested quote questions">
-                      {ADVISOR_QUICK_QUESTIONS.map(function(question) {
-                        return <button type="button" key={question} onClick={function() { askQuoteAdvisor(question); }} disabled={advisorLoading}>{question}</button>;
-                      })}
-                    </div>
-
-                    <div className="eq-assistant-thread" aria-live="polite">
-                      {!advisorLoading && advisorExchanges.length === 0 && (
-                        <div className="eq-assistant-empty">
-                          <MessageCircle size={23} />
-                          <div><strong>Ask a question about this load</strong><span>Try equipment fit, pallet math, $/mile, nearby freight markets, weather, or what is missing before pricing.</span></div>
-                        </div>
-                      )}
-                      {advisorExchanges.map(function(exchange) {
-                        return (
-                          <div className="eq-assistant-turn" key={exchange.id}>
-                            <div className="eq-assistant-message user">
-                              <span>Staff</span>
-                              <p>{exchange.question}</p>
-                            </div>
-                            <div className="eq-assistant-message assistant">
-                              <span><Sparkles size={13} /> Quote assistant</span>
-                              <p>{exchange.answer}</p>
-                              {Array.isArray(exchange.sources) && exchange.sources.length > 0 && (
-                                <div className="eq-assistant-sources">
-                                  <strong>Sources</strong>
-                                  <div>{exchange.sources.map(function(source) {
-                                    return <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}<ExternalLink size={11} /></a>;
-                                  })}</div>
-                                </div>
-                              )}
-                              <small>{exchange.usedWebSearch ? 'Web researched' : 'Quote data only'}{exchange.createdAt ? ' · ' + formatDateTime(exchange.createdAt) : ''}{exchange.createdBy ? ' · ' + exchange.createdBy : ''}</small>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {advisorLoading && (
-                        <div className="eq-assistant-thinking"><RefreshCw size={15} className="spinning" /><span>Reviewing the quote and checking current sources...</span></div>
-                      )}
-                    </div>
-
-                    {advisorError && <div className="eq-assistant-error"><AlertCircle size={15} /> {advisorError}</div>}
-
-                    <div className="eq-assistant-composer">
-                      <textarea
-                        value={advisorQuestion}
-                        maxLength={2000}
-                        onChange={function(event) { setAdvisorQuestion(event.target.value); }}
-                        onKeyDown={function(event) {
-                          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                            event.preventDefault();
-                            askQuoteAdvisor();
-                          }
-                        }}
-                        placeholder="Ask about dimensions, equipment fit, rate per mile, lane conditions, or what staff should verify..."
-                      />
-                      <button type="button" onClick={function() { askQuoteAdvisor(); }} disabled={!advisorQuestion.trim() || advisorLoading}>
-                        <Send size={15} /> {advisorLoading ? 'Researching...' : 'Ask assistant'}
-                      </button>
-                    </div>
-                    <p className="eq-assistant-footnote">Advisory only. Connected carrier rates and DAT remain the pricing sources of record; staff confirms equipment, service, margin, and the final customer price.</p>
                   </section>
 
                   <section className="eq-section eq-route-section">
@@ -1635,7 +1406,6 @@ export default function EmailQuoteInboxPage() {
                     {carrierCostOptions.length ? (
                       <div className="eq-carrier-grid">
                         {carrierCostOptions.map(function(option) {
-                          const recommended = selected.recommendation && selected.recommendation.carrierKey === option.key;
                           const active = carrierKey === option.key && option.selectable !== false;
                           const benchmark = option.benchmark === true;
                           return (
@@ -1648,7 +1418,6 @@ export default function EmailQuoteInboxPage() {
                             >
                               <div className="eq-carrier-top">
                                 <span>{option.source}</span>
-                                {recommended && <em><Sparkles size={12} /> Suggested</em>}
                                 {benchmark && <em className="market">Market benchmark</em>}
                                 {active && <Check size={16} />}
                               </div>
@@ -1686,9 +1455,6 @@ export default function EmailQuoteInboxPage() {
                       </div>
                     ) : (
                       <div className="eq-rate-empty"><Truck size={22} /><p>Complete the shipment details to request carrier rates.</p></div>
-                    )}
-                    {selected.recommendation && (
-                      <div className="eq-suggestion-line"><Sparkles size={14} /><strong>Suggestion:</strong> {selected.recommendation.reason}</div>
                     )}
                   </section>
 
@@ -1776,29 +1542,6 @@ export default function EmailQuoteInboxPage() {
                     )}
                   </section>
 
-                  <section className="eq-section eq-advisor-section">
-                    <div className="eq-section-heading">
-                      <div><Sparkles size={18} /><span><strong>Final quote checks</strong><small>Required second-view checks for equipment, connected pricing, DAT context, and dangerous goods.</small></span></div>
-                      <span className={'eq-status ' + (quoteAdvisor.reviewRequired ? 'attention' : 'ready')}>
-                        {quoteAdvisor.reviewRequired ? 'Review flags' : 'Checks ready'}
-                      </span>
-                    </div>
-                    <div className="eq-advisor-checks">
-                      {quoteAdvisor.checks.map(function(check) {
-                        return (
-                          <div className={'eq-advisor-check ' + check.tone} key={check.label}>
-                            {check.tone === 'good' ? <CheckCircle2 size={17} /> : check.tone === 'warning' ? <AlertCircle size={17} /> : <Sparkles size={17} />}
-                            <span><strong>{check.label}</strong><small>{check.detail}</small></span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <label className="eq-advisor-ack">
-                      <input type="checkbox" checked={advisorAcknowledged} onChange={function(e) { setAdvisorAcknowledged(e.target.checked); }} />
-                      <span>I reviewed the shipment, equipment recommendation, carrier rates, and DAT context.</span>
-                    </label>
-                  </section>
-
                   <section className="eq-section pricing">
                     <div className="eq-section-heading">
                       <div><CircleDollarSign size={18} /><span><strong>Set the client price</strong><small>Staff controls the final margin and amount charged.</small></span></div>
@@ -1832,6 +1575,16 @@ export default function EmailQuoteInboxPage() {
                       Staff notes
                       <textarea value={staffNotes} onChange={function(e) { setStaffNotes(e.target.value); }} placeholder="Internal pricing rationale or service notes..." />
                     </label>
+                    <div className="eq-price-review">
+                      <label className="eq-advisor-ack">
+                        <input type="checkbox" checked={advisorAcknowledged} onChange={function(e) { setAdvisorAcknowledged(e.target.checked); }} />
+                        <span>I reviewed the shipment, equipment, carrier rates, and DAT context.</span>
+                      </label>
+                      <button type="button" className="eq-review-link" onClick={function() { setChatView('review'); }}>
+                        {quoteAdvisor.reviewRequired && <AlertCircle size={14} />}
+                        {quoteAdvisor.reviewRequired ? 'Review shipment flags' : 'View shipment checks'}
+                      </button>
+                    </div>
                     <div className="eq-pricing-footer">
                       <p><CheckCircle2 size={15} /> Saving creates a pending client quote in the CRM pipeline.</p>
                       <button type="button" className="eq-save-price" onClick={saveClientPrice} disabled={!selectedCarrier || !clientPrice || !quoteValidUntil || !advisorAcknowledged || savingPrice}>
@@ -1841,9 +1594,9 @@ export default function EmailQuoteInboxPage() {
                   </section>
 
                   {(selected.status === 'priced' || selected.status === 'sent') && (
-                    <section className="eq-section">
+                    <section className="eq-section eq-email-response">
                       <div className="eq-section-heading">
-                        <div><Mail size={18} /><span><strong>Email response</strong><small>Review the draft, then send it to the customer.</small></span></div>
+                        <div><Mail size={18} /><span><strong>Email response</strong><small>Add a personal touch, review the quote, and send it to your customer.</small></span></div>
                         {selected.status === 'sent' && selected.quoteSentAt && (
                           <span className="eq-route-summary">Sent {formatDateTime(selected.quoteSentAt)}</span>
                         )}
@@ -1856,13 +1609,43 @@ export default function EmailQuoteInboxPage() {
                           placeholder="Add a personal note for the customer..."
                         />
                       </label>
-                      <span className="eq-form-kicker eq-preview-kicker">Email preview</span>
-                      <iframe
-                        title="Email preview"
-                        className="eq-email-preview"
-                        srcDoc={emailHtml}
-                        sandbox=""
-                      />
+                      <div className="eq-email-rate-fields">
+                        <label>
+                          <span>Fuel surcharge</span>
+                          <select value={emailFuelSurcharge} onChange={function(e) { updateEmailRateDraft({ fuelSurcharge: e.target.value }); }}>
+                            <option value="unconfirmed">Confirm before booking</option>
+                            <option value="included">Included in quoted total</option>
+                            <option value="excluded">Not included; quoted separately</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Included extra services</span>
+                          <input
+                            type="text"
+                            value={emailIncludedServices}
+                            maxLength={1000}
+                            onChange={function(e) { updateEmailRateDraft({ includedServices: e.target.value }); }}
+                            placeholder="e.g., Liftgate at delivery"
+                          />
+                        </label>
+                        <p>These details appear in this email draft. List only services covered by the quoted total; the amount stays unchanged.</p>
+                      </div>
+                      <div className="eq-preview-toolbar">
+                        <div className="eq-preview-caption"><Mail size={16} /><span><strong>Customer email</strong><small>Preview of the email you're sending</small></span></div>
+                        <div className="eq-preview-devices" role="group" aria-label="Email preview size">
+                          <button type="button" aria-pressed={emailPreviewDevice === 'desktop'} onClick={function() { setEmailPreviewDevice('desktop'); }}><Monitor size={14} /> Desktop</button>
+                          <button type="button" aria-pressed={emailPreviewDevice === 'mobile'} onClick={function() { setEmailPreviewDevice('mobile'); }}><Smartphone size={14} /> Mobile</button>
+                        </div>
+                      </div>
+                      <div className={'eq-preview-surface ' + emailPreviewDevice}>
+                        <iframe
+                          key={emailPreviewDevice}
+                          title="Email preview"
+                          className="eq-email-preview"
+                          srcDoc={emailHtml}
+                          sandbox=""
+                        />
+                      </div>
                       <div className="eq-send-row">
                         <label className="eq-send-field">
                           <span>To <em>(receiver)</em></span>
@@ -1935,6 +1718,16 @@ export default function EmailQuoteInboxPage() {
           </div>
         </div>
       </main>
+      <ShipmentChatbot
+        quote={selected}
+        advisor={quoteAdvisor}
+        view={chatView}
+        onViewChange={setChatView}
+        previewMode={previewMode}
+        createPreviewExchange={buildPreviewAdvisorExchange}
+        hasUnsavedChanges={hasUnsavedShipment || hasUnsavedPricingNotes || hasUnsavedPrice}
+        contextLoading={detailLoading}
+      />
     </div>
   );
 }
