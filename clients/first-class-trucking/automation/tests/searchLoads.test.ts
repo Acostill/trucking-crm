@@ -11,9 +11,145 @@ import {
   searchLoadsEquipmentUiLabel,
   selectExactSearchLoadsOption,
   selectSearchLoadsEquipment,
+  verifySearchLoadsForm,
+  submitAndExtractSearchLoads,
+  type SearchControls,
   type RawSearchLoadCandidate,
 } from "../src/searchLoads.ts";
 import { WorkflowError, type SearchLoadsRequest } from "../src/types.ts";
+import type { AppConfig } from "../src/config.ts";
+
+const scopeRequest: SearchLoadsRequest = {
+  workflowId: "fct-dat-search-loads-offers-v1", schemaVersion: 1,
+  requestId: "synthetic-scope", shipmentRecordId: "synthetic-shipment",
+  searchFingerprint: "synthetic-fingerprint", origin: "Charlotte, NC", destination: "Atlanta, GA",
+  equipmentType: "Vans (Standard)", pickupDate: "2026-09-09",
+  originDeadheadMiles: 50, destinationDeadheadMiles: 50,
+  loadType: "Full & Partial", includeSimilarResults: false, approveSearch: true,
+};
+
+function scopeFormFixture(): string {
+  return `<input role="combobox" aria-label="Origin" value="Charlotte, NC">
+    <input role="combobox" aria-label="Destination" value="Atlanta, GA">
+    <input aria-label="DH-O" value="50"><input aria-label="DH-D" value="50">
+    <mat-form-field><input data-test="equipment-type-dropdown">
+      <mat-chip-list role="listbox"><mat-chip role="option">Vans (Standard)<i matchipremove>cancel</i></mat-chip></mat-chip-list>
+    </mat-form-field>
+    <div role="combobox" aria-label="Load Type">Full &amp; Partial</div>
+    <input aria-label="Start Date" value="9/9/2026"><input aria-label="End Date" value="09/09/2026">
+    <button role="switch" aria-label="Include Similar Results" aria-checked="false">Similar</button>
+    <button>SEARCH</button>`;
+}
+
+function scopeControls(page: import("@playwright/test").Page): SearchControls {
+  return {
+    origin: page.getByRole("combobox", { name: "Origin", exact: true }),
+    destination: page.getByRole("combobox", { name: "Destination", exact: true }),
+    search: page.getByRole("button", { name: "SEARCH", exact: true }),
+    startDate: page.getByRole("textbox", { name: "Start Date", exact: true }),
+    endDate: page.getByRole("textbox", { name: "End Date", exact: true }),
+    validatedRequest: scopeRequest,
+  };
+}
+
+test("final form readback rejects a saved search overwriting the origin after staging", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.route("**/*", (route) => route.abort());
+    await page.setContent(scopeFormFixture());
+    const controls = scopeControls(page);
+    assert.ok(Object.values(await verifySearchLoadsForm(page, controls, scopeRequest)).every(Boolean));
+    await controls.origin.fill("Baltimore, MD");
+    await assert.rejects(verifySearchLoadsForm(page, controls, scopeRequest),
+      (error: unknown) => error instanceof WorkflowError && error.category === "FORM_VALUE_REJECTED");
+  } finally { await browser.close(); }
+});
+
+test("final readback checks every approved filter and fails closed on a missing Similar Results control", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.route("**/*", (route) => route.abort());
+    for (const selector of [
+      '[aria-label="DH-O"]', '[aria-label="DH-D"]', '[role="option"]',
+      '[aria-label="Load Type"]', '[aria-label="Start Date"]', '[aria-label="End Date"]',
+      '[aria-label="Include Similar Results"]',
+    ]) {
+      await page.setContent(scopeFormFixture());
+      await page.locator(selector).evaluate((element) => {
+        if (element instanceof HTMLInputElement) element.value = "invalid";
+        else element.remove();
+      });
+      await assert.rejects(verifySearchLoadsForm(page, scopeControls(page), scopeRequest));
+    }
+  } finally { await browser.close(); }
+});
+
+function scopeResultFixture(mode: "stale" | "delayed" | "wrong-lane" | "empty" | "changes-during-sort"): string {
+  return `${scopeFormFixture()}
+    <div data-test="search-tab-group">
+      <div role="tab" aria-selected="true"><div data-test="search-tab-summary-labels"><div class="load-details">
+        <div id="active-origin">Baltimore, MD</div><div>Atlanta, GA</div>
+      </div></div></div>
+      <div id="progress"></div>
+    </div>
+    <div data-test="results-counter">1Results</div>
+    <button data-test="sort-by-button">Age - Newest</button>
+    <button role="menuitem">Rate - Highest</button>
+    <div id="result-rows"><div class="row-container" id="table-row-old">
+      <div class="cell-rate"><dat-rate><div class="offer">$1,000</div></dat-rate></div>
+      <div class="cell-route"><dat-route>Bethlehem, PA Anniston, AL 859 mi</dat-route></div>
+    </div></div>
+    <script>
+      const mode = ${JSON.stringify(mode)};
+      const search = Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'SEARCH');
+      search.onclick = () => {
+        document.body.dataset.searchClicks = String(Number(document.body.dataset.searchClicks || '0') + 1);
+        if (mode === 'stale') return;
+        document.querySelector('#progress').innerHTML = '<mat-progress-bar role="progressbar" style="display:block;height:4px;width:100px"></mat-progress-bar>';
+        setTimeout(() => {
+          document.querySelector('#active-origin').textContent = mode === 'wrong-lane' ? 'Baltimore, MD' : 'Charlotte, NC';
+          document.querySelector('[data-test="results-counter"]').textContent = mode === 'empty' ? '0Results' : '1Results';
+          document.querySelector('#result-rows').innerHTML = mode === 'empty' ? '' : '<div class="row-container" id="table-row-fresh"><div class="cell-rate"><dat-rate><div class="offer">$900</div></dat-rate></div><div class="cell-route"><dat-route>Gastonia, NC Atlanta, GA 220 mi</dat-route></div></div>';
+          document.querySelector('#progress').replaceChildren();
+        }, mode === 'delayed' ? 1000 : 100);
+      };
+      document.querySelector('[role="menuitem"]').onclick = () => {
+        document.querySelector('[data-test="sort-by-button"]').textContent = 'Rate - Highest';
+        if (mode === 'changes-during-sort') document.querySelector('#active-origin').textContent = 'Baltimore, MD';
+      };
+    </script>`;
+}
+
+test("single SEARCH rejects stale or wrong-lane tables and waits beyond 750ms for a same-count fresh result", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const mode of ["stale", "delayed", "wrong-lane", "empty", "changes-during-sort"] as const) {
+      const page = await browser.newPage();
+      await page.route("**/*", (route) => route.abort());
+      await page.setContent(scopeResultFixture(mode));
+      const result = submitAndExtractSearchLoads(page, scopeRequest, scopeControls(page), {
+        resultTimeoutMs: mode === "delayed" ? 2200 : 500,
+      } as AppConfig);
+      if (mode === "delayed" || mode === "empty") {
+        const accepted = await result;
+        assert.equal(accepted.acceptedCriteria.origin, "Charlotte, NC");
+        assert.equal(accepted.acceptedCriteria.originDeadheadMiles, 50);
+        assert.equal(accepted.acceptedCriteria.destinationDeadheadMiles, 50);
+        assert.equal(accepted.directResultCount, mode === "empty" ? 0 : 1);
+        if (mode === "delayed") {
+          assert.equal(accepted.offers[0].datLoadId, "table-row-fresh");
+          assert.equal(accepted.offers[0].origin, "Gastonia, NC");
+        }
+      } else {
+        await assert.rejects(result, (error: unknown) => error instanceof WorkflowError && error.category === "RESULT_SCOPE_UNVERIFIED");
+      }
+      assert.equal(await page.locator("body").getAttribute("data-search-clicks"), "1");
+      await page.close();
+    }
+  } finally { await browser.close(); }
+});
 
 function candidate(
   id: string,

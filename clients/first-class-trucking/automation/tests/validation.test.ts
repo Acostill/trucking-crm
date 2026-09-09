@@ -117,3 +117,24 @@ test("Search Loads rejects past pickup dates before browser use", () => {
     "2026-09-02",
   );
 });
+
+test("Search Loads preserves approved 50-mile and legacy 150-mile radii and server-provided fingerprints", () => {
+  const now = new Date("2026-09-09T15:00:00Z");
+  const request = {
+    workflowId: SEARCH_LOADS_WORKFLOW_ID, schemaVersion: SEARCH_LOADS_SCHEMA_VERSION,
+    requestId: "search-radius-test", shipmentRecordId: "shipment-radius-test",
+    searchFingerprint: "c".repeat(64), origin: "Charlotte, NC", destination: "Atlanta, GA",
+    equipmentType: "Vans (Standard)", pickupDate: "2026-09-09",
+    originDeadheadMiles: 50, destinationDeadheadMiles: 50,
+    loadType: "Full & Partial", includeSimilarResults: false, approveSearch: true,
+  } as const;
+  const current = validateSearchLoadsRequest(request, now);
+  const legacy = validateSearchLoadsRequest({ ...request, searchFingerprint: "d".repeat(64), originDeadheadMiles: 150, destinationDeadheadMiles: 150 }, now);
+  assert.equal(current.originDeadheadMiles, 50);
+  assert.equal(current.destinationDeadheadMiles, 50);
+  assert.equal(legacy.originDeadheadMiles, 150);
+  assert.equal(legacy.destinationDeadheadMiles, 150);
+  assert.notEqual(requestFingerprint(current), requestFingerprint(legacy));
+  assert.throws(() => validateSearchLoadsRequest({ ...request, destinationDeadheadMiles: 150 }, now));
+  assert.throws(() => validateSearchLoadsRequest({ ...request, originDeadheadMiles: 75 as 50 }, now));
+});

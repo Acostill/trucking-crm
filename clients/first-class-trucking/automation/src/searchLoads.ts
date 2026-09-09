@@ -3,6 +3,11 @@ import path from "node:path";
 import { expect, type Locator, type Page } from "@playwright/test";
 import type { AppConfig } from "./config.ts";
 import {
+  assertStableSearchLoadsScope,
+  observeSearchLoadsScope,
+  waitForSearchLoadsScope,
+} from "./searchLoadsScope.ts";
+import {
   resolveSharedSessionConflict,
   waitForAuthenticatedTarget,
 } from "./rateview.ts";
@@ -37,12 +42,13 @@ export interface RawSearchLoadCandidate {
   commentsStatus: SearchLoadOffer["commentsStatus"];
 }
 
-interface SearchControls {
+export interface SearchControls {
   origin: Locator;
   destination: Locator;
   search: Locator;
   startDate: Locator;
   endDate: Locator;
+  validatedRequest?: Readonly<SearchLoadsRequest>;
 }
 
 const CONTACT_EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
@@ -577,7 +583,10 @@ async function populateSearchLoadsFormOnce(
     await expect(similar).toHaveAttribute("aria-checked", "false");
   }
   await expect(search).toBeEnabled({ timeout: timeoutMs });
-  return { origin, destination, search, startDate, endDate };
+  return {
+    origin, destination, search, startDate, endDate,
+    validatedRequest: Object.freeze({ ...request }),
+  };
 }
 
 export async function populateSearchLoadsForm(
@@ -602,6 +611,14 @@ export async function populateSearchLoadsForm(
       );
     }
     try {
+      // DAT restores a saved tab asynchronously. Do not let that hydration
+      // overwrite the requested origin while this workflow stages the form.
+      const initialScope = await observeSearchLoadsScope(page);
+      try {
+        await waitForSearchLoadsScope(initialScope.read, config.resultTimeoutMs);
+      } finally {
+        await initialScope.dispose();
+      }
       return await populateSearchLoadsFormOnce(
         page,
         request,
@@ -683,10 +700,14 @@ export async function populateSearchLoadsForm(
 }
 
 export async function captureSearchLoadsPreSubmitEvidence(
-  _page: Page,
-  _controls: SearchControls,
+  page: Page,
+  controls: SearchControls,
   runDirectory: string,
 ): Promise<void> {
+  if (!controls.validatedRequest) {
+    throw new WorkflowError("FORM_VALUE_REJECTED", "DAT form has no validated request snapshot.", "SL-070");
+  }
+  const comparisons = await verifySearchLoadsForm(page, controls, controls.validatedRequest);
   await fs.mkdir(runDirectory, { recursive: true, mode: 0o700 });
   await fs.writeFile(
     path.join(runDirectory, "pre-submit-evidence.json"),
@@ -694,10 +715,57 @@ export async function captureSearchLoadsPreSubmitEvidence(
       schemaVersion: 1,
       capturedAt: new Date().toISOString(),
       status: "FORM_VALIDATED_PRE_SUBMIT",
+      stepId: "SL-070",
+      searchFingerprint: controls.validatedRequest.searchFingerprint,
+      comparisons,
       redaction: "No page screenshot retained; Search Loads can display confidential rates and contact data.",
     }, null, 2)}\n`,
     { mode: 0o600 },
   );
+}
+
+/** Re-read every approved criterion after staging, and immediately before SEARCH.
+ * This proves the form only; it is never treated as result identity evidence. */
+export async function verifySearchLoadsForm(
+  page: Page,
+  controls: SearchControls,
+  request: Readonly<SearchLoadsRequest>,
+): Promise<Record<string, boolean>> {
+  const readInput = async (control: Locator): Promise<string> =>
+    await control.count() === 1 ? control.inputValue() : "";
+  const readNamed = async (name: RegExp): Promise<string> => {
+    const control = page.getByRole("spinbutton", { name }).or(page.getByRole("textbox", { name }));
+    return await control.count() === 1 ? control.inputValue() : "";
+  };
+  const equipmentInput = page.locator('input[data-test="equipment-type-dropdown"]');
+  const equipmentField = page.locator("mat-form-field").filter({ has: equipmentInput });
+  const chips = equipmentField.locator('mat-chip-list[role="listbox"] mat-chip[role="option"]');
+  const loadType = page.getByRole("combobox", { name: /^Load Type/i });
+  const readLoadType = await loadType.count() === 1
+    ? await loadType.evaluate((element) => element instanceof HTMLInputElement || element instanceof HTMLSelectElement
+      ? element.value : (element as HTMLElement).innerText)
+    : "";
+  const similar = page.getByRole("switch", { name: /Include Similar Results/i });
+  const [year, month, day] = request.pickupDate.split("-");
+  const dates = new Set([request.pickupDate, `${Number(month)}/${Number(day)}/${year}`, `${month}/${day}/${year}`]);
+  const comparisons = {
+    origin: searchLoadsLabelsEqual(await readInput(controls.origin), request.origin),
+    destination: searchLoadsLabelsEqual(await readInput(controls.destination), request.destination),
+    originDeadhead: await readNamed(/^DH-O$/i) === String(request.originDeadheadMiles),
+    destinationDeadhead: await readNamed(/^DH-D$/i) === String(request.destinationDeadheadMiles),
+    equipment: await equipmentField.count() === 1 && await chips.count() === 1 &&
+      searchLoadsLabelsEqual(await selectedEquipmentChipLabel(chips.first()), searchLoadsEquipmentUiLabel(request.equipmentType)),
+    loadType: searchLoadsLabelsEqual(readLoadType, request.loadType),
+    startDate: dates.has(await readInput(controls.startDate)),
+    endDate: dates.has(await readInput(controls.endDate)),
+    includeSimilarResults: await similar.count() === 1 && await similar.getAttribute("aria-checked") === "false",
+    searchEnabled: await controls.search.count() === 1 && await controls.search.isEnabled(),
+  };
+  if (Object.values(comparisons).some((value) => !value)) {
+    const failed = Object.entries(comparisons).filter(([, passed]) => !passed).map(([name]) => name);
+    throw new WorkflowError("FORM_VALUE_REJECTED", `DAT final form readback failed: ${failed.join(", ")}.`, "SL-070");
+  }
+  return comparisons;
 }
 
 function firstMatch(value: string | null, pattern: RegExp): string | null {
@@ -921,7 +989,9 @@ export async function collectCompleteDirectRows(
   page: Page,
   expectedCount: number,
   timeoutMs: number,
+  assertScope?: () => Promise<void>,
 ): Promise<RawSearchLoadCandidate[]> {
+  await assertScope?.();
   if (expectedCount === 0) return [];
   const rows = page.locator('.row-container[id^="table-row-"]:not(#table-row-similar-matches-separator)');
   const viewport = page.locator("cdk-virtual-scroll-viewport.table-rows-container").first();
@@ -935,7 +1005,9 @@ export async function collectCompleteDirectRows(
   const collected = new Map<string, RawSearchLoadCandidate>();
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline && collected.size < expectedCount) {
+    await assertScope?.();
     const visibleRows = await snapshotVisibleRows(rows);
+    await assertScope?.();
     for (const visibleRow of visibleRows) {
       const id = clean(visibleRow.datLoadId);
       if (!id || collected.has(id)) continue;
@@ -964,6 +1036,7 @@ export async function collectCompleteDirectRows(
     // instead of treating five unchanged frames as a terminal list.
     await page.waitForTimeout(250);
   }
+  await assertScope?.();
   if (collected.size !== expectedCount) {
     throw new WorkflowError(
       "RESULT_SCOPE_UNVERIFIED",
@@ -983,37 +1056,50 @@ export async function submitAndExtractSearchLoads(
   controls: SearchControls,
   config: AppConfig,
 ): Promise<SearchLoadsResult> {
-  await controls.search.click();
-  await page.waitForTimeout(750);
-  const count = await directResultCount(page, config.resultTimeoutMs);
-  const similar = page.getByRole("switch", { name: /Include Similar Results/i });
-  if (await similar.count()) {
-    await expect(similar).toHaveAttribute("aria-checked", "false");
+  const scope = await observeSearchLoadsScope(page);
+  try {
+    const before = await waitForSearchLoadsScope(scope.read, config.resultTimeoutMs);
+    await verifySearchLoadsForm(page, controls, request);
+    // Exactly one activation. Any subsequent scope failure is thrown to the
+    // runner, whose durable submitted ledger becomes uncertain, never retried.
+    await controls.search.click();
+    const fresh = await waitForSearchLoadsScope(scope.read, config.resultTimeoutMs, {
+      request, afterRevision: before.revision,
+    });
+    const count = fresh.count as number;
+    await verifySearchLoadsForm(page, controls, request);
+    if (count > 0) await chooseHighestRateSort(page, config.resultTimeoutMs);
+    const accepted = await waitForSearchLoadsScope(scope.read, config.resultTimeoutMs, { request });
+    if (accepted.count !== count) {
+      throw new WorkflowError("RESULT_SCOPE_UNVERIFIED", "DAT direct scope changed during sorting.", "SL-090");
+    }
+    const assertScope = async () => assertStableSearchLoadsScope(await scope.read(), accepted, request);
+    const candidates = await collectCompleteDirectRows(page, count, config.resultTimeoutMs, assertScope);
+    await verifySearchLoadsForm(page, controls, request);
+    await assertScope();
+    const ranked = rankSearchLoadCandidates(candidates);
+    return {
+      workflowId: SEARCH_LOADS_WORKFLOW_ID,
+      schemaVersion: SEARCH_LOADS_SCHEMA_VERSION,
+      requestId: request.requestId,
+      shipmentRecordId: request.shipmentRecordId,
+      searchFingerprint: request.searchFingerprint,
+      source: "DAT Search Loads",
+      searchTimestamp: new Date().toISOString(),
+      acceptedCriteria: {
+        origin: accepted.origin!.replace(/\s+/g, " ").trim(),
+        destination: accepted.destination!.replace(/\s+/g, " ").trim(),
+        equipmentType: request.equipmentType,
+        pickupDate: request.pickupDate,
+        originDeadheadMiles: request.originDeadheadMiles,
+        destinationDeadheadMiles: request.destinationDeadheadMiles,
+        loadType: "Full & Partial",
+        includeSimilarResults: false,
+        sort: "Rate - Highest",
+      },
+      ...ranked,
+    };
+  } finally {
+    await scope.dispose();
   }
-  if (count > 0) {
-    await chooseHighestRateSort(page, config.resultTimeoutMs);
-  }
-  const candidates = await collectCompleteDirectRows(page, count, config.resultTimeoutMs);
-  const ranked = rankSearchLoadCandidates(candidates);
-  return {
-    workflowId: SEARCH_LOADS_WORKFLOW_ID,
-    schemaVersion: SEARCH_LOADS_SCHEMA_VERSION,
-    requestId: request.requestId,
-    shipmentRecordId: request.shipmentRecordId,
-    searchFingerprint: request.searchFingerprint,
-    source: "DAT Search Loads",
-    searchTimestamp: new Date().toISOString(),
-    acceptedCriteria: {
-      origin: request.origin,
-      destination: request.destination,
-      equipmentType: request.equipmentType,
-      pickupDate: request.pickupDate,
-      originDeadheadMiles: 150,
-      destinationDeadheadMiles: 150,
-      loadType: "Full & Partial",
-      includeSimilarResults: false,
-      sort: "Rate - Highest",
-    },
-    ...ranked,
-  };
 }

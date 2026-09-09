@@ -66,8 +66,8 @@ export interface SearchLoadsRequest {
   destination: string;
   equipmentType: SearchLoadsEquipmentType;
   pickupDate: string;
-  originDeadheadMiles: 150;
-  destinationDeadheadMiles: 150;
+  originDeadheadMiles: 50 | 150;
+  destinationDeadheadMiles: 50 | 150;
   loadType: "Full & Partial";
   includeSimilarResults: false;
   approveSearch: boolean;
@@ -109,8 +109,8 @@ export interface SearchLoadsResult {
     destination: string;
     equipmentType: SearchLoadsEquipmentType;
     pickupDate: string;
-    originDeadheadMiles: 150;
-    destinationDeadheadMiles: 150;
+    originDeadheadMiles: 50 | 150;
+    destinationDeadheadMiles: 50 | 150;
     loadType: "Full & Partial";
     includeSimilarResults: false;
     sort: "Rate - Highest";

@@ -13,6 +13,7 @@ type DatSearchEquipmentType = 'Vans (Standard)' | 'Flatbeds (Standard)' | 'Reefe
 
 export const DAT_SEARCH_LOADS_WORKFLOW_ID = 'fct-dat-search-loads-offers-v1';
 export const DAT_SEARCH_LOADS_SCHEMA_VERSION = 1;
+export const DAT_SEARCH_LOADS_RADIUS_MILES = 50;
 
 export interface DatRateViewRequest {
   requestId: string;
@@ -31,8 +32,8 @@ export interface DatSearchLoadsRequest {
   destination: string;
   equipmentType: DatSearchEquipmentType;
   pickupDate: string;
-  originDeadheadMiles: 150;
-  destinationDeadheadMiles: 150;
+  originDeadheadMiles: 50;
+  destinationDeadheadMiles: 50;
   loadType: 'Full & Partial';
   includeSimilarResults: false;
 }
@@ -73,8 +74,8 @@ export interface DatSearchLoadsResult {
     destination: string;
     equipmentType: DatSearchEquipmentType;
     pickupDate: string;
-    originDeadheadMiles: 150;
-    destinationDeadheadMiles: 150;
+    originDeadheadMiles: 50 | 150;
+    destinationDeadheadMiles: 50 | 150;
     loadType: 'Full & Partial';
     includeSimilarResults: false;
     sort: 'Rate - Highest';
@@ -237,8 +238,8 @@ export function buildDatSearchLoadsRequest(
     destination: destination.toLowerCase(),
     equipmentType: equipmentType.toLowerCase(),
     pickupDate,
-    originDeadheadMiles: 150,
-    destinationDeadheadMiles: 150,
+    originDeadheadMiles: DAT_SEARCH_LOADS_RADIUS_MILES,
+    destinationDeadheadMiles: DAT_SEARCH_LOADS_RADIUS_MILES,
     loadType: 'full & partial',
     includeSimilarResults: false
   });
@@ -255,8 +256,8 @@ export function buildDatSearchLoadsRequest(
       destination,
       equipmentType,
       pickupDate,
-      originDeadheadMiles: 150,
-      destinationDeadheadMiles: 150,
+      originDeadheadMiles: DAT_SEARCH_LOADS_RADIUS_MILES,
+      destinationDeadheadMiles: DAT_SEARCH_LOADS_RADIUS_MILES,
       loadType: 'Full & Partial',
       includeSimilarResults: false
     }
@@ -487,7 +488,9 @@ function nonNegativeInteger(value: any, field: string): number {
 }
 
 function validateSearchCriteria(value: any): DatSearchLoadsResult['acceptedCriteria'] {
-  if (!value || value.originDeadheadMiles !== 150 || value.destinationDeadheadMiles !== 150 ||
+  // Retain historical 150-mile results for audit; new requests always use 50.
+  if (!value || ![50, 150].includes(value.originDeadheadMiles) ||
+      ![50, 150].includes(value.destinationDeadheadMiles) ||
       value.loadType !== 'Full & Partial' || value.includeSimilarResults !== false ||
       value.sort !== 'Rate - Highest') {
     throw new Error('DAT Search Loads accepted criteria are invalid');
@@ -505,8 +508,8 @@ function validateSearchCriteria(value: any): DatSearchLoadsResult['acceptedCrite
     destination: cleanText(value.destination),
     equipmentType,
     pickupDate,
-    originDeadheadMiles: 150,
-    destinationDeadheadMiles: 150,
+    originDeadheadMiles: value.originDeadheadMiles,
+    destinationDeadheadMiles: value.destinationDeadheadMiles,
     loadType: 'Full & Partial',
     includeSimilarResults: false,
     sort: 'Rate - Highest'
@@ -1207,7 +1210,11 @@ export async function completeDatRateViewJob(
         cleanText(searchResult.acceptedCriteria.origin).toLowerCase() !== cleanText(searchInput.origin).toLowerCase() ||
         cleanText(searchResult.acceptedCriteria.destination).toLowerCase() !== cleanText(searchInput.destination).toLowerCase() ||
         searchResult.acceptedCriteria.equipmentType !== searchInput.equipmentType ||
-        searchResult.acceptedCriteria.pickupDate !== searchInput.pickupDate
+        searchResult.acceptedCriteria.pickupDate !== searchInput.pickupDate ||
+        searchResult.acceptedCriteria.originDeadheadMiles !== searchInput.originDeadheadMiles ||
+        searchResult.acceptedCriteria.destinationDeadheadMiles !== searchInput.destinationDeadheadMiles ||
+        searchResult.acceptedCriteria.loadType !== searchInput.loadType ||
+        searchResult.acceptedCriteria.includeSimilarResults !== searchInput.includeSimilarResults
       ) {
         const err: any = new Error('DAT Search Loads result does not match the claimed request');
         err.status = 400;

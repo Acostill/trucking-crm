@@ -287,8 +287,8 @@ const PREVIEW_QUOTES = [
           destination: 'Atlanta, GA',
           equipmentType: 'Vans (Standard)',
           pickupDate: '2026-08-03',
-          originDeadheadMiles: 150,
-          destinationDeadheadMiles: 150,
+          originDeadheadMiles: 50,
+          destinationDeadheadMiles: 50,
           loadType: 'Full & Partial',
           includeSimilarResults: false,
           sort: 'Rate - Highest'
@@ -1460,7 +1460,7 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section eq-dat-loads-section">
                     <div className="eq-section-heading">
-                      <div><Truck size={18} /><span><strong>DAT Market Offers — pricing context only</strong><small>Search Loads runs automatically and returns up to 10 direct results ranked by total Rate. They are not confirmed carrier bids or capacity.</small></span></div>
+                      <div><Truck size={18} /><span><strong>DAT Market Offers — pricing context only</strong><small>Loads within 50 miles of the pickup and delivery cities, ranked by total rate. Each row shows the load’s actual locations.</small></span></div>
                       {datLoadsRetryable ? (
                         <button
                           type="button"
@@ -1508,14 +1508,14 @@ export default function EmailQuoteInboxPage() {
                             <span>{datLoadsOption.acceptedCriteria.destination}</span>
                             <em>{datLoadsOption.acceptedCriteria.equipmentType}</em>
                             <em>{datLoadsOption.acceptedCriteria.pickupDate}</em>
-                            <em>150 mi DH-O / DH-D</em>
+                            <em>Within {datLoadsOption.acceptedCriteria.originDeadheadMiles} mi of pickup / {datLoadsOption.acceptedCriteria.destinationDeadheadMiles} mi of delivery</em>
                           </div>
                         )}
                         {datLoadsOption.offers && datLoadsOption.offers.length ? (
                           <div className="eq-dat-loads-table-wrap">
                             <table className="eq-dat-loads-table">
                               <thead>
-                                <tr><th>Rank / rate</th><th>Lane</th><th>Pickup</th><th>Equipment</th><th>Company</th><th>Credit</th><th>Comments</th></tr>
+                                <tr><th>Rank / rate</th><th>Actual pickup → delivery</th><th>Pickup date</th><th>Equipment</th><th>Company</th><th>Credit</th><th>Comments</th></tr>
                               </thead>
                               <tbody>
                                 {datLoadsOption.offers.map(function(offer) {

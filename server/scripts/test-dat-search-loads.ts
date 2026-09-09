@@ -1,4 +1,5 @@
 import assert from 'assert';
+import crypto from 'crypto';
 import { mergeDatCarrierOptions } from '../services/carrierQuoteOptions';
 import {
   DAT_SEARCH_LOADS_WORKFLOW_ID,
@@ -56,9 +57,17 @@ function run() {
   assert.strictEqual(candidate.request.workflowId, DAT_SEARCH_LOADS_WORKFLOW_ID);
   assert.strictEqual(candidate.request.equipmentType, 'Vans (Standard)');
   assert.strictEqual(candidate.request.pickupDate, '2026-08-13');
-  assert.strictEqual(candidate.request.originDeadheadMiles, 150);
-  assert.strictEqual(candidate.request.destinationDeadheadMiles, 150);
+  assert.strictEqual(candidate.request.originDeadheadMiles, 50);
+  assert.strictEqual(candidate.request.destinationDeadheadMiles, 50);
   assert.strictEqual(candidate.request.includeSimilarResults, false);
+  const oldFingerprint = crypto.createHash('sha256').update(JSON.stringify({
+    workflowId: DAT_SEARCH_LOADS_WORKFLOW_ID, schemaVersion: 1,
+    shipmentRecordId: 'email-quote-search-test', origin: 'portland, or', destination: 'chicago, il',
+    equipmentType: 'vans (standard)', pickupDate: '2026-08-13',
+    originDeadheadMiles: 150, destinationDeadheadMiles: 150,
+    loadType: 'full & partial', includeSimilarResults: false
+  })).digest('hex');
+  assert.notStrictEqual(candidate.fingerprint, oldFingerprint, '50-mile searches must not reuse a 150-mile result');
 
   const offers = [offer(1, 4500), offer(2, 4200), offer(3, 3900)];
   const result = validateDatSearchLoadsResult({
@@ -74,8 +83,8 @@ function run() {
       destination: 'Chicago, IL',
       equipmentType: 'Vans (Standard)',
       pickupDate: '2026-08-13',
-      originDeadheadMiles: 150,
-      destinationDeadheadMiles: 150,
+      originDeadheadMiles: 50,
+      destinationDeadheadMiles: 50,
       loadType: 'Full & Partial',
       includeSimilarResults: false,
       sort: 'Rate - Highest'
@@ -95,6 +104,15 @@ function run() {
   assert.strictEqual(mapped.key, 'datLoadOffers');
   assert.strictEqual(mapped.selectable, false);
   assert.strictEqual(mapped.offers?.length, 3);
+  assert.strictEqual(mapped.acceptedCriteria.originDeadheadMiles, 50);
+  assert.strictEqual(mapped.acceptedCriteria.destinationDeadheadMiles, 50);
+  const historical = validateDatSearchLoadsResult({ ...result, acceptedCriteria: {
+    ...result.acceptedCriteria, originDeadheadMiles: 150, destinationDeadheadMiles: 150
+  } });
+  assert.strictEqual(historical.acceptedCriteria.originDeadheadMiles, 150);
+  assert.throws(() => validateDatSearchLoadsResult({ ...result, acceptedCriteria: {
+    ...result.acceptedCriteria, originDeadheadMiles: 500
+  } }), /accepted criteria/);
 
   const merged = mergeDatCarrierOptions([
     { key: 'forwardAir', source: 'Forward Air', available: true, cost: 1200 },

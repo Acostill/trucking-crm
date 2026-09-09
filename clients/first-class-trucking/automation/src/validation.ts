@@ -105,8 +105,8 @@ export function validateSearchLoadsRequest(
     destination: normalizeText(input.destination || ""),
     equipmentType,
     pickupDate: normalizeText(input.pickupDate || ""),
-    originDeadheadMiles: input.originDeadheadMiles as 150,
-    destinationDeadheadMiles: input.destinationDeadheadMiles as 150,
+    originDeadheadMiles: input.originDeadheadMiles as 50 | 150,
+    destinationDeadheadMiles: input.destinationDeadheadMiles as 50 | 150,
     loadType: input.loadType as "Full & Partial",
     includeSimilarResults: input.includeSimilarResults as false,
     approveSearch: input.approveSearch === true,
@@ -118,7 +118,8 @@ export function validateSearchLoadsRequest(
     !/^[a-f0-9]{64}$/.test(request.searchFingerprint) ||
     !isCurrentOrFutureCalendarDate(request.pickupDate, now, timezone) ||
     !SEARCH_EQUIPMENT.includes(equipmentType) ||
-    request.originDeadheadMiles !== 150 || request.destinationDeadheadMiles !== 150 ||
+    ![50, 150].includes(request.originDeadheadMiles) ||
+    request.destinationDeadheadMiles !== request.originDeadheadMiles ||
     request.loadType !== "Full & Partial" || request.includeSimilarResults !== false
   ) {
     throw new WorkflowError(
