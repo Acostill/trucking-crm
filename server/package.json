@@ -35,6 +35,7 @@
     "db:migrate:phase1-hardening": "ts-node ./scripts/run-phase1-hardening-migration.ts",
     "db:migrate:quote-operations": "ts-node ./scripts/run-quote-operations-migration.ts",
     "db:migrate:quote-advisor-chat": "ts-node ./scripts/run-quote-advisor-chat-migration.ts",
+    "db:migrate:carrier-connection-credentials": "ts-node ./scripts/run-carrier-connection-credentials-migration.ts",
     "gmail:authorize": "ts-node ./scripts/authorize-gmail.ts",
     "gmail:authorize:send": "ts-node ./scripts/authorize-gmail.ts --send",
     "start": "node dist/bin/www.js"

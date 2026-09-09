@@ -1832,6 +1832,30 @@ label {
   font-size: 18px;
 }
 
+.carrier-connection-form .admin-form-heading h3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.carrier-status {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.carrier-status.connected {
+  border-color: rgba(5, 150, 105, 0.35);
+  background: rgba(236, 253, 245, 0.86);
+  color: #047857;
+}
+
 .admin-form-heading p {
   margin: 5px 0 0;
   color: var(--muted);

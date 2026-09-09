@@ -1,5 +1,10 @@
 import express, { Request, Response, NextFunction } from 'express';
 import db from '../db';
+import {
+  ForwardAirCredentials,
+  getForwardAirConnectionStatus,
+  saveForwardAirCredentials
+} from '../services/carrierConnectionCredentials';
 
 const router = express.Router();
 const SESSION_COOKIE = 'session_token';
@@ -51,6 +56,46 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 router.use(requireAdmin);
+
+function cleanCredential(value: unknown, field: string): string {
+  const cleaned = String(value || '').trim();
+  if (!cleaned || cleaned.length > 300 || /[\r\n]/.test(cleaned)) {
+    throw new Error(`${field} is required and must be 300 characters or fewer.`);
+  }
+  return cleaned;
+}
+
+router.get('/carrier-connections/forward-air', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    // Deliberately never return credential values to the browser.
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(await getForwardAirConnectionStatus());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/carrier-connections/forward-air', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = req.body || {};
+    const credentials: ForwardAirCredentials = {
+      username: cleanCredential(body.username, 'Username'),
+      password: cleanCredential(body.password, 'Password'),
+      customerId: cleanCredential(body.customerId, 'Customer ID'),
+      billToCustomerNumber: cleanCredential(body.billToCustomerNumber, 'Bill-to customer number'),
+      shipperCustomerNumber: cleanCredential(body.shipperCustomerNumber, 'Shipper customer number')
+    };
+    await saveForwardAirCredentials(credentials, (req as any).user.id);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ saved: true, message: 'Forward Air production credentials saved securely.' });
+  } catch (err: any) {
+    if (err && typeof err.message === 'string' && /(required|Carrier credential storage)/.test(err.message)) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
 
 // Get a profit margin rule by ID (default row used for future margins)
 router.get('/profit-margin/:id', async function(req: Request, res: Response, next: NextFunction) {
@@ -202,4 +247,3 @@ router.get('/audit/:tableName', async function(req: Request, res: Response, next
 });
 
 export default router;
-

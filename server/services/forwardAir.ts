@@ -1,6 +1,7 @@
 import https from 'https';
 import xml2js from 'xml2js';
 import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
+import { getStoredForwardAirCredentials } from './carrierConnectionCredentials';
 
 export interface ForwardAirResponse {
   QuoteResponse?: {
@@ -36,12 +37,25 @@ function configuredText(name: string): string {
 }
 
 export function getForwardAirConfig(): ForwardAirConfig {
-  const baseUrl = configuredText('FORWARD_AIR_BASE_URL');
-  const username = configuredText('FORWARD_AIR_USERNAME');
-  const password = configuredText('FORWARD_AIR_PASSWORD');
-  const customerId = configuredText('FORWARD_AIR_CUSTOMER_ID');
-  const billToCustomerNumber = configuredText('FORWARD_AIR_BILL_TO_CUSTOMER_NUMBER');
-  const shipperCustomerNumber = configuredText('FORWARD_AIR_SHIPPER_CUSTOMER_NUMBER');
+  return forwardAirConfigFromValues({
+    baseUrl: configuredText('FORWARD_AIR_BASE_URL'),
+    username: configuredText('FORWARD_AIR_USERNAME'),
+    password: configuredText('FORWARD_AIR_PASSWORD'),
+    customerId: configuredText('FORWARD_AIR_CUSTOMER_ID'),
+    billToCustomerNumber: configuredText('FORWARD_AIR_BILL_TO_CUSTOMER_NUMBER'),
+    shipperCustomerNumber: configuredText('FORWARD_AIR_SHIPPER_CUSTOMER_NUMBER')
+  });
+}
+
+function forwardAirConfigFromValues(values: {
+  baseUrl: string;
+  username: string;
+  password: string;
+  customerId: string;
+  billToCustomerNumber: string;
+  shipperCustomerNumber: string;
+}): ForwardAirConfig {
+  const { baseUrl, username, password, customerId, billToCustomerNumber, shipperCustomerNumber } = values;
   if (!baseUrl || !username || !password || !customerId || !billToCustomerNumber || !shipperCustomerNumber) {
     return { error: 'Forward Air production rating is not configured. Set FORWARD_AIR_BASE_URL, FORWARD_AIR_USERNAME, FORWARD_AIR_PASSWORD, FORWARD_AIR_CUSTOMER_ID, FORWARD_AIR_BILL_TO_CUSTOMER_NUMBER, and FORWARD_AIR_SHIPPER_CUSTOMER_NUMBER.' };
   }
@@ -54,6 +68,19 @@ export function getForwardAirConfig(): ForwardAirConfig {
   } catch (_error) {
     return { error: 'FORWARD_AIR_BASE_URL is not a valid URL.' };
   }
+}
+
+async function activeForwardAirConfig(): Promise<ForwardAirConfig> {
+  const stored = await getStoredForwardAirCredentials();
+  if (!stored) return getForwardAirConfig();
+  return forwardAirConfigFromValues({
+    baseUrl: `https://${PRODUCTION_HOST}`,
+    username: stored.username,
+    password: stored.password,
+    customerId: stored.customerId,
+    billToCustomerNumber: stored.billToCustomerNumber,
+    shipperCustomerNumber: stored.shipperCustomerNumber
+  });
 }
 
 function toWeightType(unit: string): string {
@@ -96,17 +123,17 @@ function requestError(body: UnifiedQuoteRequest): string | undefined {
 }
 
 export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIResponse<ForwardAirResponse | ErrorResponse>> {
-  const config = getForwardAirConfig();
-  if (config.error) return Promise.resolve({ statusCode: 503, data: { error: config.error } });
-  const invalid = requestError(body);
-  if (invalid) return Promise.resolve({ statusCode: 400, data: { error: invalid } });
+  return activeForwardAirConfig().then(function(config) {
+    if (config.error) return { statusCode: 503, data: { error: config.error } };
+    const invalid = requestError(body);
+    if (invalid) return { statusCode: 400, data: { error: invalid } };
 
-  const pickup = body.pickup || {};
-  const delivery = body.delivery || {};
-  const pieces = body.pieces || {};
-  const part = (pieces.parts || [])[0] || {};
-  const hazardous = Boolean(body.hazardousMaterial?.unNumbers?.filter(Boolean).length);
-  const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
+    const pickup = body.pickup || {};
+    const delivery = body.delivery || {};
+    const pieces = body.pieces || {};
+    const part = (pieces.parts || [])[0] || {};
+    const hazardous = Boolean(body.hazardousMaterial?.unNumbers?.filter(Boolean).length);
+    const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
 <QuoteRequest>
   <BillToCustomerNumber>${xml(config.billToCustomerNumber)}</BillToCustomerNumber>
   <ShipperCustomerNumber>${xml(config.shipperCustomerNumber)}</ShipperCustomerNumber>
@@ -117,25 +144,26 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
   <Hazmat>${hazardous ? 'Y' : 'N'}</Hazmat><InBondShipment>N</InBondShipment><DeclaredValue>0.00</DeclaredValue><ShippingDate>${ymd(pickup.date)}</ShippingDate>
 </QuoteRequest>`;
 
-  return new Promise((resolve, reject) => {
-    const request = https.request({
-      method: 'POST', hostname: config.endpoint!.hostname, path: config.endpoint!.pathname,
-      headers: { 'Content-Type': 'application/xml', 'Accept': 'application/xml', 'Content-Length': Buffer.byteLength(xmlBody), user: config.username!, password: config.password!, customerId: config.customerId! }
-    }, function(response) {
-      let raw = '';
-      response.on('data', function(chunk) { raw += chunk; });
-      response.on('end', function() {
-        if (String(response.headers?.['content-type'] || '').toLowerCase().includes('xml')) {
-          // Keep the provider's response root. The normalizer expects
-          // `QuoteResponse`, and flattening it can silently drop the quote.
-          xml2js.parseString(raw, { explicitArray: false, trim: true, explicitRoot: true }, function(error, data) {
-            resolve({ statusCode: response.statusCode || 500, data: error ? { error: 'Failed to parse Forward Air response.' } : data });
-          });
-        } else resolve({ statusCode: response.statusCode || 502, data: { error: 'Forward Air returned an unexpected response format.' } });
+    return new Promise<APIResponse<ForwardAirResponse | ErrorResponse>>((resolve, reject) => {
+      const request = https.request({
+        method: 'POST', hostname: config.endpoint!.hostname, path: config.endpoint!.pathname,
+        headers: { 'Content-Type': 'application/xml', 'Accept': 'application/xml', 'Content-Length': Buffer.byteLength(xmlBody), user: config.username!, password: config.password!, customerId: config.customerId! }
+      }, function(response) {
+        let raw = '';
+        response.on('data', function(chunk) { raw += chunk; });
+        response.on('end', function() {
+          if (String(response.headers?.['content-type'] || '').toLowerCase().includes('xml')) {
+            // Keep the provider's response root. The normalizer expects
+            // `QuoteResponse`, and flattening it can silently drop the quote.
+            xml2js.parseString(raw, { explicitArray: false, trim: true, explicitRoot: true }, function(error, data) {
+              resolve({ statusCode: response.statusCode || 500, data: error ? { error: 'Failed to parse Forward Air response.' } : data });
+            });
+          } else resolve({ statusCode: response.statusCode || 502, data: { error: 'Forward Air returned an unexpected response format.' } });
+        });
       });
+      request.on('error', reject);
+      request.write(xmlBody);
+      request.end();
     });
-    request.on('error', reject);
-    request.write(xmlBody);
-    request.end();
   });
 }

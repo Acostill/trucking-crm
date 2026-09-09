@@ -3,7 +3,7 @@ import { buildApiUrl } from '../config';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import AuthForm from '../components/AuthForm';
-import { Check, Copy, KeyRound, UserPlus, UserRoundCheck, UserRoundX } from 'lucide-react';
+import { Check, Copy, KeyRound, Save, Truck, UserPlus, UserRoundCheck, UserRoundX } from 'lucide-react';
 
 function normalizeRoles(list) {
   return Array.isArray(list) ? list.slice().sort().join('|') : '';
@@ -30,6 +30,12 @@ export default function AdminPortalPage() {
   const [passwordTarget, setPasswordTarget] = useState(null);
   const [resetPassword, setResetPassword] = useState('');
   const [credentialNotice, setCredentialNotice] = useState(null);
+  const [carrierStatus, setCarrierStatus] = useState(null);
+  const [carrierLoading, setCarrierLoading] = useState(false);
+  const [carrierSaving, setCarrierSaving] = useState(false);
+  const [forwardAirForm, setForwardAirForm] = useState({
+    username: '', password: '', customerId: '', billToCustomerNumber: '', shipperCustomerNumber: ''
+  });
   
   // Audit logs state
   const [auditTables, setAuditTables] = useState([]);
@@ -46,6 +52,8 @@ export default function AdminPortalPage() {
       fetchUsers();
     } else if (activeTab === 'audit') {
       fetchAuditTables();
+    } else if (activeTab === 'carriers') {
+      fetchCarrierStatus();
     }
   }, [activeTab]);
   
@@ -80,6 +88,48 @@ export default function AdminPortalPage() {
       setError(err && err.message ? err.message : 'Failed to load users');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchCarrierStatus() {
+    setCarrierLoading(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const resp = await fetch(buildApiUrl('/api/admin/carrier-connections/forward-air'), {
+        credentials: 'include', cache: 'no-store'
+      });
+      const data = await resp.json().catch(function(){ return null; });
+      if (!resp.ok) throw new Error((data && data.error) || 'Failed to load carrier connection status');
+      setCarrierStatus(data || null);
+    } catch (err) {
+      setError(err && err.message ? err.message : 'Failed to load carrier connection status');
+    } finally {
+      setCarrierLoading(false);
+    }
+  }
+
+  async function saveForwardAirConnection(event) {
+    event.preventDefault();
+    setCarrierSaving(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const resp = await fetch(buildApiUrl('/api/admin/carrier-connections/forward-air'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(forwardAirForm)
+      });
+      const data = await resp.json().catch(function(){ return null; });
+      if (!resp.ok) throw new Error((data && data.error) || 'Failed to save Forward Air credentials');
+      setForwardAirForm({ username: '', password: '', customerId: '', billToCustomerNumber: '', shipperCustomerNumber: '' });
+      setStatus((data && data.message) || 'Forward Air production credentials saved securely.');
+      await fetchCarrierStatus();
+    } catch (err) {
+      setError(err && err.message ? err.message : 'Failed to save Forward Air credentials');
+    } finally {
+      setCarrierSaving(false);
     }
   }
 
@@ -445,6 +495,12 @@ export default function AdminPortalPage() {
             >
               Audit Logs
             </button>
+            <button
+              className={activeTab === 'carriers' ? 'admin-tab active' : 'admin-tab'}
+              onClick={() => setActiveTab('carriers')}
+            >
+              Carrier connections
+            </button>
           </div>
 
           {/* Users Tab */}
@@ -683,6 +739,63 @@ export default function AdminPortalPage() {
                       </tbody>
                     </table>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'carriers' && (
+            <div className="card">
+              <div className="card-header">
+                <h2 className="title">Carrier connections</h2>
+                <div className="subtitle">Connect production carrier accounts. Credentials are encrypted before they are saved and are never shown again.</div>
+              </div>
+              <div className="card-body admin-body">
+                {error && <div className="admin-message error">{error}</div>}
+                {status && <div className="admin-message success">{status}</div>}
+                {carrierLoading && <div className="admin-message">Loading connection status…</div>}
+                {!carrierLoading && carrierStatus && !carrierStatus.encryptionReady && (
+                  <div className="admin-message error">Carrier credential storage still needs its one-time encryption key. Add <code>CARRIER_CREDENTIALS_ENCRYPTION_KEY</code> in Render, then refresh this page.</div>
+                )}
+                {!carrierLoading && carrierStatus && carrierStatus.encryptionReady && (
+                  <form className="admin-user-form carrier-connection-form" onSubmit={saveForwardAirConnection}>
+                    <div className="admin-form-heading">
+                      <div>
+                        <h3><Truck size={18} /> Forward Air</h3>
+                        <p>{carrierStatus.saved ? 'Production credentials are saved. Enter all five fields again only to replace them.' : 'Enter the production credentials from your Forward Air account.'}</p>
+                      </div>
+                      <span className={carrierStatus.saved || carrierStatus.environmentConfigured ? 'carrier-status connected' : 'carrier-status'}>
+                        {carrierStatus.saved || carrierStatus.environmentConfigured ? 'Connected' : 'Not connected'}
+                      </span>
+                    </div>
+                    <div className="admin-form-grid">
+                      <label>
+                        API username
+                        <input type="text" value={forwardAirForm.username} onChange={function(e){ setForwardAirForm({ ...forwardAirForm, username: e.target.value }); }} autoComplete="off" required />
+                      </label>
+                      <label>
+                        API password
+                        <input type="password" value={forwardAirForm.password} onChange={function(e){ setForwardAirForm({ ...forwardAirForm, password: e.target.value }); }} autoComplete="new-password" required />
+                      </label>
+                      <label>
+                        Customer ID
+                        <input type="text" value={forwardAirForm.customerId} onChange={function(e){ setForwardAirForm({ ...forwardAirForm, customerId: e.target.value }); }} autoComplete="off" required />
+                      </label>
+                      <label>
+                        Bill-to customer number
+                        <input type="text" value={forwardAirForm.billToCustomerNumber} onChange={function(e){ setForwardAirForm({ ...forwardAirForm, billToCustomerNumber: e.target.value }); }} autoComplete="off" required />
+                      </label>
+                      <label className="admin-form-wide">
+                        Shipper customer number
+                        <input type="text" value={forwardAirForm.shipperCustomerNumber} onChange={function(e){ setForwardAirForm({ ...forwardAirForm, shipperCustomerNumber: e.target.value }); }} autoComplete="off" required />
+                      </label>
+                    </div>
+                    <div className="admin-form-actions">
+                      <button className="btn" type="submit" disabled={carrierSaving}>
+                        <Save size={16} /> {carrierSaving ? 'Saving…' : 'Save production credentials'}
+                      </button>
+                    </div>
+                  </form>
                 )}
               </div>
             </div>
