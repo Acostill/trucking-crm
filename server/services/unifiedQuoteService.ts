@@ -132,7 +132,7 @@ function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
     return {
       source: 'ForwardAir',
       error: providerError
-        ? `Forward Air: ${providerError}`
+        ? (/^forward air\s*:/i.test(providerError) ? providerError : `Forward Air: ${providerError}`)
         : 'Forward Air did not return a quote amount. Confirm the account is enabled for API rating and that this shipment is eligible.'
     };
   }
