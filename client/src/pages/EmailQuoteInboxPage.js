@@ -1400,7 +1400,6 @@ export default function EmailQuoteInboxPage() {
                             })}
                           </select>
                         </label>
-                        <label className="dat-equipment">DAT equipment<select value={editor.datEquipmentType} onChange={function(e) { setEditor({ ...editor, datEquipmentType: e.target.value }); }}><option value="">Choose equipment</option><option value="Van">Van</option><option value="Flatbed">Flatbed</option><option value="Reefer">Reefer</option></select></label>
                       </div>
                     </div>
 
@@ -1427,7 +1426,7 @@ export default function EmailQuoteInboxPage() {
                     <div className="eq-section-heading">
                       <div><Truck size={18} /><span><strong>Carrier costs + DAT market benchmarks</strong><small>Carrier pricing and DAT benchmarks run automatically. Select the best confirmed carrier cost when the results are ready.</small></span></div>
                       {datRetryable ? (
-                        <button type="button" className="eq-secondary-button eq-dat-button" onClick={retryDatLookup} disabled={datRetryDisabled} title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !datEquipmentSaved ? 'Save shipment details before retrying DAT' : ''}>
+                        <button type="button" className="eq-secondary-button eq-dat-button" onClick={retryDatLookup} disabled={datRetryDisabled} title={!editor.datEquipmentType ? 'Confirm shipment details and save to assign a truck first' : !datEquipmentSaved ? 'Save shipment details before retrying DAT' : ''}>
                           <RefreshCw size={14} className={runningDat ? 'spinning' : ''} />
                           {runningDat ? 'Queueing...' : 'Retry DAT pricing'}
                         </button>
@@ -1502,7 +1501,7 @@ export default function EmailQuoteInboxPage() {
                           className="eq-secondary-button eq-dat-button"
                           onClick={retryDatSearchLoads}
                           disabled={datLoadsRetryDisabled}
-                          title={!editor.datEquipmentType ? 'Choose DAT equipment above first' : !editor.pickupDate ? 'Add and save a pickup date first' : !datSearchPickupDateCurrent ? 'Pickup date must be today or later' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and DAT equipment before retrying Search Loads' : ''}
+                          title={!editor.datEquipmentType ? 'Confirm shipment details and save to assign a truck first' : !editor.pickupDate ? 'Add and save a pickup date first' : !datSearchPickupDateCurrent ? 'Pickup date must be today or later' : !searchLoadsSnapshotSaved ? 'Save the current lane, pickup date, and assigned truck before retrying Search Loads' : ''}
                         >
                           <RefreshCw size={14} className={runningDatLoads ? 'spinning' : ''} />
                           {runningDatLoads ? 'Queueing...' : datLoadsOption ? 'Retry DAT lookups' : 'Queue missing DAT searches'}
@@ -1521,7 +1520,7 @@ export default function EmailQuoteInboxPage() {
                     </div>
 
                     {!datLoadsOption ? (
-                      <div className="eq-rate-empty"><Truck size={22} /><p>Search Loads will start automatically as soon as the saved shipment has a valid lane, pickup date, and DAT equipment.</p></div>
+                      <div className="eq-rate-empty"><Truck size={22} /><p>Search Loads will start automatically once the shipment is saved with a valid lane, pickup date, and assigned truck.</p></div>
                     ) : !datLoadsOption.available ? (
                       <div className="eq-dat-loads-state">
                         <AlertCircle size={17} />

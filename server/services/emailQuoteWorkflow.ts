@@ -182,23 +182,29 @@ export function parsedEmailToShipmentRequest(parsed: N8nEmailPasteResponse): Uni
   return assignTruckType(shipment).shipment;
 }
 
-const EXPLICIT_DRY_SERVICE = /\b(?:dry freight|dry cargo|dry shipment|non[-\s]?refrigerated|no (?:refrigeration(?: or temperature control)?|temperature control)(?: required)?|without (?:refrigeration|temperature control))\b/i;
-const EXPLICIT_REEFER_SERVICE = /\b(?:reefer|refrigerat(?:ed|ion)|temperature[-\s]?controlled|temperature control)\b/i;
+const TEMPERATURE_SERVICE_TERM = String.raw`(?:reefers?|refrigerat(?:ed|ion)|(?:temperature|temp)[-\s]+control(?:led)?)(?:\s+(?:service|equipment))?`;
+const NEGATED_TEMPERATURE_SERVICE = new RegExp(
+  String.raw`\b(?:non[-\s]?refrigerated|(?:no|without)\s+${TEMPERATURE_SERVICE_TERM}(?:\s+(?:or|and)\s+${TEMPERATURE_SERVICE_TERM})?(?:\s+(?:required|needed))?|${TEMPERATURE_SERVICE_TERM}\s*(?::\s*)?(?:(?:is|are)\s+)?not\s+(?:required|needed)|${TEMPERATURE_SERVICE_TERM}\s*:\s*no(?=[\t ]*(?:$|[\r\n,;.|])))\b`,
+  'gi'
+);
+const EXPLICIT_DRY_SERVICE = /\bdry[-\s]+(?:vans?|freight|cargo|shipments?)\b/i;
+const EXPLICIT_REEFER_SERVICE = /\b(?:reefer|refrigerat(?:ed|ion)|(?:temperature|temp)[-\s]+control(?:led)?|chilled|frozen|keep\s+cold|protect\s+from\s+freezing)\b/i;
+const EXPLICIT_TEMPERATURE_VALUE = /[+-]?\d+(?:\.\d+)?\s*(?:°\s*|degrees?\s*)?(?:[cf]\b|celsius\b|fahrenheit\b)/i;
 
 export function applyExplicitTemperatureService(
   shipment: UnifiedQuoteRequest,
   rawText: string
 ): UnifiedQuoteRequest {
   const normalizedRawText = String(rawText || '');
-  const explicitDry = EXPLICIT_DRY_SERVICE.test(normalizedRawText);
-  // Remove explicit dry/negated-temperature phrases before looking for an
-  // affirmative reefer request. Otherwise "No temperature control required"
-  // also matches the shorter positive phrase "temperature control".
-  const affirmativeServiceText = normalizedRawText.replace(
-    new RegExp(EXPLICIT_DRY_SERVICE.source, 'ig'),
-    ' '
-  );
-  const explicitReefer = EXPLICIT_REEFER_SERVICE.test(affirmativeServiceText);
+  // Strip complete negative statements before checking for cooling requests:
+  // "no reefer" and "refrigeration: not required" are dry-service evidence.
+  const affirmativeServiceText = normalizedRawText.replace(NEGATED_TEMPERATURE_SERVICE, ' ');
+  const explicitDry = EXPLICIT_DRY_SERVICE.test(normalizedRawText) ||
+    affirmativeServiceText !== normalizedRawText;
+  // A real cold-chain instruction or temperature in the email must survive
+  // dry wording (for example, dry packaging that must travel at 2–8°C).
+  const explicitReefer = EXPLICIT_REEFER_SERVICE.test(affirmativeServiceText) ||
+    EXPLICIT_TEMPERATURE_VALUE.test(affirmativeServiceText);
   if (!explicitDry || explicitReefer || shipment.truckAssignment?.source === 'staff') {
     return shipment;
   }

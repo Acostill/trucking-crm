@@ -166,6 +166,64 @@ async function run() {
     assert.strictEqual(explicitReefer.truckType, 'Reefer Cargo Van');
     assert.strictEqual(explicitReefer.datEquipmentType, 'Reefer');
 
+    // Regressions for dry trucks being relabeled by model-invented cooling data.
+    const dryServiceEmails = [
+      'Please quote a 53 ft dry van.',
+      'Equipment: DRY VAN',
+      'Equipment: dry-van',
+      'Two dry vans needed',
+      'Dry\u00a0van required',
+      'No reefer required.',
+      'No refrigerated equipment required.',
+      'Reefer: no',
+      'Refrigeration is not required.',
+      'Temperature control: not required',
+      'No refrigeration or temperature control required.',
+      'Non-refrigerated shipment',
+      'Without refrigeration',
+      'Dry freight. Refrigeration not required.'
+    ];
+    const originalReefer = JSON.stringify(hallucinatedReefer);
+    for (const rawText of dryServiceEmails) {
+      const corrected = applyExplicitTemperatureService(hallucinatedReefer, rawText);
+      assert.strictEqual(corrected.temperatureControlled, false, rawText);
+      assert.strictEqual(corrected.temperatureControl, undefined, rawText);
+      assert.strictEqual(corrected.truckType, 'Cargo Van', rawText);
+      assert.strictEqual(corrected.datEquipmentType, 'Van', rawText);
+      assert.strictEqual(corrected.truckAssignment?.source, 'auto', rawText);
+    }
+    assert.strictEqual(JSON.stringify(hallucinatedReefer), originalReefer, 'normalization must not mutate its input');
+
+    const fullDryVan = applyExplicitTemperatureService({
+      ...hallucinatedReefer,
+      pieces: { quantity: 20, unit: 'in', parts: [{ count: 20, length: 48, width: 40, height: 48 }] },
+      weight: { value: 20000, unit: 'lbs' }
+    }, 'Please quote a 53-foot dry van.');
+    assert.strictEqual(fullDryVan.truckType, 'Dry Van');
+    assert.strictEqual(fullDryVan.datEquipmentType, 'Van');
+
+    // Dry wording must never erase an affirmative cold-chain requirement.
+    for (const rawText of [
+      'Dry van requested, but refrigerated service is required.',
+      'Reefer Dry Van required',
+      'Reefer no later than noon.',
+      'Refrigerated equipment: no later than noon.',
+      'Dry freight packaging. Keep chilled.',
+      'Dry freight packaging. Frozen shipment.',
+      'Dry freight. Protect from freezing.',
+      'Dry freight packaging. Maintain 2–8°C.',
+      'Dry freight packaging. Temperature: 35 F.',
+      'Dry freight packaging. Keep at -18 degrees Celsius.'
+    ]) {
+      assert.deepStrictEqual(applyExplicitTemperatureService(hallucinatedReefer, rawText), hallucinatedReefer, rawText);
+    }
+    const staffReefer = {
+      ...hallucinatedReefer,
+      truckAssignment: { ...hallucinatedReefer.truckAssignment, source: 'staff' }
+    };
+    assert.deepStrictEqual(applyExplicitTemperatureService(staffReefer, 'Dry van required.'), staffReefer);
+    assert.deepStrictEqual(applyExplicitTemperatureService(hallucinatedReefer, ''), hallucinatedReefer);
+
     await queueAutomaticDatLookups(quoteId);
     assert.strictEqual(client.jobs.length, 2, 'automatic pricing must queue RateView and Search Loads');
     assert(client.jobs.every(function(job) { return job.status === 'pending'; }));

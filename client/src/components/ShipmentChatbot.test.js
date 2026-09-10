@@ -70,7 +70,7 @@ test('an answer in flight stays with its quote and preserves the other shipment�
   const { rerender } = render(<Harness createPreviewExchange={createPreviewExchange} />);
   openChat();
   ask('Check the Miami equipment');
-  expect(screen.getByText('Reviewing this shipment…')).toBeVisible();
+  expect(screen.getByText('Checking shipment details and sources…')).toBeVisible();
   expect(createPreviewExchange).toHaveBeenCalledWith(shipmentA, 'Check the Miami equipment');
   rerender(<Harness quote={shipmentB} createPreviewExchange={createPreviewExchange} />);
   expect(screen.getByText('Dallas, TX → Chicago, IL')).toBeVisible();
@@ -120,9 +120,10 @@ test('retries failed history loading and posts to the selected shipment with lin
   await waitFor(() => expect(screen.getByRole('button', { name: 'Check equipment' })).toBeEnabled());
   ask('Check the route');
   expect(await screen.findByText('Route answer.')).toBeVisible();
+  fireEvent.click(screen.getByText('Sources'));
   expect(global.fetch).toHaveBeenLastCalledWith(expect.stringContaining('/miami-quote/advisor-conversation'), expect.objectContaining({ method: 'POST', body: JSON.stringify({ question: 'Check the route' }) }));
-  expect(screen.getByRole('link', { name: 'Weather source' })).toHaveAttribute('href', 'https://weather.gov/example');
-  expect(screen.queryByRole('link', { name: 'Unsafe source' })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: '1. Weather source' })).toHaveAttribute('href', 'https://weather.gov/example');
+  expect(screen.queryByRole('link', { name: /Unsafe source/ })).not.toBeInTheDocument();
 });
 
 test('a failed message keeps the question available without overwriting new typing', async () => {

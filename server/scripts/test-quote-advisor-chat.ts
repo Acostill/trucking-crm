@@ -1,7 +1,10 @@
 import assert from 'assert';
+import OpenAI from 'openai';
 import {
   buildQuoteAdvisorContext,
-  extractQuoteAdvisorSources
+  extractQuoteAdvisorSources,
+  formatQuoteAdvisorAnswer,
+  answerQuoteAdvisorQuestion
 } from '../services/quoteAdvisorChat';
 
 const context: any = buildQuoteAdvisorContext({
@@ -55,8 +58,87 @@ const sources = extractQuoteAdvisorSources({
 });
 
 assert.deepEqual(sources, [
-  { title: 'DOT guidance', url: 'https://www.transportation.gov/example' },
-  { title: 'Weather', url: 'https://www.weather.gov/example' }
+  { title: 'Weather', url: 'https://www.weather.gov/example' },
+  { title: 'Duplicate', url: 'https://www.transportation.gov/example' }
 ]);
 
 console.log('Quote advisor chat checks passed.');
+
+async function testResearchContract() {
+  const originalCreate = (OpenAI as any).Responses.prototype.create;
+  const originalKey = process.env.OPENAI_API_KEY;
+  const originalEnabled = process.env.OPENAI_QUOTE_ADVISOR_WEB_SEARCH_ENABLED;
+  const originalError = console.error;
+  process.env.OPENAI_API_KEY = 'test-key-not-used-for-network';
+  process.env.OPENAI_QUOTE_ADVISOR_WEB_SEARCH_ENABLED = 'true';
+  let request: any;
+  const text = '🚚 **Check the terminal hours.** citeturn0search0';
+  const source = { title: 'Official terminal page', url: 'https://www.forwardair.com/locations' };
+  const fixture: any = {
+    status: 'completed',
+    output_text: text,
+    output: [
+      { type: 'web_search_call', status: 'completed', action: { type: 'search', sources: [source] } },
+      { type: 'message', content: [{ type: 'output_text', text, annotations: [{
+        type: 'url_citation', ...source,
+        start_index: Array.from(text).length - Array.from('citeturn0search0').length,
+        end_index: Array.from(text).length
+      }] }] }
+    ]
+  };
+  let nextResponse = fixture;
+  (OpenAI as any).Responses.prototype.create = async function(body: any) {
+    request = body;
+    return nextResponse;
+  };
+  console.error = () => undefined;
+  try {
+    const result = await answerQuoteAdvisorQuestion({ row: {}, question: 'Check the terminal hours.' });
+    assert.strictEqual(request.tool_choice, 'required', 'the model must not skip research');
+    assert.strictEqual(request.tools[0].external_web_access, true);
+    assert(request.input.includes(new Date().toISOString().slice(0, 10)));
+    assert.strictEqual(result.usedWebSearch, true);
+    assert.deepStrictEqual(result.sources, [source]);
+    assert(result.answer.includes('[1](<https://www.forwardair.com/locations>)'));
+    assert(result.answer.includes('🚚 **Check the terminal hours.**'));
+    assert(!result.answer.includes('turn0search0'));
+
+    const sharedMarker = JSON.parse(JSON.stringify(fixture));
+    sharedMarker.output[1].content[0].annotations.push({
+      ...sharedMarker.output[1].content[0].annotations[0],
+      title: 'Weather', url: 'https://www.weather.gov/'
+    });
+    const formatted = formatQuoteAdvisorAnswer(sharedMarker, extractQuoteAdvisorSources(sharedMarker));
+    assert(formatted.includes('[1](<https://www.forwardair.com/locations>)'));
+    assert(formatted.includes('[2](<https://www.weather.gov/>)'));
+
+    for (const badResponse of [
+      { ...fixture, output: fixture.output.slice(1) },
+      { ...fixture, output: [{ type: 'web_search_call', status: 'failed' }, fixture.output[1]] },
+      { status: 'completed', output_text: 'Unsupported claim', output: [{ type: 'web_search_call', status: 'completed', action: { sources: [] } }] }
+    ]) {
+      nextResponse = badResponse;
+      await assert.rejects(answerQuoteAdvisorQuestion({ row: {}, question: 'Research this lane.' }), /Web research did not return usable sources/);
+    }
+    nextResponse = { ...fixture, status: 'incomplete' };
+    await assert.rejects(answerQuoteAdvisorQuestion({ row: {}, question: 'Research this lane.' }), /temporarily unavailable/);
+
+    process.env.OPENAI_QUOTE_ADVISOR_WEB_SEARCH_ENABLED = 'false';
+    nextResponse = { status: 'completed', output_text: 'Saved cost: $500.', output: [] };
+    const offline = await answerQuoteAdvisorQuestion({ row: {}, question: 'What is the saved cost?' });
+    assert.strictEqual(request.tools, undefined);
+    assert.strictEqual(offline.usedWebSearch, false);
+    assert.deepStrictEqual(offline.sources, []);
+    assert(offline.answer.startsWith('Web research is unavailable.'));
+    console.log('Quote advisor research and citation checks passed.');
+  } finally {
+    (OpenAI as any).Responses.prototype.create = originalCreate;
+    console.error = originalError;
+    if (originalKey == null) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+    if (originalEnabled == null) delete process.env.OPENAI_QUOTE_ADVISOR_WEB_SEARCH_ENABLED;
+    else process.env.OPENAI_QUOTE_ADVISOR_WEB_SEARCH_ENABLED = originalEnabled;
+  }
+}
+
+testResearchContract().catch(error => { console.error(error); process.exitCode = 1; });

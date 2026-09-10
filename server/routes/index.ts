@@ -127,6 +127,7 @@ export async function parseEmailWithOpenRouter(emailContent: string): Promise<N8
     '        "total_weight_lbs": number,',
     '        "commodity": string,',
     '        "stackable": boolean,',
+    '        "truck_type": string,',
     '        "temperature_control": { "min_c": number, "max_c": number },',
     '        "data_loggers_required": number,',
     '        "ready_for_loading_date": string,',
@@ -150,6 +151,10 @@ export async function parseEmailWithOpenRouter(emailContent: string): Promise<N8
     'Convert total shipment weight to pounds before returning total_weight_lbs (1 kg = 2.2046226218 lb).',
     'Preserve a three-letter US airport code in location_code. If it is the only location supplied, also resolve it to its airport city/state/ZIP when known.',
     'Only add a dangerous-goods compliance flag when the email explicitly supplies a UN#### code or explicitly says the shipment is hazardous. Do not infer hazardous status from a commodity keyword alone.',
+    'Extract truck_type only from an explicit equipment request for this shipment. Dry van is dry equipment; never relabel it as reefer or refrigerated.',
+    'Only include temperature_control when the email explicitly gives a shipment temperature or range. Convert Fahrenheit to Celsius. Never invent a default range such as 2–8 C, and omit temperature_control when no temperature is supplied.',
+    'Dry van, dry freight, non-refrigerated, no reefer required, and refrigeration not required indicate dry service unless the same shipment explicitly requires cooling. A reefer request without a temperature belongs in truck_type; do not fabricate min_c or max_c.',
+    'Do not infer refrigeration from the commodity, company name, signature, advertised services, or an unrelated earlier shipment in the email chain. Preserve contradictory service instructions in special_instructions.notes.',
     '',
     'EMAIL TEXT:',
     emailContent

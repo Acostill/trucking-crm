@@ -50,6 +50,29 @@
 .shipment-chat-message > small { display: block; color: #717980; font-size: 10px; }
 .shipment-chat-message > p { margin: 5px 0 0; white-space: pre-wrap; }
 .shipment-chat-message.user { justify-self: end; max-width: 90%; padding: 10px 13px; border-radius: 9px 9px 2px 9px; background: #f0f2f3; }
+.shipment-chat-answer { margin-top: 5px; overflow-wrap: anywhere; }
+.shipment-chat-answer > :first-child { margin-top: 0; }
+.shipment-chat-answer > :last-child { margin-bottom: 0; }
+.shipment-chat-answer p { margin: 0 0 9px; }
+.shipment-chat-answer h3, .shipment-chat-answer h4, .shipment-chat-answer h5, .shipment-chat-answer h6 { margin: 15px 0 6px; font-size: 13px; line-height: 1.45; font-weight: 650; }
+.shipment-chat-answer strong { font-weight: 650; }
+.shipment-chat-answer ul, .shipment-chat-answer ol { margin: 7px 0 10px; padding-left: 21px; }
+.shipment-chat-answer ul { list-style: disc; }
+.shipment-chat-answer ol { list-style: decimal; }
+.shipment-chat-answer li { margin: 4px 0; }
+.shipment-chat-answer li > p { margin: 0; }
+.shipment-chat-answer a { color: #28576e; text-decoration: underline; text-underline-offset: 2px; }
+.shipment-chat-answer blockquote { margin: 10px 0; padding-left: 12px; border-left: 2px solid #cfd8dd; color: #657078; }
+.shipment-chat-answer code { padding: 1px 4px; border-radius: 3px; background: #f0f2f3; font-size: 12px; }
+.shipment-chat-answer pre { max-width: 100%; overflow-x: auto; padding: 10px; border-radius: 5px; background: #f0f2f3; white-space: pre; }
+.shipment-chat-answer pre code { padding: 0; }
+.shipment-chat-table { max-width: 100%; overflow-x: auto; margin: 10px 0; }
+.shipment-chat-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.shipment-chat-table th, .shipment-chat-table td { padding: 7px 9px; border: 1px solid #e1e6e8; text-align: left; }
+.shipment-chat-table th { background: #f5f7f8; font-weight: 600; }
+.shipment-chat-sources summary { cursor: pointer; color: #657078; }
+.shipment-chat-sources[open] summary { margin-bottom: 7px; }
+.shipment-chat-sources a { padding: 3px 0; }
 .shipment-chat-message.assistant { padding: 0 0 13px; }
 .shipment-chat-citation-note { display: block; margin-top: 12px; color: #7c8389; font-size: 10px; }
 .shipment-chat-sources { display: grid; gap: 6px; padding-top: 12px; font-size: 11px; }

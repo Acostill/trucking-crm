@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertCircle, ArrowUp, Check, ChevronDown, ExternalLink, MessageCircle, X } from 'lucide-react';
 import { buildApiUrl } from '../config';
+import ShipmentAssistantAnswer, { safeAssistantUrl } from './ShipmentAssistantAnswer';
 import './ShipmentChatbot.css';
 
 const QUICK_QUESTIONS = [
@@ -54,7 +55,7 @@ function ShipmentContext({ quote }) {
         <div><dt>Dimensions</dt><dd>{pieces.parts?.length ? pieces.parts.map((part, index) => <span key={index}>{part.count || 1} unit(s): {part.length || '?'} × {part.width || '?'} × {part.height || '?'} {pieces.unit || 'in'}</span>) : 'Not supplied'}</dd></div>
         <div><dt>Commodity</dt><dd>{shipment.commodity || 'Not supplied'}</dd></div>
         <div><dt>Stackable</dt><dd>{typeof shipment.stackable === 'boolean' ? (shipment.stackable ? 'Yes' : 'No') : 'Not supplied'}</dd></div>
-        <div><dt>Equipment</dt><dd>{shipment.truckType || 'Unassigned'}{shipment.datEquipmentType && ' · DAT ' + shipment.datEquipmentType}</dd></div>
+        <div><dt>Equipment</dt><dd>{shipment.truckType || 'Unassigned'}</dd></div>
         <div><dt>Carrier rates</dt><dd>{rates.length ? rates.map(option => <span key={option.key}>{option.source} · {money(option.cost)}</span>) : 'No available carrier rates'}</dd></div>
         <div><dt>DAT context</dt><dd>{benchmarks.length ? benchmarks.map(option => <span key={option.key}>{option.source} · {money(option.cost)}</span>) : 'No market benchmarks available'}</dd></div>
         <div><dt>Client price</dt><dd>{money(quote.selection?.clientPrice)}</dd></div>
@@ -214,12 +215,12 @@ export default function ShipmentChatbot({ quote, advisor = {}, view, onViewChang
                 {conversation.loading && <p className="shipment-chat-status" role="status">Loading conversation…</p>}
                 {conversation.exchanges.map(exchange => <div className="shipment-chat-exchange" key={exchange.id}>
                   <div className="shipment-chat-message user"><small>{exchange.createdBy || 'Staff'}</small><p>{exchange.question}</p></div>
-                  <div className="shipment-chat-message assistant"><small>Shipment assistant</small><p>{exchange.answer}</p>
-                    {!!exchange.sources?.length && <div className="shipment-chat-sources"><strong>Sources</strong>{exchange.sources.filter(source => /^https?:\/\//i.test(source.url)).map(source => <a key={source.url} href={source.url} target="_blank" rel="noreferrer">{source.title || source.url}<ExternalLink size={12} /></a>)}</div>}
-                    <span className="shipment-chat-citation-note">{exchange.usedWebSearch ? 'Includes web research' : 'Saved quote data'}{exchange.createdAt && ' · ' + new Date(exchange.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+                  <div className="shipment-chat-message assistant"><small>Shipment assistant</small><ShipmentAssistantAnswer answer={exchange.answer} />
+                    {!!exchange.sources?.some(source => safeAssistantUrl(source.url)) && <details className="shipment-chat-sources"><summary>Sources</summary>{exchange.sources.map((source, index) => safeAssistantUrl(source.url) && <a key={source.url} href={safeAssistantUrl(source.url)} target="_blank" rel="noopener noreferrer">{index + 1}. {source.title || source.url}<ExternalLink size={12} /></a>)}</details>}
+                    <span className="shipment-chat-citation-note">{exchange.usedWebSearch ? 'Web research' : 'Saved quote data · Not web-verified'}{exchange.createdAt && ' · ' + new Date(exchange.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
                   </div>
                 </div>)}
-                {conversation.pending && <div className="shipment-chat-exchange"><div className="shipment-chat-message user"><small>You</small><p>{conversation.pending}</p></div><p className="shipment-chat-status" role="status">Reviewing this shipment…</p></div>}
+                {conversation.pending && <div className="shipment-chat-exchange"><div className="shipment-chat-message user"><small>You</small><p>{conversation.pending}</p></div><p className="shipment-chat-status" role="status">Checking shipment details and sources…</p></div>}
               </div>
               {conversation.error && <div className="shipment-chat-error" role="alert"><p><strong>{conversation.failedQuestion}</strong></p>{conversation.error}</div>}
             </>}
