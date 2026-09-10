@@ -133,9 +133,7 @@ export function describeExpediteAllError(
   const weight = Number(body && body.weight && body.weight.value);
   const baseTruckType = truckType.replace(/^Reefer\s+/i, '');
   const providerLimits: Record<string, { weightMax: number; nextEquipment: string }> = {
-    'Cargo Van': { weightMax: 3000, nextEquipment: 'Straight Truck or larger equipment is required.' },
-    'Box Truck': { weightMax: 3000, nextEquipment: 'Straight Truck or larger equipment is required.' },
-    'Straight Truck': { weightMax: 8000, nextEquipment: 'Dry Van or larger equipment is required.' }
+    'Cargo Van': { weightMax: 3000, nextEquipment: 'Straight Truck or larger equipment is required.' }
   };
   const providerLimit = providerLimits[baseTruckType];
 

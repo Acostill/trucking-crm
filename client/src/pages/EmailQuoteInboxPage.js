@@ -84,6 +84,72 @@ const TRUCK_TYPE_OPTIONS = [
   'Reefer Dry Van'
 ];
 
+// The automatic limit is deliberately conservative. The published range is
+// shown separately because a vehicle class alone does not identify a specific
+// chassis, body, liftgate, or refrigeration conversion.
+const TRUCK_CAPACITY_GUIDES = {
+  'Cargo Van': {
+    profile: 'Commercial high-roof cargo van',
+    automatic: '3 pallets · 3,000 lb · 120 × 54 × 60 in · 225 cu ft',
+    published: 'Published payloads vary by vehicle; commercial cargo vans commonly span about 3,700–5,100 lb.',
+    sourceLabel: 'Ford Transit specifications',
+    sourceUrl: 'https://www.ford.com/trucks/transit-passenger-van-wagon/features/design/'
+  },
+  'Box Truck': {
+    profile: '16 ft dry box truck',
+    automatic: '8 pallets · 4,300 lb · 192 × 91 × 78 in · 800 cu ft',
+    published: 'Published 16 ft box-truck payloads vary: 4,300 lb (Penske), 6,000 lb (Ryder), and up to 7,500 lb for a cabover configuration.',
+    sourceLabel: 'Penske 16 ft box-truck specifications',
+    sourceUrl: 'https://www.pensketruckrental.com/commercial-truck-rental/commercial-trucks/light-duty-trucks/16-foot-box-truck/'
+  },
+  'Straight Truck': {
+    profile: '20–26 ft commercial straight truck',
+    automatic: '12 pallets · 10,000 lb · 312 × 96 × 96 in · 1,600 cu ft',
+    published: 'Published payloads range from 10,000 lb for a 20–26 ft box truck to up to 13,000 lb for a commercial straight truck.',
+    sourceLabel: 'Ryder straight-truck specifications',
+    sourceUrl: 'https://www.ryder.com/en-us/rent-trucks/trucks/straight-trucks'
+  },
+  'Dry Van': {
+    profile: '53 ft dry van trailer',
+    automatic: '26 pallets · 45,000 lb · 636 × 100 × 108 in · 3,900 cu ft',
+    published: 'A 53 ft dry van normally has space for about 26–30 pallets. Actual legal payload depends on tractor, trailer, axle weights, and load distribution.',
+    sourceLabel: 'Great Dane dry-van guidance',
+    sourceUrl: 'https://greatdane.com/pre-owned-trailers-provide-flexible-and-affordable-solutions/'
+  },
+  'Reefer Cargo Van': {
+    profile: 'Refrigerated cargo van',
+    automatic: '2 pallets · 2,500 lb · 110 × 48 × 54 in · 165 cu ft',
+    published: 'The refrigeration conversion and setpoint reduce usable cargo space and payload. Confirm the actual vehicle before booking.',
+    sourceLabel: 'Ford Transit specifications',
+    sourceUrl: 'https://www.ford.com/trucks/transit-passenger-van-wagon/features/design/'
+  },
+  'Reefer Box Truck': {
+    profile: '16 ft refrigerated box truck',
+    automatic: '6 pallets · 4,000 lb · 186 × 88 × 76 in · 700 cu ft',
+    published: 'Refrigerated box bodies vary substantially; confirm the carrier’s actual payload, box dimensions, airflow clearance, and setpoint.',
+    sourceLabel: 'Enterprise refrigerated box-truck specifications',
+    sourceUrl: 'https://www.enterprise.com/en/rental-cars/us/trucks/16-refrigerated-box-truck-ebor.html'
+  },
+  'Reefer Straight Truck': {
+    profile: '20–26 ft refrigerated straight truck',
+    automatic: '12 pallets · 9,500 lb · 300 × 92 × 92 in · 1,450 cu ft',
+    published: 'Refrigeration equipment and insulation reduce dry-body capacity. Confirm the carrier’s actual body and payload before booking.',
+    sourceLabel: 'Ryder straight-truck specifications',
+    sourceUrl: 'https://www.ryder.com/en-us/rent-trucks/trucks/straight-trucks'
+  },
+  'Reefer Dry Van': {
+    profile: '53 ft refrigerated trailer',
+    automatic: '26 pallets · 42,000 lb · 620 × 98 × 102 in · 3,500 cu ft',
+    published: 'Interior space and payload vary with the refrigeration unit, insulation, air chutes, and temperature requirements. Confirm the carrier’s trailer specification.',
+    sourceLabel: 'Utility refrigerated-trailer guidance',
+    sourceUrl: 'https://www.utilitytrailer.com/trus/'
+  }
+};
+
+function truckCapacityGuide(truckType) {
+  return TRUCK_CAPACITY_GUIDES[String(truckType || '').trim()] || null;
+}
+
 // NMFTA's current full-density scale. This is an operational estimate only:
 // commodity-specific handling, stowability, or liability rules can override it.
 function freightClassEstimate(editor) {
@@ -637,6 +703,9 @@ export default function EmailQuoteInboxPage() {
   const estimatedFreightClass = useMemo(function() {
     return freightClassEstimate(editor);
   }, [editor]);
+  const selectedTruckGuide = useMemo(function() {
+    return truckCapacityGuide(editor.truckType);
+  }, [editor.truckType]);
 
   async function requestJson(path, options) {
     const response = await fetch(buildApiUrl(path), {
@@ -1400,6 +1469,14 @@ export default function EmailQuoteInboxPage() {
                             })}
                           </select>
                         </label>
+                        {selectedTruckGuide && (
+                          <div className="eq-capacity-guide" role="status">
+                            <strong>{selectedTruckGuide.profile}</strong>
+                            <span><b>Automatic limit:</b> {selectedTruckGuide.automatic}</span>
+                            <span>{selectedTruckGuide.published}</span>
+                            <a href={selectedTruckGuide.sourceUrl} target="_blank" rel="noopener noreferrer">{selectedTruckGuide.sourceLabel}</a>
+                          </div>
+                        )}
                       </div>
                     </div>
 
