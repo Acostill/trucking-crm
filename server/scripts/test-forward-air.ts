@@ -2,6 +2,7 @@ import assert from 'assert';
 import { EventEmitter } from 'events';
 import https from 'https';
 import { callForwardAirAPI, getForwardAirConfig } from '../services/forwardAir';
+import { normalizeForwardAir } from '../services/unifiedQuoteService';
 
 const names = [
   'FORWARD_AIR_BASE_URL', 'FORWARD_AIR_USERNAME', 'FORWARD_AIR_PASSWORD',
@@ -49,7 +50,7 @@ async function run() {
       request.write = function(value: string) { payload += value; };
       request.end = function() {
         process.nextTick(function() {
-          response.emit('data', '<QuoteResponse><QuoteAmount>725.50</QuoteAmount><LineHaul>600</LineHaul></QuoteResponse>');
+          response.emit('data', '<FAQuoteResponse><QuoteTotal>725.50</QuoteTotal><TransitDaysTotal>3</TransitDaysTotal><ChargeLineItems><ChargeLineItem><Code>LTL</Code><Description>LINEHAUL</Description><Amount>600</Amount></ChargeLineItem></ChargeLineItems></FAQuoteResponse>');
           response.emit('end');
         });
       };
@@ -63,15 +64,21 @@ async function run() {
       forwardAirFreightClass: '70'
     });
     assert.strictEqual(response.statusCode, 200);
-    assert.strictEqual((response.data as any).QuoteResponse.QuoteAmount, '725.50');
+    assert.strictEqual((response.data as any).FAQuoteResponse.QuoteTotal, '725.50');
     assert.strictEqual(options.hostname, 'api.forwardair.com');
-    assert.strictEqual(options.path, '/ltlservices/v2/rest/waybills/quotes');
+    assert.strictEqual(options.path, '/ltlservices/v2/rest/waybills/quote');
     assert.strictEqual(options.headers.user, 'production-user');
     assert.strictEqual(options.headers.customerId, 'PRODUCTION-CUSTOMER');
     assert.match(payload, /<BillToCustomerNumber>BILL-TO<\/BillToCustomerNumber>/);
     assert.match(payload, /<ShipperCustomerNumber>SHIPPER<\/ShipperCustomerNumber>/);
     assert.match(payload, /<FreightClass>70<\/FreightClass>/);
+    assert.match(payload, /<FAQuoteRequest>/);
+    assert.match(payload, /<Description>Freight<\/Description>/);
     assert.doesNotMatch(payload, /1234567|2300130|60\.0/);
+    const normalized = normalizeForwardAir(response.data as any);
+    assert.strictEqual(normalized.total, 725.5);
+    assert.strictEqual(normalized.lineHaul, 600);
+    assert.strictEqual(normalized.additionalInfo?.transitTime, 3);
     console.log('Forward Air production configuration tests passed.');
   } finally {
     (https as any).request = originalRequest;

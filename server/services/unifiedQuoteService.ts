@@ -115,7 +115,7 @@ function normalizeExpediteAll(data: ExpediteAllResponse): StandardizedQuote {
 /**
  * Normalize ForwardAir response to standardized format
  */
-function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
+export function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
   if ('error' in data) {
     console.error('[ForwardAir] Error in response:', data.error);
     return { source: 'ForwardAir', error: data.error };
@@ -123,9 +123,14 @@ function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
 
   // Support historical flattened XML results while the Forward Air client
   // preserves its XML root for every newly fetched production quote.
-  const quoteResponse = data.QuoteResponse || data || {};
-  const lineHaul = findNumberByKeys(quoteResponse, ['linehaul', 'line_haul', 'base', 'basecharge']);
-  const total = findNumberByKeys(quoteResponse, ['quoteamount', 'totalcharges', 'total', 'grandtotal', 'amountdue']);
+  const quoteResponse = data.FAQuoteResponse || data.QuoteResponse || data || {};
+  const chargeLineItems = quoteResponse.ChargeLineItems?.ChargeLineItem || quoteResponse.AccessorialCharges?.AccessorialCharge;
+  const chargesArray = chargeLineItems
+    ? (Array.isArray(chargeLineItems) ? chargeLineItems : [chargeLineItems])
+    : [];
+  const lineHaul = findNumberByKeys(quoteResponse, ['linehaul', 'line_haul', 'base', 'basecharge']) ||
+    coerceNumber((chargesArray.find(function(charge: any) { return String(charge && charge.Code || '').toUpperCase() === 'LTL'; }) || {}).Amount);
+  const total = findNumberByKeys(quoteResponse, ['quotetotal', 'quoteamount', 'totalcharges', 'total', 'grandtotal', 'amountdue']);
 
   if (typeof total !== 'number') {
     const providerError = findTextByKeys(data, ['errormessage', 'error', 'message', 'reason']);
@@ -139,9 +144,7 @@ function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
 
   // Extract accessorials
   const accessorials: Array<{ description?: string; code?: string; price?: number }> = [];
-  const accessorialCharges = quoteResponse.AccessorialCharges?.AccessorialCharge;
-  if (accessorialCharges) {
-    const chargesArray = Array.isArray(accessorialCharges) ? accessorialCharges : [accessorialCharges];
+  if (chargesArray.length) {
     chargesArray.forEach((charge: any) => {
       const price = coerceNumber(charge.Amount);
       accessorials.push({
@@ -157,6 +160,7 @@ function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
     lineHaul,
     total,
     additionalInfo: {
+      transitTime: findNumberByKeys(quoteResponse, ['transitdaystotal']),
       accessorials: accessorials.length > 0 ? accessorials : undefined
     }
   };

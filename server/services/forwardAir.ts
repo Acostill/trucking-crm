@@ -4,6 +4,15 @@ import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote'
 import { getStoredForwardAirCredentials } from './carrierConnectionCredentials';
 
 export interface ForwardAirResponse {
+  FAQuoteResponse?: {
+    QuoteTotal?: string | number;
+    TransitDaysTotal?: string | number;
+    ChargeLineItems?: {
+      ChargeLineItem?: Array<{ Code?: string; Description?: string; Amount?: string | number }> |
+        { Code?: string; Description?: string; Amount?: string | number };
+    };
+    [key: string]: any;
+  };
   QuoteResponse?: {
     QuoteAmount?: string | number;
     LineHaul?: string | number;
@@ -30,7 +39,7 @@ interface ForwardAirConfig {
 }
 
 const PRODUCTION_HOST = 'api.forwardair.com';
-const QUOTE_PATH = '/ltlservices/v2/rest/waybills/quotes';
+const QUOTE_PATH = '/ltlservices/v2/rest/waybills/quote';
 
 function configuredText(name: string): string {
   return String(process.env[name] || '').trim();
@@ -134,15 +143,15 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     const part = (pieces.parts || [])[0] || {};
     const hazardous = Boolean(body.hazardousMaterial?.unNumbers?.filter(Boolean).length);
     const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
-<QuoteRequest>
+<FAQuoteRequest>
   <BillToCustomerNumber>${xml(config.billToCustomerNumber)}</BillToCustomerNumber>
   <ShipperCustomerNumber>${xml(config.shipperCustomerNumber)}</ShipperCustomerNumber>
   <Origin><OriginAirportCode/><OriginZipCode>${xml(pickup.location?.zip)}</OriginZipCode><OriginCountryCode>US</OriginCountryCode><Pickup><AirportPickup>N</AirportPickup></Pickup></Origin>
   <Destination><DestinationAirportCode/><DestinationZipCode>${xml(delivery.location?.zip)}</DestinationZipCode><DestinationCountryCode>US</DestinationCountryCode><Delivery><AirportDelivery>N</AirportDelivery></Delivery></Destination>
-  <FreightDetails><FreightDetail><Weight>${positive(body.weight?.value)}</Weight><WeightType>${toWeightType(body.weight?.unit || '')}</WeightType><Pieces>${positive(pieces.quantity)}</Pieces><FreightClass>${freightClass(body.forwardAirFreightClass)}</FreightClass></FreightDetail></FreightDetails>
+  <FreightDetails><FreightDetail><Weight>${positive(body.weight?.value)}</Weight><WeightType>${toWeightType(body.weight?.unit || '')}</WeightType><Pieces>${positive(pieces.quantity)}</Pieces><FreightClass>${freightClass(body.forwardAirFreightClass)}</FreightClass><Description>${xml(body.commodity || 'Freight')}</Description></FreightDetail></FreightDetails>
   <Dimensions><Dimension><Pieces>${positive(pieces.quantity)}</Pieces><Length>${positive(part.length)}</Length><Width>${positive(part.width)}</Width><Height>${positive(part.height)}</Height></Dimension></Dimensions>
   <Hazmat>${hazardous ? 'Y' : 'N'}</Hazmat><InBondShipment>N</InBondShipment><DeclaredValue>0.00</DeclaredValue><ShippingDate>${ymd(pickup.date)}</ShippingDate>
-</QuoteRequest>`;
+</FAQuoteRequest>`;
 
     return new Promise<APIResponse<ForwardAirResponse | ErrorResponse>>((resolve, reject) => {
       const request = https.request({
