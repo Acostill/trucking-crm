@@ -373,9 +373,12 @@ export async function rateEmailQuoteRequest(
   const defaultMarginPct = await getDefaultProfitMarginPct();
   const recommendation = buildCarrierRecommendation(carrierQuotes, defaultMarginPct);
   const status = recommendation ? 'ready' : 'needs_review';
+  const carrierErrors = connectedCarrierQuotes
+    .filter(function(quote) { return !quote.available && quote.error; })
+    .map(function(quote) { return `${quote.source}: ${quote.error}`; });
   const processingError = recommendation
     ? null
-    : 'Forward Air and ExpediteAll did not return an available rate.';
+    : carrierErrors.join(' ') || 'Forward Air and ExpediteAll did not return an available rate.';
   const result = await db.query(
     `UPDATE public.email_quote_requests
      SET carrier_quotes = $2::jsonb,

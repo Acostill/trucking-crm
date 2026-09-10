@@ -45,6 +45,25 @@ function findNumberByKeys(obj: any, keyCandidates: string[]): number | undefined
   return undefined;
 }
 
+function findTextByKeys(obj: any, keyCandidates: string[]): string | undefined {
+  if (!obj || typeof obj !== 'object') return undefined;
+  for (const key of keyCandidates) {
+    for (const currentKey in obj) {
+      if (!Object.prototype.hasOwnProperty.call(obj, currentKey)) continue;
+      if (currentKey.toLowerCase().indexOf(key.toLowerCase()) === -1) continue;
+      const value = obj[currentKey];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number') return String(value);
+    }
+  }
+  for (const currentKey in obj) {
+    if (!Object.prototype.hasOwnProperty.call(obj, currentKey)) continue;
+    const found = findTextByKeys(obj[currentKey], keyCandidates);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 export async function getDefaultProfitMarginPct(): Promise<number> {
   try {
     const result = await db.query(
@@ -107,6 +126,16 @@ function normalizeForwardAir(data: ForwardAirResponse): StandardizedQuote {
   const quoteResponse = data.QuoteResponse || data || {};
   const lineHaul = findNumberByKeys(quoteResponse, ['linehaul', 'line_haul', 'base', 'basecharge']);
   const total = findNumberByKeys(quoteResponse, ['quoteamount', 'totalcharges', 'total', 'grandtotal', 'amountdue']);
+
+  if (typeof total !== 'number') {
+    const providerError = findTextByKeys(data, ['errormessage', 'error', 'message', 'reason']);
+    return {
+      source: 'ForwardAir',
+      error: providerError
+        ? `Forward Air: ${providerError}`
+        : 'Forward Air did not return a quote amount. Confirm the account is enabled for API rating and that this shipment is eligible.'
+    };
+  }
 
   // Extract accessorials
   const accessorials: Array<{ description?: string; code?: string; price?: number }> = [];
