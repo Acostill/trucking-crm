@@ -43,34 +43,57 @@ function expectReview(request: UnifiedQuoteRequest, reasonCode: string) {
 function run() {
   expectAssigned(shipment(1, 500), 'Cargo Van', 'Van');
   expectAssigned(shipment(3, 3000), 'Cargo Van', 'Van');
-  expectAssigned(shipment(3, 3001), 'Straight Truck', 'Van');
-  expectAssigned(shipment(3, 3450), 'Straight Truck', 'Van');
+  expectAssigned(shipment(3, 3001), 'Box Truck', 'Van');
+  expectAssigned(shipment(3, 4300), 'Box Truck', 'Van');
 
   expectAssigned(shipment(4, 3000), 'Box Truck', 'Van');
-  expectAssigned(shipment(2, 4000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(6, 8000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(2, 2000, { length: 73, width: 40, height: 48 }), 'Box Truck', 'Van');
+  expectAssigned(shipment(8, 4300), 'Box Truck', 'Van');
+  expectAssigned(shipment(3, 4301), 'Straight Truck', 'Van');
+  expectAssigned(shipment(2, 4000), 'Box Truck', 'Van');
+  expectAssigned(shipment(12, 10000), 'Straight Truck', 'Van');
+  expectAssigned(shipment(2, 2000, { length: 73, width: 40, height: 48 }), 'Cargo Van', 'Van');
 
-  expectAssigned(shipment(7, 8000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(14, 8000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(6, 8001), 'Dry Van', 'Van');
-  expectAssigned(shipment(15, 8000), 'Dry Van', 'Van');
-  expectAssigned(shipment(5, 2500, undefined, { stackable: false }), 'Dry Van', 'Van');
+  expectAssigned(shipment(13, 10000), 'Dry Van', 'Van');
+  expectAssigned(shipment(12, 10001), 'Dry Van', 'Van');
+  expectAssigned(shipment(26, 45000), 'Dry Van', 'Van');
+  expectAssigned(shipment(5, 2500, undefined, { stackable: false }), 'Box Truck', 'Van');
+  expectReview(
+    shipment(8, 1000, { length: 96, width: 80, height: 10 }, { stackable: false }),
+    'FIT_REQUIRES_STAFF_VALIDATION'
+  );
+
+  // The fit guard checks the entire shipment, not only the largest piece.
+  expectAssigned(
+    shipment(3, 2000, { length: 100, width: 50, height: 54 }),
+    'Box Truck',
+    'Van'
+  );
 
   const reefer = expectAssigned(
-    shipment(3, 3000, undefined, { temperatureControl: { minC: 2, maxC: 8 } }),
+    shipment(2, 2500, undefined, { temperatureControl: { minC: 2, maxC: 8 } }),
     'Reefer Cargo Van',
     'Reefer'
   );
   assert.strictEqual(reefer.shipment.temperatureControlled, true);
   expectAssigned(
-    shipment(4, 5000, undefined, { temperatureControlled: true }),
+    shipment(3, 3000, undefined, { temperatureControlled: true }),
+    'Reefer Box Truck',
+    'Reefer'
+  );
+  expectAssigned(
+    shipment(12, 9500, undefined, { temperatureControlled: true }),
     'Reefer Straight Truck',
+    'Reefer'
+  );
+  expectAssigned(
+    shipment(13, 9500, undefined, { temperatureControlled: true }),
+    'Reefer Dry Van',
     'Reefer'
   );
 
   expectReview(shipment(27, 7000), 'CAPACITY_OUT_OF_RANGE');
   expectReview(shipment(10, 45001), 'CAPACITY_OUT_OF_RANGE');
+  expectReview(shipment(10, 42001, undefined, { temperatureControlled: true }), 'CAPACITY_OUT_OF_RANGE');
   expectReview(shipment(2, 2000, { length: 637, width: 40, height: 48 }), 'OVERSIZED_ENCLOSED_FREIGHT');
   expectReview({ pieces: { quantity: 2, parts: [{}] }, weight: { value: 2000 } }, 'MISSING_REQUIRED_FREIGHT_DATA');
   expectReview({

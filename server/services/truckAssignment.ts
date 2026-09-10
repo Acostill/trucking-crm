@@ -1,6 +1,6 @@
 import { Piece, UnifiedQuoteRequest } from '../types/quote';
 
-export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v4';
+export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v5';
 
 export type TruckAssignmentStatus = 'assigned' | 'needs_review';
 export type TruckAssignmentSource = 'auto' | 'ai' | 'staff';
@@ -34,35 +34,101 @@ export interface TruckAssignmentResult {
 
 export interface TruckCapacityRule {
   baseTruckType: 'Cargo Van' | 'Box Truck' | 'Straight Truck' | 'Dry Van';
+  serviceCategory: TruckServiceCategory;
   palletMax: number;
   weightMax: number;
   dimensions: { length: number; width: number; height: number };
+  cubicFeetMax: number;
+  floorSquareFeetMax: number;
 }
 
+/**
+ * Conservative default equipment classes for automatic assignment.
+ *
+ * They intentionally sit below the largest available configuration: a specific
+ * carrier's equipment, axle weights, liftgate, loading method, or temperature
+ * unit may further reduce usable capacity. The rules are therefore an
+ * assignment guard, not a promise of carrier capacity.
+ *
+ * Sources reviewed September 2026:
+ * - Ford Transit technical specifications (cargo van payload and load area)
+ * - Penske 16 ft box-truck specifications (4,300 lb, 16 x 7 ft 7 in x 6 ft 6 in)
+ * - Ryder straight-truck specifications (up to 13,000 lb capacity)
+ * - Great Dane / Utility 53 ft van specifications (about 100 in internal width,
+ *   26–30 pallet space; refrigeration insulation reduces usable space/payload)
+ */
 export const CAPACITY_RULES: TruckCapacityRule[] = [
   {
     baseTruckType: 'Cargo Van',
+    serviceCategory: 'dry',
     palletMax: 3,
     weightMax: 3000,
-    dimensions: { length: 72, width: 52, height: 70 }
+    dimensions: { length: 120, width: 54, height: 60 },
+    cubicFeetMax: 225,
+    floorSquareFeetMax: 42
   },
   {
     baseTruckType: 'Box Truck',
-    palletMax: 6,
-    weightMax: 3000,
-    dimensions: { length: 96, width: 96, height: 96 }
+    serviceCategory: 'dry',
+    palletMax: 8,
+    weightMax: 4300,
+    dimensions: { length: 192, width: 91, height: 78 },
+    cubicFeetMax: 800,
+    floorSquareFeetMax: 110
   },
   {
     baseTruckType: 'Straight Truck',
-    palletMax: 14,
-    weightMax: 8000,
-    dimensions: { length: 120, width: 102, height: 110 }
+    serviceCategory: 'dry',
+    palletMax: 12,
+    weightMax: 10000,
+    dimensions: { length: 312, width: 96, height: 96 },
+    cubicFeetMax: 1600,
+    floorSquareFeetMax: 190
   },
   {
     baseTruckType: 'Dry Van',
+    serviceCategory: 'dry',
     palletMax: 26,
     weightMax: 45000,
-    dimensions: { length: 636, width: 102, height: 110 }
+    dimensions: { length: 636, width: 100, height: 108 },
+    cubicFeetMax: 3900,
+    floorSquareFeetMax: 410
+  },
+  {
+    baseTruckType: 'Cargo Van',
+    serviceCategory: 'reefer',
+    palletMax: 2,
+    weightMax: 2500,
+    dimensions: { length: 110, width: 48, height: 54 },
+    cubicFeetMax: 165,
+    floorSquareFeetMax: 34
+  },
+  {
+    baseTruckType: 'Box Truck',
+    serviceCategory: 'reefer',
+    palletMax: 6,
+    weightMax: 4000,
+    dimensions: { length: 186, width: 88, height: 76 },
+    cubicFeetMax: 700,
+    floorSquareFeetMax: 105
+  },
+  {
+    baseTruckType: 'Straight Truck',
+    serviceCategory: 'reefer',
+    palletMax: 12,
+    weightMax: 9500,
+    dimensions: { length: 300, width: 92, height: 92 },
+    cubicFeetMax: 1450,
+    floorSquareFeetMax: 180
+  },
+  {
+    baseTruckType: 'Dry Van',
+    serviceCategory: 'reefer',
+    palletMax: 26,
+    weightMax: 42000,
+    dimensions: { length: 620, width: 98, height: 102 },
+    cubicFeetMax: 3500,
+    floorSquareFeetMax: 390
   }
 ];
 
@@ -154,12 +220,45 @@ function validParts(shipment: UnifiedQuoteRequest): Piece[] | null {
   return valid ? parts : null;
 }
 
+function partFits(part: Piece, rule: TruckCapacityRule): boolean {
+  const length = Number(part.length);
+  const width = Number(part.width);
+  const height = Number(part.height);
+  if (height > rule.dimensions.height) return false;
+  return (length <= rule.dimensions.length && width <= rule.dimensions.width) ||
+    (width <= rule.dimensions.length && length <= rule.dimensions.width);
+}
+
+function totalCubicFeet(parts: Piece[]): number {
+  return parts.reduce(function(total, part) {
+    return total + (Number(part.length) * Number(part.width) * Number(part.height) * Number(part.count || 1)) / 1728;
+  }, 0);
+}
+
+function totalFloorSquareFeet(parts: Piece[]): number {
+  return parts.reduce(function(total, part) {
+    return total + (Number(part.length) * Number(part.width) * Number(part.count || 1)) / 144;
+  }, 0);
+}
+
 function partsFit(parts: Piece[], rule: TruckCapacityRule): boolean {
   return parts.every(function(part) {
-    return Number(part.length) <= rule.dimensions.length &&
-      Number(part.width) <= rule.dimensions.width &&
-      Number(part.height) <= rule.dimensions.height;
+    return partFits(part, rule);
   });
+}
+
+function shipmentFitsRule(
+  pallets: number,
+  weight: number,
+  parts: Piece[],
+  rule: TruckCapacityRule,
+  requireFloorFit = false
+): boolean {
+  return pallets <= rule.palletMax &&
+    weight <= rule.weightMax &&
+    totalCubicFeet(parts) <= rule.cubicFeetMax &&
+    (!requireFloorFit || totalFloorSquareFeet(parts) <= rule.floorSquareFeetMax) &&
+    partsFit(parts, rule);
 }
 
 function reeferVariant(baseTruckType: TruckCapacityRule['baseTruckType']): string {
@@ -239,29 +338,29 @@ export function assignTruckType(shipment: UnifiedQuoteRequest): TruckAssignmentR
     );
   }
 
-  if (pallets > 26 || weight > 45000) {
+  const serviceRules = CAPACITY_RULES.filter(function(rule) {
+    return rule.serviceCategory === temperature.category;
+  });
+  const largestRule = serviceRules[serviceRules.length - 1];
+  if (!largestRule || pallets > largestRule.palletMax || weight > largestRule.weightMax) {
     return reviewResult(
       shipment,
       'CAPACITY_OUT_OF_RANGE',
-      'This shipment exceeds the automatic enclosed-trailer limit of 26 pallets or 45,000 lb.'
+      `This shipment exceeds the automatic ${temperature.category === 'reefer' ? 'refrigerated' : 'dry'} enclosed-trailer limit of ${largestRule ? largestRule.palletMax : 26} pallets or ${(largestRule ? largestRule.weightMax : 45000).toLocaleString('en-US')} lb.`
     );
   }
 
-  const eligibleRules = shipment.stackable === false
-    ? CAPACITY_RULES.filter(function(rule) { return rule.baseTruckType === 'Dry Van'; })
-    : CAPACITY_RULES;
-  const selected = eligibleRules.find(function(rule) {
-    return pallets <= rule.palletMax && weight <= rule.weightMax && partsFit(parts, rule);
+  const selected = serviceRules.find(function(rule) {
+    return shipmentFitsRule(pallets, weight, parts, rule, shipment.stackable === false);
   });
   if (!selected) {
-    const dryVan = CAPACITY_RULES[CAPACITY_RULES.length - 1];
-    const oversized = !partsFit(parts, dryVan);
+    const oversized = !partsFit(parts, largestRule);
     return reviewResult(
       shipment,
       oversized ? 'OVERSIZED_ENCLOSED_FREIGHT' : 'FIT_REQUIRES_STAFF_VALIDATION',
       oversized
-        ? 'The freight dimensions exceed the automatic Dry Van fit guard.'
-        : 'The freight does not fit one automatic truck rule and requires staff review.'
+        ? `The freight dimensions exceed the automatic ${temperature.category === 'reefer' ? 'Reefer Dry Van' : 'Dry Van'} fit guard.`
+        : 'The shipment exceeds an automatic cube or loading-fit guard and requires staff review.'
     );
   }
 
@@ -272,12 +371,10 @@ export function assignTruckType(shipment: UnifiedQuoteRequest): TruckAssignmentR
     status: 'assigned',
     source: 'auto',
     ruleVersion: TRUCK_ASSIGNMENT_RULE_VERSION,
-    reason: shipment.stackable === false
-      ? 'A Dry Van is recommended because the freight is marked non-stackable.'
-      : `Smallest truck within ${selected.palletMax} pallets, ${selected.weightMax.toLocaleString('en-US')} lb, and the v2 dimension guard.`,
+    reason: `Smallest ${temperature.category === 'reefer' ? 'refrigerated' : 'dry'} truck within ${selected.palletMax} pallets, ${selected.weightMax.toLocaleString('en-US')} lb, ${selected.cubicFeetMax.toLocaleString('en-US')} cu ft, and the interior-dimension guard.`,
     baseTruckType: selected.baseTruckType,
     serviceCategory: temperature.category,
-    fitSummary: `${pallets} pallet${pallets === 1 ? '' : 's'} · ${weight.toLocaleString('en-US')} lb · largest piece ${Math.max(...parts.map(function(part) { return Number(part.length); }))}×${Math.max(...parts.map(function(part) { return Number(part.width); }))}×${Math.max(...parts.map(function(part) { return Number(part.height); }))} in`
+    fitSummary: `${pallets} pallet${pallets === 1 ? '' : 's'} · ${weight.toLocaleString('en-US')} lb · ${totalCubicFeet(parts).toFixed(1)} cu ft · largest piece ${Math.max(...parts.map(function(part) { return Number(part.length); }))}×${Math.max(...parts.map(function(part) { return Number(part.width); }))}×${Math.max(...parts.map(function(part) { return Number(part.height); }))} in`
   };
   const next: UnifiedQuoteRequest = {
     ...shipment,
@@ -331,14 +428,13 @@ export function applyValidatedAITruckRecommendation(
   const isReefer = /^Reefer\b/i.test(truckType);
   const baseTruckType = truckType.replace(/^Reefer\s+/i, '') as TruckCapacityRule['baseTruckType'];
   const rule = CAPACITY_RULES.find(function(candidate) {
-    return candidate.baseTruckType === baseTruckType;
+    return candidate.baseTruckType === baseTruckType && candidate.serviceCategory === service.category;
   });
 
   if (
     !rule || pallets == null || weight == null || !parts || !hasCanonicalUnits(current) ||
     !service.category || isReefer !== (service.category === 'reefer') ||
-    (current.stackable === false && baseTruckType !== 'Dry Van') ||
-    pallets > rule.palletMax || weight > rule.weightMax || !partsFit(parts, rule)
+    !shipmentFitsRule(pallets, weight, parts, rule, current.stackable === false)
   ) {
     return {
       accepted: false,
