@@ -84,6 +84,25 @@ const TRUCK_TYPE_OPTIONS = [
   'Reefer Dry Van'
 ];
 
+// NMFTA's current full-density scale. This is an operational estimate only:
+// commodity-specific handling, stowability, or liability rules can override it.
+function freightClassEstimate(editor) {
+  const pieces = Number(editor && editor.pallets);
+  const length = Number(editor && editor.length);
+  const width = Number(editor && editor.width);
+  const height = Number(editor && editor.height);
+  const weight = Number(editor && editor.totalWeight);
+  if (![pieces, length, width, height, weight].every(function(value) { return Number.isFinite(value) && value > 0; })) return null;
+  const cubicFeet = (pieces * length * width * height) / 1728;
+  const density = weight / cubicFeet;
+  const scale = [
+    [50, '50'], [35, '55'], [30, '60'], [22.5, '65'], [15, '70'], [12, '85'],
+    [10, '92.5'], [8, '100'], [6, '125'], [4, '175'], [2, '250'], [1, '300'], [0, '400']
+  ];
+  const matched = scale.find(function(entry) { return density >= entry[0]; });
+  return { freightClass: matched ? matched[1] : '400', density, cubicFeet };
+}
+
 function buildPreviewAdvisorExchange(quote, question) {
   const shipment = (quote && quote.shipment) || {};
   const pieces = shipment.pieces || {};
@@ -481,6 +500,8 @@ function shipmentToEditor(shipment) {
 
 function buildShipment(editor, existing) {
   const palletCount = Number(editor.pallets) || undefined;
+  const estimatedClass = freightClassEstimate(editor);
+  const suppliedClass = editor.forwardAirFreightClass.trim();
   const shipment = {
     ...(existing || {}),
     pickup: {
@@ -522,7 +543,10 @@ function buildShipment(editor, existing) {
       unit: 'lbs'
     },
     commodity: editor.commodity.trim(),
-    forwardAirFreightClass: editor.forwardAirFreightClass.trim(),
+    // Staff-entered class takes precedence. Otherwise use the density estimate
+    // from shipment facts the CRM already has so rating can proceed.
+    forwardAirFreightClass: suppliedClass || (estimatedClass && estimatedClass.freightClass) || '',
+    forwardAirFreightClassSource: suppliedClass ? 'staff_confirmed' : estimatedClass ? 'density_estimate' : undefined,
     temperatureControlled: Boolean(editor.temperatureControlled),
     truckType: editor.truckType,
     datEquipmentType: editor.datEquipmentType
@@ -610,6 +634,9 @@ export default function EmailQuoteInboxPage() {
   const detailRequest = useRef(0);
   const requestedQuoteId = useRef(null);
   const detailPending = useRef(false);
+  const estimatedFreightClass = useMemo(function() {
+    return freightClassEstimate(editor);
+  }, [editor]);
 
   async function requestJson(path, options) {
     const response = await fetch(buildApiUrl(path), {
@@ -1325,7 +1352,11 @@ export default function EmailQuoteInboxPage() {
                         <label>Width (in)<input type="number" value={editor.width} onChange={function(e) { setEditor({ ...editor, width: e.target.value }); }} /></label>
                         <label>Height (in)<input type="number" value={editor.height} onChange={function(e) { setEditor({ ...editor, height: e.target.value }); }} /></label>
                         <label><span><Weight size={13} /> Total weight (lb)</span><input type="number" value={editor.totalWeight} onChange={function(e) { setEditor({ ...editor, totalWeight: e.target.value }); }} /></label>
-                        <label>LTL freight class<input inputMode="decimal" placeholder="Required for Forward Air" value={editor.forwardAirFreightClass} onChange={function(e) { setEditor({ ...editor, forwardAirFreightClass: e.target.value }); }} /></label>
+                        <label className="eq-freight-class-field">
+                          LTL freight class
+                          <input inputMode="decimal" placeholder={estimatedFreightClass ? 'Uses calculated class ' + estimatedFreightClass.freightClass : 'Add class if known'} value={editor.forwardAirFreightClass} onChange={function(e) { setEditor({ ...editor, forwardAirFreightClass: e.target.value }); }} />
+                          {estimatedFreightClass && <small>CRM estimate: Class {estimatedFreightClass.freightClass} · {estimatedFreightClass.density.toFixed(1)} lb/ft³</small>}
+                        </label>
                         <label className="commodity">Commodity<input value={editor.commodity} onChange={function(e) { setEditor({ ...editor, commodity: e.target.value }); }} /></label>
                         <label className="temperature-control">
                           Temperature service

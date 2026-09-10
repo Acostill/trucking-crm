@@ -810,7 +810,8 @@
 
 .eq-field-grid.freight .commodity,
 .eq-field-grid.freight .temperature-control,
-.eq-field-grid.freight .truck-assignment {
+.eq-field-grid.freight .truck-assignment,
+.eq-field-grid.freight .eq-freight-class-field {
   grid-column: span 2;
 }
 
@@ -827,6 +828,15 @@
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.eq-freight-class-field small {
+  display: block;
+  margin-top: 4px;
+  color: #477188;
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .eq-field-grid input,
@@ -1597,7 +1607,8 @@
 
   .eq-field-grid.freight .commodity,
   .eq-field-grid.freight .temperature-control,
-  .eq-field-grid.freight .truck-assignment {
+  .eq-field-grid.freight .truck-assignment,
+  .eq-field-grid.freight .eq-freight-class-field {
     grid-column: auto;
   }
 

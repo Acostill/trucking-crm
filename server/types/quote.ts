@@ -71,6 +71,7 @@ export interface UnifiedQuoteRequest {
   accessorialCodes?: string[];
   // Confirmed class required for a production Forward Air LTL quote.
   forwardAirFreightClass?: string;
+  forwardAirFreightClassSource?: 'staff_confirmed' | 'density_estimate';
   hazardousUnNumbers?: string[];
   shipmentId?: string;
   referenceNumber?: string;
