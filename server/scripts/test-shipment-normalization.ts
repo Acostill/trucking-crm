@@ -1,6 +1,11 @@
 import assert from 'assert';
 import { parsedEmailToShipmentRequest } from '../services/emailQuoteWorkflow';
-import { dimensionToInches, normalizeAirportLocation, weightToPounds } from '../services/shipmentNormalization';
+import {
+  dimensionToInches,
+  forwardAirTerminalCode,
+  normalizeAirportLocation,
+  weightToPounds
+} from '../services/shipmentNormalization';
 
 function run() {
   assert.strictEqual(dimensionToInches(1200, 'mm'), 47.24);
@@ -9,6 +14,9 @@ function run() {
   assert.deepStrictEqual(normalizeAirportLocation({ location_code: 'LAX' }), {
     city: 'Los Angeles', state: 'CA', zip: '90045', country: 'US'
   });
+  assert.strictEqual(forwardAirTerminalCode({ city: 'Charlotte', state: 'NC', zip: '28273' }), 'CLT');
+  assert.strictEqual(forwardAirTerminalCode({ city: 'Atlanta', state: 'GA', zip: '30320' }), 'ATL');
+  assert.strictEqual(forwardAirTerminalCode({ city: 'Dallas', state: 'TX', zip: '75201' }), undefined);
 
   const shipment = parsedEmailToShipmentRequest({
     parsedSample: {

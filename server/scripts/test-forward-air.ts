@@ -32,8 +32,8 @@ async function run() {
     assert.match(getForwardAirConfig().error || '', /production/i);
     process.env.FORWARD_AIR_BASE_URL = 'https://api.forwardair.com';
     assert.match((await callForwardAirAPI({
-      pickup: { location: { zip: '28208' }, date: '2026-09-09' },
-      delivery: { location: { zip: '30320' } },
+      pickup: { location: { zip: '28208', city: 'Charlotte', state: 'NC' }, date: '2026-09-09' },
+      delivery: { location: { zip: '30320', city: 'Atlanta', state: 'GA' } },
       pieces: { quantity: 1, parts: [{ length: 48, width: 40, height: 48 }] },
       weight: { value: 500, unit: 'lbs' }
     })).data.error || '', /freight class/i);
@@ -57,8 +57,8 @@ async function run() {
       return request;
     };
     const response = await callForwardAirAPI({
-      pickup: { location: { zip: '28208' }, date: '2026-09-09T17:00:00.000Z' },
-      delivery: { location: { zip: '30320' } },
+      pickup: { location: { zip: '28208', city: 'Charlotte', state: 'NC' }, date: '2026-09-09T17:00:00.000Z' },
+      delivery: { location: { zip: '30320', city: 'Atlanta', state: 'GA' } },
       pieces: { quantity: 2, parts: [{ length: 48, width: 40, height: 48 }] },
       weight: { value: 500, unit: 'lbs' },
       forwardAirFreightClass: '70'
@@ -73,6 +73,8 @@ async function run() {
     assert.match(payload, /<ShipperCustomerNumber>SHIPPER<\/ShipperCustomerNumber>/);
     assert.match(payload, /<FreightClass>70<\/FreightClass>/);
     assert.match(payload, /<FAQuoteRequest>/);
+    assert.match(payload, /<OriginAirportCode>CLT<\/OriginAirportCode>/);
+    assert.match(payload, /<DestinationAirportCode>ATL<\/DestinationAirportCode>/);
     assert.match(payload, /<Description>Freight<\/Description>/);
     assert.doesNotMatch(payload, /1234567|2300130|60\.0/);
     const normalized = normalizeForwardAir(response.data as any);

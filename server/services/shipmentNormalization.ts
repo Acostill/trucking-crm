@@ -45,6 +45,33 @@ function airportCode(value: any): string {
   return matches.find(function(code) { return Boolean(AIRPORT_CODES[code]); }) || '';
 }
 
+/**
+ * Forward Premier resolves its station code from a city/ZIP even on a
+ * door-to-door quote. Keep an explicitly supplied airport code first; for a
+ * city that maps to one known airport in our directory, use that station.
+ * Ambiguous cities deliberately return nothing so the carrier can resolve
+ * the route from ZIP rather than receiving a guessed terminal.
+ */
+export function forwardAirTerminalCode(input: any): string | undefined {
+  const location = input || {};
+  const explicit = airportCode(
+    location.location_code || location.airport_code || location.code
+  );
+  if (explicit) return explicit;
+
+  const city = String(location.city || '').trim().toLowerCase();
+  const state = String(location.state || location.state_code || '').trim().toUpperCase();
+  if (!city || !state) return undefined;
+
+  const matches = Object.entries(AIRPORT_CODES)
+    .filter(function(entry) {
+      const airport = entry[1];
+      return airport.city.toLowerCase() === city && airport.state === state;
+    })
+    .map(function(entry) { return entry[0]; });
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 export function normalizeAirportLocation(input: any): Location {
   const location = input || {};
   const code = airportCode(

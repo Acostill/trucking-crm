@@ -2,6 +2,7 @@ import https from 'https';
 import xml2js from 'xml2js';
 import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
 import { getStoredForwardAirCredentials } from './carrierConnectionCredentials';
+import { forwardAirTerminalCode } from './shipmentNormalization';
 
 export interface ForwardAirResponse {
   FAQuoteResponse?: {
@@ -142,12 +143,17 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     const pieces = body.pieces || {};
     const part = (pieces.parts || [])[0] || {};
     const hazardous = Boolean(body.hazardousMaterial?.unNumbers?.filter(Boolean).length);
+    // Forward Premier resolves the serving terminal from the shipment location
+    // for D2D quotes. Send the same unambiguous terminal code alongside ZIP so
+    // API rating uses the same station context as the carrier's own UI.
+    const originTerminal = forwardAirTerminalCode(pickup.location);
+    const destinationTerminal = forwardAirTerminalCode(delivery.location);
     const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
 <FAQuoteRequest>
   <BillToCustomerNumber>${xml(config.billToCustomerNumber)}</BillToCustomerNumber>
   <ShipperCustomerNumber>${xml(config.shipperCustomerNumber)}</ShipperCustomerNumber>
-  <Origin><OriginAirportCode/><OriginZipCode>${xml(pickup.location?.zip)}</OriginZipCode><OriginCountryCode>US</OriginCountryCode><Pickup><AirportPickup>N</AirportPickup></Pickup></Origin>
-  <Destination><DestinationAirportCode/><DestinationZipCode>${xml(delivery.location?.zip)}</DestinationZipCode><DestinationCountryCode>US</DestinationCountryCode><Delivery><AirportDelivery>N</AirportDelivery></Delivery></Destination>
+  <Origin><OriginAirportCode>${xml(originTerminal || '')}</OriginAirportCode><OriginZipCode>${xml(pickup.location?.zip)}</OriginZipCode><OriginCountryCode>US</OriginCountryCode><Pickup><AirportPickup>N</AirportPickup></Pickup></Origin>
+  <Destination><DestinationAirportCode>${xml(destinationTerminal || '')}</DestinationAirportCode><DestinationZipCode>${xml(delivery.location?.zip)}</DestinationZipCode><DestinationCountryCode>US</DestinationCountryCode><Delivery><AirportDelivery>N</AirportDelivery></Delivery></Destination>
   <FreightDetails><FreightDetail><Weight>${positive(body.weight?.value)}</Weight><WeightType>${toWeightType(body.weight?.unit || '')}</WeightType><Pieces>${positive(pieces.quantity)}</Pieces><FreightClass>${freightClass(body.forwardAirFreightClass)}</FreightClass><Description>${xml(body.commodity || 'Freight')}</Description></FreightDetail></FreightDetails>
   <Dimensions><Dimension><Pieces>${positive(pieces.quantity)}</Pieces><Length>${positive(part.length)}</Length><Width>${positive(part.width)}</Width><Height>${positive(part.height)}</Height></Dimension></Dimensions>
   <Hazmat>${hazardous ? 'Y' : 'N'}</Hazmat><InBondShipment>N</InBondShipment><DeclaredValue>0.00</DeclaredValue><ShippingDate>${ymd(pickup.date)}</ShippingDate>
