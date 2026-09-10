@@ -17,6 +17,13 @@ export interface ForwardAirConnectionStatus {
   encryptionReady: boolean;
   environmentConfigured: boolean;
   updatedAt?: string;
+  billToAccountSuffix?: string;
+  shipperAccountSuffix?: string;
+}
+
+function accountSuffix(value: string): string | undefined {
+  const digits = String(value || '').replace(/\s/g, '');
+  return digits ? `••••${digits.slice(-4)}` : undefined;
 }
 
 function encryptionKey(): Buffer | undefined {
@@ -75,6 +82,11 @@ export async function getForwardAirConnectionStatus(): Promise<ForwardAirConnect
     if (result.rows.length) {
       status.saved = true;
       status.updatedAt = result.rows[0].updated_at;
+      const credentials = await getStoredForwardAirCredentials();
+      if (credentials) {
+        status.billToAccountSuffix = accountSuffix(credentials.billToCustomerNumber);
+        status.shipperAccountSuffix = accountSuffix(credentials.shipperCustomerNumber);
+      }
     }
   } catch (_error) {
     // The setup page remains available until its additive migration runs.

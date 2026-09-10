@@ -761,8 +761,16 @@ export default function AdminPortalPage() {
                   <form className="admin-user-form carrier-connection-form" onSubmit={saveForwardAirConnection}>
                     <div className="admin-form-heading">
                       <div>
-                        <h3><Truck size={18} /> Forward Air</h3>
-                        <p>{carrierStatus.saved ? 'Production credentials are saved. Enter all five fields again only to replace them.' : 'Enter the production credentials from your Forward Air account.'}</p>
+                      <h3><Truck size={18} /> Forward Air</h3>
+                      <p>{carrierStatus.saved ? 'Production credentials are saved. Enter all five fields again only to replace them.' : 'Enter the production credentials from your Forward Air account.'}</p>
+                      {carrierStatus.billToAccountSuffix && (
+                        <p className="connection-account-note">
+                          Rating account: {carrierStatus.billToAccountSuffix}
+                          {carrierStatus.shipperAccountSuffix && carrierStatus.shipperAccountSuffix !== carrierStatus.billToAccountSuffix
+                            ? ' · Shipper account: ' + carrierStatus.shipperAccountSuffix
+                            : ''}
+                        </p>
+                      )}
                       </div>
                       <span className={carrierStatus.saved || carrierStatus.environmentConfigured ? 'carrier-status connected' : 'carrier-status'}>
                         {carrierStatus.saved || carrierStatus.environmentConfigured ? 'Connected' : 'Not connected'}
