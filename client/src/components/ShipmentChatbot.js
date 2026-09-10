@@ -53,6 +53,7 @@ function ShipmentContext({ quote }) {
         <div><dt>Freight</dt><dd>{pieces.quantity || 'Unspecified'} handling units · {shipment.weight?.value != null ? Number(shipment.weight.value).toLocaleString() + ' ' + (shipment.weight.unit || 'lb') : 'Weight not supplied'}</dd></div>
         <div><dt>Dimensions</dt><dd>{pieces.parts?.length ? pieces.parts.map((part, index) => <span key={index}>{part.count || 1} unit(s): {part.length || '?'} × {part.width || '?'} × {part.height || '?'} {pieces.unit || 'in'}</span>) : 'Not supplied'}</dd></div>
         <div><dt>Commodity</dt><dd>{shipment.commodity || 'Not supplied'}</dd></div>
+        <div><dt>Stackable</dt><dd>{typeof shipment.stackable === 'boolean' ? (shipment.stackable ? 'Yes' : 'No') : 'Not supplied'}</dd></div>
         <div><dt>Equipment</dt><dd>{shipment.truckType || 'Unassigned'}{shipment.datEquipmentType && ' · DAT ' + shipment.datEquipmentType}</dd></div>
         <div><dt>Carrier rates</dt><dd>{rates.length ? rates.map(option => <span key={option.key}>{option.source} · {money(option.cost)}</span>) : 'No available carrier rates'}</dd></div>
         <div><dt>DAT context</dt><dd>{benchmarks.length ? benchmarks.map(option => <span key={option.key}>{option.source} · {money(option.cost)}</span>) : 'No market benchmarks available'}</dd></div>

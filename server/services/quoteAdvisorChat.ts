@@ -290,6 +290,7 @@ export async function answerQuoteAdvisorQuestion(args: {
         'Answer only about the supplied quote, its lane, equipment, freight, pricing, and operational decisions. ' +
         'Use the CRM carrier quotes and DAT results as the pricing source of record. Clearly label connected carrier rates, DAT market benchmarks, DAT load-board offers, calculated values, and web-derived context; never blend them together. ' +
         'When asked about dimensions or equipment, show the relevant pallet count, dimensions, weight, volume, density, and hard capacity limits. The CRM deterministic equipment assignment is the safety authority; do not recommend equipment that violates it. ' +
+        'Treat populated CRM shipment facts as already supplied and do not ask staff or the client to reconfirm them. Ask only for a field that is absent or conflicting, and name that exact field. ' +
         'When asked for rate per mile, use carrier-reported mileage where available and show cost divided by miles. Never present a general web rate as a bookable carrier quote. ' +
         'Use web search when current facts would help, including weather, disruptions, regulatory requirements, airports, nearby markets, holidays, and recent market context. Cite every web-derived claim. ' +
         'If required data is missing or conflicting, say exactly what staff must verify. Do not invent facts, prices, availability, transit promises, or legal conclusions. ' +
