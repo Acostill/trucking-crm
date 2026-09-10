@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { UnifiedQuoteRequest } from '../types/quote';
 import {
   applyValidatedAITruckRecommendation,
-  CAPACITY_RULES,
+  automaticAssignmentProfiles,
   SupportedTruckType,
   SUPPORTED_TRUCK_TYPES
 } from './truckAssignment';
@@ -130,8 +130,8 @@ export async function adviseShipmentWithOpenAI(
       store: false,
       instructions:
         'You are a conservative freight shipment advisor for First Class Trucking. ' +
-        'Recommend exactly one supported equipment type using the supplied pallet count, per-piece dimensions, total weight, stackability, temperature service, and hard capacity rules. ' +
-        'Never exceed a rule, never change dry versus refrigerated service, and prefer the smallest safe truck. ' +
+        'Recommend exactly one supported equipment type using the supplied pallet count, per-piece dimensions, total weight, stackability, temperature service, and automatic-assignment guardrails. ' +
+        'The guardrails are conservative CRM defaults, not hard carrier or vehicle limits. Never call pallet positions pieces. Never exceed a guardrail, never change dry versus refrigerated service, and prefer the smallest safe truck. ' +
         'Point out missing operational checks without inventing facts. Your output is advisory and a staff member makes the final price and booking decision.',
       input: JSON.stringify({
         shipment: {
@@ -146,7 +146,7 @@ export async function adviseShipmentWithOpenAI(
           deterministicRecommendation: shipment.truckType
         },
         supportedTruckTypes: SUPPORTED_TRUCK_TYPES,
-        hardCapacityRules: CAPACITY_RULES
+        automaticAssignmentProfiles: automaticAssignmentProfiles()
       }),
       text: {
         format: {

@@ -42,6 +42,18 @@ export interface TruckCapacityRule {
   floorSquareFeetMax: number;
 }
 
+export interface AutomaticAssignmentProfile {
+  truckType: SupportedTruckType;
+  automaticAssignmentLimit: {
+    maxPallets: number;
+    maxWeightLb: number;
+    maxCubicFeet: number;
+    maxFloorSquareFeet: number;
+    interiorDimensionsIn: { length: number; width: number; height: number };
+  };
+  meaning: string;
+}
+
 /**
  * Conservative default equipment classes for automatic assignment.
  *
@@ -131,6 +143,29 @@ export const CAPACITY_RULES: TruckCapacityRule[] = [
     floorSquareFeetMax: 390
   }
 ];
+
+/**
+ * Context supplied to AI assistants. The names deliberately distinguish a
+ * conservative CRM guardrail from a carrier's actual vehicle specification.
+ */
+export function automaticAssignmentProfiles(): AutomaticAssignmentProfile[] {
+  return CAPACITY_RULES.map(function(rule) {
+    const truckType = (rule.serviceCategory === 'reefer'
+      ? reeferVariant(rule.baseTruckType)
+      : rule.baseTruckType) as SupportedTruckType;
+    return {
+      truckType,
+      automaticAssignmentLimit: {
+        maxPallets: rule.palletMax,
+        maxWeightLb: rule.weightMax,
+        maxCubicFeet: rule.cubicFeetMax,
+        maxFloorSquareFeet: rule.floorSquareFeetMax,
+        interiorDimensionsIn: { ...rule.dimensions }
+      },
+      meaning: 'Conservative CRM automatic-assignment guardrail, not a hard carrier or vehicle capacity. maxPallets means standard pallet positions, never individual pieces. Carrier equipment must be confirmed before booking.'
+    };
+  });
+}
 
 const STAFF_TRUCK_TYPES = new Set([
   'Cargo Van',

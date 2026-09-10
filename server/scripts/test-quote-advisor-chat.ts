@@ -32,8 +32,14 @@ const context: any = buildQuoteAdvisorContext({
 assert.equal(context.freight.calculatedVolumeCubicFeet, 53.33);
 assert.equal(context.freight.calculatedFootprintSquareFeet, 13.33);
 assert.equal(context.freight.calculatedDensityLbPerCubicFoot, 9.38);
+assert.equal(context.freight.declaredPalletCount, 1);
+assert.match(context.freight.countMeaning, /pallets/i);
 assert.equal(context.pricing.carrierAndMarketOptions[0].derivedRatePerMile, 1.87);
 assert.equal(context.equipment.assignedTruckType, 'Cargo Van');
+assert.equal(context.equipment.deterministicCapacityRules, undefined);
+assert.equal(context.equipment.automaticAssignmentProfiles[1].truckType, 'Box Truck');
+assert.equal(context.equipment.automaticAssignmentProfiles[1].automaticAssignmentLimit.maxPallets, 8);
+assert.match(context.equipment.automaticAssignmentProfiles[1].meaning, /not a hard carrier/i);
 assert.equal(context.quote.reference, 'FCT-1048');
 assert.equal(context.quote.validUntil, '2026-09-16');
 assert.equal(context.quote.staffNotes, 'Customer needs liftgate delivery. Confirm with carrier.');
@@ -97,6 +103,8 @@ async function testResearchContract() {
     assert.strictEqual(request.tool_choice, 'required', 'the model must not skip research');
     assert.strictEqual(request.tools[0].external_web_access, true);
     assert(request.input.includes(new Date().toISOString().slice(0, 10)));
+    assert(request.instructions.includes('never hard carrier or vehicle limits'));
+    assert(request.instructions.includes('never call a pallet position a piece'));
     assert.strictEqual(result.usedWebSearch, true);
     assert.deepStrictEqual(result.sources, [source]);
     assert(result.answer.includes('[1](<https://www.forwardair.com/locations>)'));
