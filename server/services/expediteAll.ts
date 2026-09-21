@@ -112,7 +112,10 @@ export function expediteAllEligibilityError(body: UnifiedQuoteRequest): string |
 
   const baseTruckType = truckType.replace(/^Reefer\s+/i, '');
   if (baseTruckType !== 'Cargo Van') {
-    return `ExpediteAll rates Cargo Van shipments only; this load requires ${truckType}.`;
+    // The published calculate-rate contract supports Cargo Van only. A larger
+    // vehicle fitting the freight does not make it rateable through this API.
+    // https://documenter.getpostman.com/view/30227005/2sAYJ1j2MS
+    return `ExpediteAll's connected rating API supports Cargo Van only. This load is assigned to ${truckType}; request an ExpediteAll portal/manual quote for that equipment.`;
   }
 
   const weight = Number(body && body.weight && body.weight.value);
@@ -136,6 +139,10 @@ export function describeExpediteAllError(
     'Cargo Van': { weightMax: 3000, nextEquipment: 'Straight Truck or larger equipment is required.' }
   };
   const providerLimit = providerLimits[baseTruckType];
+
+  if (/the size of the load exceeds the dimensions/i.test(providerMessage)) {
+    return 'ExpediteAll rejected this load under its Cargo Van dimension limits. Its connected API does not return Box Truck or Straight Truck rates; check the equipment fit and request a portal/manual quote for suitable equipment.';
+  }
 
   if (
     providerCode === 'LOAD_WEIGHT_OVER_LIMIT' &&

@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { UnifiedQuoteRequest } from '../types/quote';
-import { assignTruckType, TRUCK_ASSIGNMENT_RULE_VERSION } from '../services/truckAssignment';
+import { applyValidatedAITruckRecommendation, assignTruckType, TRUCK_ASSIGNMENT_RULE_VERSION } from '../services/truckAssignment';
 
 function shipment(
   pallets: number,
@@ -51,7 +51,34 @@ function run() {
   expectAssigned(shipment(3, 4301), 'Straight Truck', 'Van');
   expectAssigned(shipment(2, 4000), 'Box Truck', 'Van');
   expectAssigned(shipment(12, 10000), 'Straight Truck', 'Van');
-  expectAssigned(shipment(2, 2000, { length: 73, width: 40, height: 48 }), 'Cargo Van', 'Van');
+  expectAssigned(shipment(2, 2000, { length: 73, width: 40, height: 48 }), 'Box Truck', 'Van');
+
+  // September 21 failure: each crate fits a Cargo Van individually, but both
+  // cannot share its 120 x 54 x 60 interior, even if stacking is allowed.
+  const longCrates = shipment(2, 130, { length: 107, width: 31, height: 31 });
+  expectAssigned(longCrates, 'Box Truck', 'Van');
+  expectAssigned({ ...longCrates, stackable: false }, 'Box Truck', 'Van');
+  expectAssigned({ ...longCrates, stackable: true }, 'Box Truck', 'Van');
+  assert.strictEqual(applyValidatedAITruckRecommendation(longCrates, 'Cargo Van').accepted, false);
+  const separateCrates = {
+    ...longCrates,
+    pieces: { quantity: 2, unit: 'in', parts: [
+      { length: 107, width: 31, height: 31 },
+      { length: 31, width: 107, height: 31 }
+    ] }
+  };
+  expectAssigned(separateCrates, 'Box Truck', 'Van');
+  expectAssigned(shipment(1, 130, { length: 107, width: 31, height: 31 }), 'Cargo Van', 'Van');
+
+  // Exact side-by-side boundary, including a rotated footprint.
+  expectAssigned(shipment(2, 130, { length: 107, width: 27, height: 31 }), 'Cargo Van', 'Van');
+  expectAssigned(shipment(2, 130, { length: 27, width: 107, height: 31 }), 'Cargo Van', 'Van');
+  expectAssigned(shipment(2, 130, { length: 107, width: 27.01, height: 31 }), 'Box Truck', 'Van');
+  // Height cannot be substituted for width. Stacking requires confirmation.
+  const shortCrates = shipment(2, 130, { length: 107, width: 31, height: 30 });
+  expectAssigned(shortCrates, 'Box Truck', 'Van');
+  expectAssigned({ ...shortCrates, stackable: false }, 'Box Truck', 'Van');
+  expectAssigned({ ...shortCrates, stackable: true }, 'Cargo Van', 'Van');
 
   expectAssigned(shipment(13, 10000), 'Dry Van', 'Van');
   expectAssigned(shipment(12, 10001), 'Dry Van', 'Van');
@@ -65,7 +92,7 @@ function run() {
   // The fit guard checks the entire shipment, not only the largest piece.
   expectAssigned(
     shipment(3, 2000, { length: 100, width: 50, height: 54 }),
-    'Box Truck',
+    'Straight Truck',
     'Van'
   );
 

@@ -41,7 +41,10 @@ function run() {
   assert.strictEqual(shipment.delivery?.location?.city, 'Los Angeles');
   assert.strictEqual(shipment.weight?.value, 2204.62);
   assert.strictEqual(shipment.pieces?.parts?.[0].length, 47.24);
-  assert.strictEqual(shipment.truckType, 'Dry Van');
+  // Two normalized 47.24 x 39.37 x 51.18 inch pieces fit end to end in
+  // the current Cargo Van profile; the old Dry Van expectation was stale.
+  assert.strictEqual(shipment.pieces?.parts?.[0].count, 2);
+  assert.strictEqual(shipment.truckType, 'Cargo Van');
 
   console.log('Shipment normalization tests passed.');
 }

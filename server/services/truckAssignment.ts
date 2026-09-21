@@ -1,6 +1,6 @@
 import { Piece, UnifiedQuoteRequest } from '../types/quote';
 
-export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v5';
+export const TRUCK_ASSIGNMENT_RULE_VERSION = 'fct-truck-assignment-v6';
 
 export type TruckAssignmentStatus = 'assigned' | 'needs_review';
 export type TruckAssignmentSource = 'auto' | 'ai' | 'staff';
@@ -282,18 +282,48 @@ function partsFit(parts: Piece[], rule: TruckCapacityRule): boolean {
   });
 }
 
+/**
+ * Necessary loading-fit check: every pair must be able to share the interior.
+ * Individual dimensions and total cube alone accept, for example, two long
+ * crates that cannot sit side by side, end to end, or one above the other.
+ * This is a rejection guard, not a complete packing plan. Keep freight upright
+ * and allow vertical separation only when stacking is explicitly confirmed.
+ */
+function pairsFit(parts: Piece[], rule: TruckCapacityRule, canStack: boolean): boolean {
+  const interior = rule.dimensions;
+  const orientations = (part: Piece) => [
+    { length: Number(part.length), width: Number(part.width) },
+    { length: Number(part.width), width: Number(part.length) }
+  ].filter(p => p.length <= interior.length && p.width <= interior.width);
+
+  for (let i = 0; i < parts.length; i++) {
+    for (let j = i; j < parts.length; j++) {
+      // A grouped part represents a pair only when it contains multiple pieces.
+      if (i === j && Number(parts[i].count || 1) < 2) continue;
+      const fits = orientations(parts[i]).some(a => orientations(parts[j]).some(b =>
+        a.length + b.length <= interior.length ||
+        a.width + b.width <= interior.width ||
+        (canStack && Number(parts[i].height) + Number(parts[j].height) <= interior.height)
+      ));
+      if (!fits) return false;
+    }
+  }
+  return true;
+}
+
 function shipmentFitsRule(
   pallets: number,
   weight: number,
   parts: Piece[],
   rule: TruckCapacityRule,
-  requireFloorFit = false
+  canStack = false
 ): boolean {
   return pallets <= rule.palletMax &&
     weight <= rule.weightMax &&
     totalCubicFeet(parts) <= rule.cubicFeetMax &&
-    (!requireFloorFit || totalFloorSquareFeet(parts) <= rule.floorSquareFeetMax) &&
-    partsFit(parts, rule);
+    (canStack || totalFloorSquareFeet(parts) <= rule.floorSquareFeetMax) &&
+    partsFit(parts, rule) &&
+    pairsFit(parts, rule, canStack);
 }
 
 function reeferVariant(baseTruckType: TruckCapacityRule['baseTruckType']): string {
@@ -386,7 +416,7 @@ export function assignTruckType(shipment: UnifiedQuoteRequest): TruckAssignmentR
   }
 
   const selected = serviceRules.find(function(rule) {
-    return shipmentFitsRule(pallets, weight, parts, rule, shipment.stackable === false);
+    return shipmentFitsRule(pallets, weight, parts, rule, shipment.stackable === true);
   });
   if (!selected) {
     const oversized = !partsFit(parts, largestRule);
@@ -469,7 +499,7 @@ export function applyValidatedAITruckRecommendation(
   if (
     !rule || pallets == null || weight == null || !parts || !hasCanonicalUnits(current) ||
     !service.category || isReefer !== (service.category === 'reefer') ||
-    !shipmentFitsRule(pallets, weight, parts, rule, current.stackable === false)
+    !shipmentFitsRule(pallets, weight, parts, rule, current.stackable === true)
   ) {
     return {
       accepted: false,

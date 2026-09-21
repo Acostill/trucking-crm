@@ -60,6 +60,10 @@ async function run() {
     assert.strictEqual(parsedPayload.referenceNumber, 'Reference12345');
     assert.strictEqual(parsedPayload.pickup.date, '2026-09-08T00:00:00.000Z');
 
+    let providerRejection = {
+      message: 'The weight of the load exceeds the limit.',
+      code: 'LOAD_WEIGHT_OVER_LIMIT'
+    };
     (https as any).request = function(_options: any, callback: (response: EventEmitter & any) => void) {
       const response: EventEmitter & any = new EventEmitter();
       response.statusCode = 422;
@@ -69,10 +73,7 @@ async function run() {
       request.write = function() {};
       request.end = function() {
         process.nextTick(function() {
-          response.emit('data', JSON.stringify({
-            message: 'The weight of the load exceeds the limit.',
-            code: 'LOAD_WEIGHT_OVER_LIMIT'
-          }));
+          response.emit('data', JSON.stringify(providerRejection));
           response.emit('end');
         });
       };
@@ -93,7 +94,7 @@ async function run() {
     assert.strictEqual(expediteAllEligibilityError({
       truckType: 'Box Truck',
       weight: { value: 3450, unit: 'lbs' }
-    }), 'ExpediteAll rates Cargo Van shipments only; this load requires Box Truck.');
+    }), "ExpediteAll's connected rating API supports Cargo Van only. This load is assigned to Box Truck; request an ExpediteAll portal/manual quote for that equipment.");
 
     const unsupportedStraightTruck = await callExpediteAllAPI({
       truckType: 'Straight Truck',
@@ -102,8 +103,29 @@ async function run() {
     assert.strictEqual(unsupportedStraightTruck.statusCode, 422);
     assert.strictEqual(
       (unsupportedStraightTruck.data as any).error,
-      'ExpediteAll rates Cargo Van shipments only; this load requires Straight Truck.'
+      "ExpediteAll's connected rating API supports Cargo Van only. This load is assigned to Straight Truck; request an ExpediteAll portal/manual quote for that equipment."
     );
+
+    const dimensionMessage = describeExpediteAllError({ truckType: 'Cargo Van' }, {
+      message: 'The size of the load exceeds the dimensions.'
+    });
+    assert.match(dimensionMessage, /Cargo Van dimension limits/);
+    assert.match(dimensionMessage, /does not return Box Truck or Straight Truck rates/);
+    assert.match(dimensionMessage, /portal\/manual quote/);
+    assert.strictEqual(describeExpediteAllError({}, { message: 'Pickup location not found.' }), 'Pickup location not found.');
+
+    // Staff-selected Cargo Van still reaches the provider; report the API
+    // limitation instead of implying that no larger vehicle can carry it.
+    providerRejection = { message: 'The size of the load exceeds the dimensions.', code: '' };
+    const dimensionRejection = await callExpediteAllAPI({
+      truckType: 'Cargo Van',
+      truckAssignment: { source: 'staff' },
+      pieces: { quantity: 2, unit: 'in', parts: [{ count: 2, length: 107, width: 31, height: 31 }] },
+      weight: { value: 130, unit: 'lbs' }
+    });
+    assert.strictEqual(dimensionRejection.statusCode, 422);
+    assert.strictEqual((dimensionRejection.data as any).error, dimensionMessage);
+    assert.strictEqual((dimensionRejection.data as any).priceTotal, undefined);
 
     const cleaned = prepareExpediteAllRequest({
       hazardousMaterial: { unNumbers: ['', '  '] },
@@ -122,7 +144,7 @@ async function run() {
       request.write = function() {};
       request.end = function() {
         process.nextTick(function() {
-          response.emit('data', JSON.stringify({ priceTotal: 640, truckType: 'Box Truck' }));
+          response.emit('data', JSON.stringify({ priceTotal: 640, truckType: 'Cargo Van' }));
           response.emit('end');
         });
       };
