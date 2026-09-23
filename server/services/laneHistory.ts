@@ -39,8 +39,8 @@ export const CARRIER_CACHE_MAX_AGE_DAYS: Record<string, number> = {
   expediteAll: 3
 };
 
-/** Road miles are usually ~15–25% longer than straight-line distance. */
-export const ROAD_CIRCUITY_FACTOR = 1.2;
+/** US truck routes run ~5–15% longer than straight-line distance. */
+export const ROAD_CIRCUITY_FACTOR = 1.1;
 
 function positive(value: any): number | undefined {
   const parsed = Number(value);
