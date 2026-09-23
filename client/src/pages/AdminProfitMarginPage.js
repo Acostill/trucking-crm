@@ -3,6 +3,8 @@ import Sidebar from '../components/Sidebar';
 import AuthForm from '../components/AuthForm';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../config';
+import ExpediteRateTable from '../components/ExpediteRateTable';
+import PricingScorecard from '../components/PricingScorecard';
 
 const DEFAULT_RULE_ID = 1;
 
@@ -112,8 +114,8 @@ export default function AdminProfitMarginPage() {
       <main className="app-main">
         <div className="app-content admin-profit-page">
           <div className="page-header">
-            <h1 className="page-title">Profit Margin</h1>
-            <p className="page-subtitle">Set the default profit margin for future loads.</p>
+            <h1 className="page-title">Pricing</h1>
+            <p className="page-subtitle">Default margin, expedite rates, and how your quotes are performing.</p>
           </div>
 
           {!isAdmin ? (
@@ -146,6 +148,12 @@ export default function AdminProfitMarginPage() {
                   {saving ? 'Saving…' : (status ? 'Saved' : 'Save changes')}
                 </button>
               </div>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="pricing-admin-stack">
+              <ExpediteRateTable />
+              <PricingScorecard />
             </div>
           )}
         </div>

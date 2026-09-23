@@ -112,4 +112,6 @@ export interface StandardizedQuote {
     [key: string]: any; // Allow additional service-specific info
   };
   error?: string;
+  // True when the pricing plan chose not to call this source at all.
+  skipped?: boolean;
 }

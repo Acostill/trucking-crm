@@ -5,6 +5,7 @@ import {
   getForwardAirConnectionStatus,
   saveForwardAirCredentials
 } from '../services/carrierConnectionCredentials';
+import { listExpediteRateRules } from '../services/expediteRateTable';
 
 const router = express.Router();
 const SESSION_COOKIE = 'session_token';
@@ -160,6 +161,59 @@ router.put('/profit-margin/:id', async function(req: Request, res: Response, nex
       id: result.rows[0].id,
       marginPct: result.rows[0].margin_pct
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Expedite buy-rate table: what First Class expects to pay per loaded mile
+// for each vehicle, used to quote expedite loads without asking a carrier.
+const EXPEDITE_VEHICLE_TYPES = [
+  'Cargo Van', 'Box Truck', 'Straight Truck',
+  'Reefer Cargo Van', 'Reefer Box Truck', 'Reefer Straight Truck'
+];
+
+router.get('/expedite-rate-rules', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ vehicleTypes: EXPEDITE_VEHICLE_TYPES, rules: await listExpediteRateRules() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/expedite-rate-rules/:vehicleType', async function(req: Request, res: Response, next: NextFunction) {
+  const vehicleType = String(req.params.vehicleType || '');
+  if (EXPEDITE_VEHICLE_TYPES.indexOf(vehicleType) === -1) {
+    res.status(400).json({ error: 'Unknown expedite vehicle type' });
+    return;
+  }
+  const ratePerMile = Number(req.body && req.body.ratePerMile);
+  const minimumCharge = Number(req.body && req.body.minimumCharge != null ? req.body.minimumCharge : 0);
+  if (!Number.isFinite(ratePerMile) || ratePerMile <= 0 || ratePerMile > 50) {
+    res.status(400).json({ error: 'ratePerMile must be between 0 and 50' });
+    return;
+  }
+  if (!Number.isFinite(minimumCharge) || minimumCharge < 0 || minimumCharge > 100000) {
+    res.status(400).json({ error: 'minimumCharge must be 0 or more' });
+    return;
+  }
+  const isActive = !(req.body && req.body.isActive === false);
+  const notes = req.body && req.body.notes ? String(req.body.notes).slice(0, 1000) : null;
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    await db.queryWithUser(
+      `INSERT INTO public.expedite_rate_rules (vehicle_type, rate_per_mile, minimum_charge, is_active, notes, updated_by)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (vehicle_type) DO UPDATE SET
+         rate_per_mile = EXCLUDED.rate_per_mile,
+         minimum_charge = EXCLUDED.minimum_charge,
+         is_active = EXCLUDED.is_active,
+         notes = EXCLUDED.notes,
+         updated_by = EXCLUDED.updated_by`,
+      [vehicleType, ratePerMile, minimumCharge, isActive, notes, userId || null],
+      userId
+    );
+    res.json({ vehicleTypes: EXPEDITE_VEHICLE_TYPES, rules: await listExpediteRateRules() });
   } catch (err) {
     next(err);
   }

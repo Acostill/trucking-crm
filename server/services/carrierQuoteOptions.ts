@@ -4,7 +4,9 @@ export type CarrierQuoteKey =
   | 'datRateView'
   | 'datSpot'
   | 'datContract'
-  | 'datLoadOffers';
+  | 'datLoadOffers'
+  | 'rateTable'
+  | 'laneHistory';
 
 export interface CarrierQuoteOption {
   key: CarrierQuoteKey;
@@ -39,6 +41,25 @@ export interface CarrierQuoteOption {
   excludedCount?: number;
   exclusionReasons?: Record<string, number>;
   outcome?: string;
+  // Market-first pricing metadata.
+  pricingBasis?: 'carrier_rate' | 'market_estimate' | 'rate_table';
+  requestFingerprint?: string;
+  fromCache?: boolean;
+  cachedAt?: string;
+  mileageMethod?: string;
+  note?: string;
+}
+
+/**
+ * A price staff can build a customer quote from. DAT spot and the rate table
+ * are estimates of the truck cost (the broker covers the load after award),
+ * so they opt in with `selectable: true` even though they are not carrier bids.
+ */
+export function isPriceableOption(option: CarrierQuoteOption | null | undefined): boolean {
+  if (!option || !option.available) return false;
+  if (!(Number.isFinite(Number(option.cost)) && Number(option.cost) > 0)) return false;
+  if (option.selectable === true) return true;
+  return option.selectable !== false && option.benchmark !== true;
 }
 
 export interface CarrierRecommendation {
@@ -55,16 +76,14 @@ export function buildCarrierRecommendation(
   defaultMarginPct: number
 ): CarrierRecommendation | null {
   const available = options
-    .filter(function(option) {
-      return option.available &&
-        option.selectable !== false &&
-        option.benchmark !== true &&
-        Number.isFinite(Number(option.cost)) &&
-        Number(option.cost) > 0;
-    })
+    .filter(isPriceableOption)
     .sort(function(a, b) { return Number(a.cost) - Number(b.cost); });
   if (!available.length) return null;
-  const recommended = available[0];
+  // Brokers price from the market: the DAT estimate (truckload) or the rate
+  // table (expedite) leads; otherwise the lowest carrier bid (LTL).
+  const recommended = available.find(function(option) { return option.key === 'datSpot'; }) ||
+    available.find(function(option) { return option.key === 'rateTable'; }) ||
+    available[0];
   const carrierCost = Number(recommended.cost);
   return {
     carrierKey: recommended.key,
@@ -74,10 +93,20 @@ export function buildCarrierRecommendation(
     suggestedClientPrice: Number(
       (carrierCost * (1 + defaultMarginPct / 100)).toFixed(2)
     ),
-    reason: available.length > 1
-      ? 'Lowest available carrier cost. Compare it with the DAT market benchmark, then confirm service and transit before sending.'
-      : 'Only available carrier rate. Compare it with the DAT market benchmark, then confirm service and transit before sending.'
+    reason: recommendationReason(recommended, available.length)
   };
+}
+
+function recommendationReason(option: CarrierQuoteOption, count: number): string {
+  if (option.key === 'datSpot') {
+    return 'Priced from the DAT spot market average. Cover the truck after the customer awards the load, targeting at or below this cost.';
+  }
+  if (option.key === 'rateTable') {
+    return 'Priced from the First Class expedite rate table. Cover the van or truck after award, targeting at or below this cost.';
+  }
+  return count > 1
+    ? 'Lowest available carrier cost. Compare it with the market rate, then confirm service and transit before sending.'
+    : 'Only available carrier rate. Compare it with the market rate, then confirm service and transit before sending.';
 }
 
 export function mergeDatCarrierOptions(

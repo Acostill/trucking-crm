@@ -17,6 +17,11 @@ import {
   requestDatSearchLoadsLookup
 } from '../services/datRateViewJobs';
 import { sendGmailMessage } from '../services/gmailQuoteInbox';
+import { isPriceableOption } from '../services/carrierQuoteOptions';
+import { pricingFingerprint, pricingModeFor } from '../services/quoteRouting';
+import { recordLaneObservation } from '../services/laneHistory';
+import { requestExpediteAllCoverRate } from '../services/coverRates';
+import { buildPricingReport } from '../services/pricingReport';
 import { buildQuoteAdvisor } from '../services/quoteAdvisor';
 import { answerQuoteAdvisorQuestion } from '../services/quoteAdvisorChat';
 
@@ -115,6 +120,10 @@ function rowToEmailQuote(row: any, includeRaw = false) {
       clientPrice: numericValue(row.client_price)
     },
     staffNotes: row.staff_notes,
+    pricingMode: pricingModeFor(shipment),
+    truckCost: numericValue(row.truck_cost),
+    truckCarrierName: row.truck_carrier_name || null,
+    truckCoveredAt: row.truck_covered_at || null,
     quoteId: row.quote_id,
     lastRatedAt: row.last_rated_at,
     pricedAt: row.priced_at,
@@ -211,6 +220,16 @@ router.get('/', async function(req: Request, res: Response, next: NextFunction) 
     query += ` ORDER BY COALESCE(received_at, created_at) DESC LIMIT $${params.length}`;
     const result = await db.query(query, params);
     res.json(result.rows.map(function(row) { return rowToEmailQuote(row); }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/reports/pricing', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!await requireOperationsUser(req, res)) return;
+    const days = Math.min(365, Math.max(7, Number(req.query && req.query.days) || 90));
+    res.json(await buildPricingReport(days));
   } catch (err) {
     next(err);
   }
@@ -332,7 +351,39 @@ router.put('/:id/shipment', async function(req: Request, res: Response, next: Ne
       res.status(400).json({ error: 'shipment is required' });
       return;
     }
+    // Only lane, dates, freight, and equipment change the price. Saving any
+    // other edit keeps the current rates instead of re-asking every carrier.
+    const current = await db.query(
+      'SELECT shipment_request, carrier_quotes, status FROM public.email_quote_requests WHERE id = $1',
+      [req.params.id]
+    );
+    const forceRerate = Boolean(req.body && req.body.refreshRates === true);
+    if (current.rows.length && !forceRerate) {
+      const row = current.rows[0];
+      const hasRates = jsonValue(row.carrier_quotes, []).length > 0;
+      const unchanged = pricingFingerprint(jsonValue(row.shipment_request, {})) === pricingFingerprint(shipment);
+      if (hasRates && unchanged && ['ready', 'priced'].indexOf(row.status) > -1) {
+        const saved = await db.query(
+          `UPDATE public.email_quote_requests SET shipment_request = $2::jsonb WHERE id = $1 RETURNING *`,
+          [req.params.id, JSON.stringify({ ...jsonValue(row.shipment_request, {}), ...shipment })]
+        );
+        res.json(rowToEmailQuote(saved.rows[0], true));
+        return;
+      }
+    }
     const record = await rateEmailQuoteRequest(req.params.id, shipment);
+    res.json(rowToEmailQuote(record, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Cover step: after the customer awards an expedite load, ask ExpediteAll for
+// a bookable rate. Before award, expedite loads are priced from the rate table.
+router.post('/:id/cover/expedite-all', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!await requireOperationsUser(req, res)) return;
+    const record = await requestExpediteAllCoverRate(req.params.id);
     res.json(rowToEmailQuote(record, true));
   } catch (err) {
     next(err);
@@ -388,10 +439,7 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
     const carrierQuotes: any[] = jsonValue(row.carrier_quotes, []);
     const carrierKey = String(req.body && req.body.carrierKey || '');
     const selected = carrierQuotes.find(function(option) {
-      return option.key === carrierKey &&
-        option.available &&
-        option.selectable !== false &&
-        option.benchmark !== true;
+      return option.key === carrierKey && isPriceableOption(option);
     });
     if (!selected || !numericValue(selected.cost)) {
       res.status(400).json({ error: 'Choose an available carrier rate' });
@@ -514,6 +562,17 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
           quoteValidUntil
         ]
       );
+      await recordLaneObservation({
+        observationType: 'customer_price',
+        source: selected.key,
+        emailQuoteRequestId: row.id,
+        shipment,
+        miles: selected.miles || null,
+        totalUsd: clientPrice,
+        ratePerMile: selected.miles ? clientPrice / Number(selected.miles) : null,
+        payload: { carrierCost, marginPct, marginAmount, pricingBasis: selected.pricingBasis || 'carrier_rate' },
+        replaceForQuote: true
+      }, client);
       return result.rows[0];
     }, userId);
 
@@ -544,6 +603,15 @@ router.put('/:id/workflow', async function(req: Request, res: Response, next: Ne
       res.status(400).json({ error: 'Follow-up date is invalid' });
       return;
     }
+    // What First Class actually paid the truck once an awarded load is covered.
+    const truckCost = numericValue(req.body && req.body.truckCost);
+    const truckCarrierName = req.body && req.body.truckCarrierName
+      ? String(req.body.truckCarrierName).trim().slice(0, 200)
+      : null;
+    if (truckCost != null && (truckCost <= 0 || outcome !== 'awarded')) {
+      res.status(400).json({ error: 'Truck cost must be positive and can only be recorded on an awarded quote' });
+      return;
+    }
     const updated = await db.transactionWithUser(async function(client) {
       const result = await client.query(
         `UPDATE public.email_quote_requests
@@ -554,12 +622,35 @@ router.put('/:id/workflow', async function(req: Request, res: Response, next: Ne
              follow_up_at = $5,
              follow_up_status = $6,
              follow_up_note = $7,
+             truck_cost = CASE WHEN $2 = 'awarded' THEN COALESCE($8, truck_cost) ELSE NULL END,
+             truck_carrier_name = CASE WHEN $2 = 'awarded' THEN COALESCE($9, truck_carrier_name) ELSE NULL END,
+             truck_covered_at = CASE
+               WHEN $2 <> 'awarded' THEN NULL
+               WHEN $8::numeric IS NOT NULL THEN NOW()
+               ELSE truck_covered_at
+             END,
              updated_at = NOW()
          WHERE id = $1 AND archived_at IS NULL
          RETURNING *`,
-        [req.params.id, outcome, userId, outcomeNotes, followUpAt ? followUpAt.toISOString() : null, followUpStatus, followUpNote]
+        [req.params.id, outcome, userId, outcomeNotes, followUpAt ? followUpAt.toISOString() : null, followUpStatus, followUpNote, truckCost, truckCarrierName]
       );
       if (!result.rows.length) return null;
+      if (truckCost != null) {
+        const options: any[] = jsonValue(result.rows[0].carrier_quotes, []);
+        const withMiles = options.find(function(option) { return Number(option && option.miles) > 0; });
+        const miles = withMiles ? Number(withMiles.miles) : null;
+        await recordLaneObservation({
+          observationType: 'truck_cost',
+          source: truckCarrierName || 'covered_truck',
+          emailQuoteRequestId: req.params.id,
+          shipment: jsonValue(result.rows[0].shipment_request, {}),
+          miles,
+          totalUsd: truckCost,
+          ratePerMile: miles ? truckCost / miles : null,
+          payload: { clientPrice: numericValue(result.rows[0].client_price), carrierName: truckCarrierName },
+          replaceForQuote: true
+        }, client);
+      }
       const quoteId = result.rows[0].quote_id;
       if (quoteId && outcome !== 'open') {
         const quoteResult = await client.query('SELECT * FROM public.quotes WHERE id = $1 FOR UPDATE', [quoteId]);
