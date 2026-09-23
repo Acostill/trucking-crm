@@ -79,9 +79,11 @@ export function buildCarrierRecommendation(
     .filter(isPriceableOption)
     .sort(function(a, b) { return Number(a.cost) - Number(b.cost); });
   if (!available.length) return null;
-  // Brokers price from the market: the DAT estimate (truckload) or the rate
-  // table (expedite) leads; otherwise the lowest carrier bid (LTL).
+  // Truckload leads with the DAT market estimate. For expedite, a live
+  // ExpediteAll price beats the rate table (it is a real bookable number);
+  // otherwise the lowest carrier bid (LTL).
   const recommended = available.find(function(option) { return option.key === 'datSpot'; }) ||
+    available.find(function(option) { return option.key === 'expediteAll'; }) ||
     available.find(function(option) { return option.key === 'rateTable'; }) ||
     available[0];
   const carrierCost = Number(recommended.cost);
@@ -100,6 +102,9 @@ export function buildCarrierRecommendation(
 function recommendationReason(option: CarrierQuoteOption, count: number): string {
   if (option.key === 'datSpot') {
     return 'Priced from the DAT spot market average. Cover the truck after the customer awards the load, targeting at or below this cost.';
+  }
+  if (option.key === 'expediteAll') {
+    return 'Priced from the live ExpediteAll rate. Compare it with the First Class rate table to keep the table accurate.';
   }
   if (option.key === 'rateTable') {
     return 'Priced from the First Class expedite rate table. Cover the van or truck after award, targeting at or below this cost.';

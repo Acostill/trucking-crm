@@ -22,6 +22,7 @@ async function run() {
        to_regclass('public.expedite_rate_rules') IS NOT NULL AS rate_table_ready,
        to_regclass('public.lane_rate_history') IS NOT NULL AS lane_history_ready,
        to_regclass('public.zip_centroids') IS NOT NULL AS zip_centroids_ready,
+       to_regclass('public.pricing_settings') IS NOT NULL AS pricing_settings_ready,
        EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='email_quote_requests' AND column_name='truck_cost') AS truck_cost_ready`
   );
   console.log('Market-first pricing migration:', result.rows[0]);

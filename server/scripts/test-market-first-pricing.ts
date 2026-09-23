@@ -29,12 +29,19 @@ assert.strictEqual(truckload.queueDat, true);
 assert.strictEqual(truckload.callExpediteAll, false);
 assert.strictEqual(truckload.callForwardAir, false);
 
-// Expedite with a rate-table entry: no ExpediteAll, no DAT.
+// Expedite with a rate-table entry: ExpediteAll is still asked by default
+// (accuracy first), never DAT.
 const vanWithTable = buildPricingPlan(shipment(), { hasRateTableRule: true });
 assert.strictEqual(vanWithTable.mode, 'expedite');
 assert.strictEqual(vanWithTable.useRateTable, true);
-assert.strictEqual(vanWithTable.callExpediteAll, false);
+assert.strictEqual(vanWithTable.callExpediteAll, true);
 assert.strictEqual(vanWithTable.queueDat, false);
+
+// With the setting off, the table alone prices the van before award.
+const tableOnly = buildPricingPlan(shipment(), { hasRateTableRule: true, expediteAllBeforeAward: false });
+assert.strictEqual(tableOnly.callExpediteAll, false);
+// With the setting off but no table rate, ExpediteAll is still the only source.
+assert.strictEqual(buildPricingPlan(shipment(), { expediteAllBeforeAward: false }).callExpediteAll, true);
 
 // Expedite without a table entry falls back to ExpediteAll (cargo van only).
 assert.strictEqual(buildPricingPlan(shipment()).callExpediteAll, true);
@@ -95,6 +102,13 @@ const recommendation = buildCarrierRecommendation([
 assert(recommendation);
 assert.strictEqual(recommendation!.carrierKey, 'datSpot');
 assert.strictEqual(recommendation!.suggestedClientPrice, 2415);
+
+// For expedite, a live ExpediteAll price leads over the rate table.
+const vanRecommendation = buildCarrierRecommendation([
+  { key: 'rateTable', source: 'First Class rate table', available: true, selectable: true, benchmark: true, cost: 1100 },
+  { key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 1250 }
+], 15);
+assert.strictEqual(vanRecommendation!.carrierKey, 'expediteAll');
 
 // Plain carrier options stay priceable; unavailable ones do not.
 assert.strictEqual(isPriceableOption({ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 400 }), true);

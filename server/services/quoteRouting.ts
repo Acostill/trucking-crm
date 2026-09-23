@@ -6,8 +6,9 @@ import { UnifiedQuoteRequest } from '../types/quote';
  * - Truckload (53' dry van / reefer / flatbed): DAT market rate. Trucks are
  *   found after the customer awards the load, so no carrier is asked first.
  * - Expedite (cargo van, box truck, straight truck): First Class's own
- *   per-mile buy-rate table. ExpediteAll (itself a broker) is only asked
- *   before award when no table rate exists yet for that vehicle.
+ *   per-mile buy-rate table, shown next to a live ExpediteAll cargo-van rate
+ *   while the pricing setting asks for it (the default) or when no table rate
+ *   exists. With the setting off, ExpediteAll is only asked after award.
  * - LTL: Forward Air's rating API whenever a freight class is confirmed;
  *   LTL carriers expect to be rated on every quote.
  */
@@ -55,7 +56,7 @@ export function isExpediteAllRateable(shipment: UnifiedQuoteRequest): boolean {
 
 export function buildPricingPlan(
   shipment: UnifiedQuoteRequest,
-  options: { hasRateTableRule?: boolean } = {}
+  options: { hasRateTableRule?: boolean; expediteAllBeforeAward?: boolean } = {}
 ): PricingPlan {
   const mode = pricingModeFor(shipment);
   const reasons: string[] = [];
@@ -63,13 +64,16 @@ export function buildPricingPlan(
   if (!callForwardAir) reasons.push('Forward Air skipped: no confirmed LTL freight class.');
 
   const useRateTable = mode === 'expedite';
-  const callExpediteAll = mode === 'expedite' &&
-    !options.hasRateTableRule &&
-    isExpediteAllRateable(shipment);
-  if (mode === 'expedite' && options.hasRateTableRule) {
+  // Until the rate table is proven against real carrier prices, ExpediteAll
+  // is asked on every cargo-van quote (the default). Without a table rate it
+  // is always asked, since it is then the only price source.
+  const askBeforeAward = options.expediteAllBeforeAward !== false || !options.hasRateTableRule;
+  const callExpediteAll = mode === 'expedite' && askBeforeAward && isExpediteAllRateable(shipment);
+  if (mode === 'expedite' && !callExpediteAll && options.hasRateTableRule && isExpediteAllRateable(shipment)) {
     reasons.push('ExpediteAll not asked before award: priced from the First Class rate table.');
-  } else if (mode === 'expedite' && !callExpediteAll) {
-    reasons.push('No rate-table entry for this vehicle yet; add one in Pricing settings.');
+  }
+  if (mode === 'expedite' && !options.hasRateTableRule) {
+    reasons.push('No rate-table entry for this vehicle yet; add one on the Pricing page.');
   }
 
   const queueDat = mode === 'truckload';

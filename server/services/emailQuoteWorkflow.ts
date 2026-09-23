@@ -24,6 +24,7 @@ import {
 } from './datRateViewJobs';
 import { buildPricingPlan, pricingModeFor } from './quoteRouting';
 import { buildRateTableOption, findExpediteRateRule } from './expediteRateTable';
+import { getPricingSettings } from './pricingSettings';
 import {
   carrierRequestFingerprint,
   findCachedCarrierOption,
@@ -412,7 +413,11 @@ export async function rateEmailQuoteRequest(
   const rateRule = pricingModeFor(advisedShipment) === 'expedite'
     ? await findExpediteRateRule(advisedShipment)
     : null;
-  const plan = buildPricingPlan(advisedShipment, { hasRateTableRule: Boolean(rateRule) });
+  const settings = await getPricingSettings();
+  const plan = buildPricingPlan(advisedShipment, {
+    hasRateTableRule: Boolean(rateRule),
+    expediteAllBeforeAward: settings.expediteAllBeforeAward
+  });
   const carriers = await connectedCarrierOptions(advisedShipment, plan);
   const connectedCarrierQuotes = carriers.cached.concat(carriers.live);
   const estimateOptions: CarrierQuoteOption[] = [];

@@ -1255,6 +1255,15 @@
   line-height: 1.45;
 }
 
+.eq-rate-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #92400e;
+}
+
 .eq-rate-empty {
   display: flex;
   align-items: center;

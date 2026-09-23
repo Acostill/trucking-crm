@@ -26,6 +26,20 @@ CREATE TRIGGER trg_expedite_rate_rules_updated_at
 BEFORE UPDATE ON public.expedite_rate_rules
 FOR EACH ROW EXECUTE PROCEDURE public.set_updated_at();
 
+-- Brokerage-wide pricing switches (single row).
+CREATE TABLE IF NOT EXISTS public.pricing_settings (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  -- Accuracy first: ask ExpediteAll on every cargo-van quote and show it next
+  -- to the rate table. Turn off once the table matches what ExpediteAll
+  -- charges, so ExpediteAll is only asked after the customer awards a load.
+  expedite_all_before_award BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT pricing_settings_single_row CHECK (id = 1)
+);
+
+INSERT INTO public.pricing_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
 -- Append-only lane history. Every carrier rate, market rate, customer price,
 -- and actual truck cost is kept so pricing can be learned from past loads.
 CREATE TABLE IF NOT EXISTS public.lane_rate_history (

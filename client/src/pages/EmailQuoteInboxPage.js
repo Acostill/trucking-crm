@@ -330,6 +330,16 @@ const PREVIEW_QUOTES = [
         timeframe: 'Cargo Van rate · carrier-reported miles'
       },
       {
+        key: 'expediteAll',
+        source: 'ExpediteAll',
+        available: true,
+        cost: 1285.5,
+        lineHaul: 1285.5,
+        ratePerMile: 1.92,
+        truckType: 'Cargo Van',
+        transitTime: 1
+      },
+      {
         key: 'forwardAir',
         source: 'Forward Air',
         available: true,
@@ -351,12 +361,12 @@ const PREVIEW_QUOTES = [
       }
     ],
     recommendation: {
-      carrierKey: 'rateTable',
-      carrierSource: 'First Class rate table',
-      carrierCost: 1204.2,
+      carrierKey: 'expediteAll',
+      carrierSource: 'ExpediteAll',
+      carrierCost: 1285.5,
       defaultMarginPct: 18,
-      suggestedClientPrice: 1420.96,
-      reason: 'Priced from the First Class expedite rate table. Cover the van or truck after award, targeting at or below this cost.'
+      suggestedClientPrice: 1516.89,
+      reason: 'Priced from the live ExpediteAll rate. Compare it with the First Class rate table to keep the table accurate.'
     },
     selection: {
       carrierKey: null,
@@ -1378,6 +1388,12 @@ export default function EmailQuoteInboxPage() {
   const datLoadsRetryDisabled = runningDatLoads || datLoadsBusy || datLoadsCompleted ||
     !datEquipmentSaved || !datSearchPickupDateCurrent || !searchLoadsSnapshotSaved ||
     (datLoadsOption && datLoadsOption.status === 'disabled');
+  const expediteAllOption = carrierQuotes.find(function(option) { return option.key === 'expediteAll' && option.available; });
+  const expediteAllCost = expediteAllOption ? Number(expediteAllOption.cost) : null;
+  const forwardAirHint = selected && selected.pricingMode !== 'truckload' &&
+    carrierQuotes.length > 0 &&
+    !carrierQuotes.some(function(option) { return option.key === 'forwardAir'; }) &&
+    !(shipment && shipment.forwardAirFreightClass);
   const carrierCostOptions = carrierQuotes.filter(function(option) {
     // The header badge already says DAT is not used for expedite loads.
     if (option.status === 'not_applicable') return false;
@@ -1676,6 +1692,9 @@ export default function EmailQuoteInboxPage() {
                                       <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi' : 'Per-mile unavailable'}</span>
                                       <span>{option.miles ? option.miles.toLocaleString() + (option.mileageMethod === 'zip_centroid' ? ' mi (estimated)' : ' mi') : 'Miles unavailable'}</span>
                                       <span>{option.note || option.timeframe}</span>
+                                      {expediteAllCost && (
+                                        <span>{'vs ExpediteAll ' + formatMoney(expediteAllCost) + ' (' + (option.cost >= expediteAllCost ? '+' : '') + Math.round(((option.cost - expediteAllCost) / expediteAllCost) * 100) + '%)'}</span>
+                                      )}
                                     </div>
                                   ) : benchmark ? (
                                     <>
@@ -1707,6 +1726,9 @@ export default function EmailQuoteInboxPage() {
                       </div>
                     ) : (
                       <div className="eq-rate-empty"><Truck size={22} /><p>Complete the shipment details to request carrier rates.</p></div>
+                    )}
+                    {forwardAirHint && (
+                      <p className="eq-rate-hint"><AlertCircle size={14} /> Forward Air (LTL) wasn't asked. Add a freight class in the shipment details and save to get a Forward Air rate.</p>
                     )}
                     {selected.pricingMode === 'expedite' && !previewMode && (
                       <div className="eq-pricing-footer">

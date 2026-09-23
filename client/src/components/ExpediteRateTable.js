@@ -13,6 +13,8 @@ export default function ExpediteRateTable() {
   const [savingType, setSavingType] = useState(null);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState(null);
+  const [askExpediteAll, setAskExpediteAll] = useState(true);
+  const [savingSetting, setSavingSetting] = useState(false);
 
   function applyResponse(data) {
     const byType = {};
@@ -35,10 +37,15 @@ export default function ExpediteRateTable() {
   useEffect(function() {
     async function load() {
       try {
-        const resp = await fetch(buildApiUrl('/api/admin/expedite-rate-rules'), { credentials: 'include' });
-        const data = await resp.json().catch(function() { return null; });
-        if (!resp.ok) throw new Error((data && data.error) || 'Failed to load the rate table');
+        const [rulesResp, settingsResp] = await Promise.all([
+          fetch(buildApiUrl('/api/admin/expedite-rate-rules'), { credentials: 'include' }),
+          fetch(buildApiUrl('/api/admin/pricing-settings'), { credentials: 'include' })
+        ]);
+        const data = await rulesResp.json().catch(function() { return null; });
+        if (!rulesResp.ok) throw new Error((data && data.error) || 'Failed to load the rate table');
         applyResponse(data);
+        const settings = await settingsResp.json().catch(function() { return null; });
+        if (settingsResp.ok && settings) setAskExpediteAll(settings.expediteAllBeforeAward !== false);
       } catch (err) {
         setError(err && err.message ? err.message : 'Failed to load the rate table');
       } finally {
@@ -53,6 +60,29 @@ export default function ExpediteRateTable() {
       return { ...current, [type]: { ...current[type], [field]: value } };
     });
     setStatus(null);
+  }
+
+  async function toggleAskExpediteAll(nextValue) {
+    setSavingSetting(true);
+    setError(null);
+    try {
+      const resp = await fetch(buildApiUrl('/api/admin/pricing-settings'), {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expediteAllBeforeAward: nextValue })
+      });
+      const data = await resp.json().catch(function() { return null; });
+      if (!resp.ok) throw new Error((data && data.error) || 'Failed to save the setting');
+      setAskExpediteAll(data.expediteAllBeforeAward !== false);
+      setStatus(nextValue
+        ? 'ExpediteAll will be asked on every cargo-van quote.'
+        : 'Cargo-van quotes now use the rate table; ExpediteAll is asked only after award.');
+    } catch (err) {
+      setError(err && err.message ? err.message : 'Failed to save the setting');
+    } finally {
+      setSavingSetting(false);
+    }
   }
 
   async function save(type) {
@@ -93,9 +123,21 @@ export default function ExpediteRateTable() {
         <h2 className="pricing-card-title">Expedite rate table</h2>
         <p className="pricing-card-help">
           What you expect to pay the driver per loaded mile (fuel included), plus a minimum for short runs.
-          Expedite quotes are priced from these numbers plus your margin. ExpediteAll is only asked when a vehicle has no rate here.
+          Every quote shows the table price next to the live ExpediteAll price, so you can see how close the table is.
         </p>
       </div>
+      <label className="pricing-toggle">
+        <input
+          type="checkbox"
+          checked={askExpediteAll}
+          disabled={loading || savingSetting}
+          onChange={function(e) { toggleAskExpediteAll(e.target.checked); }}
+        />
+        <span>
+          <strong>Ask ExpediteAll on every cargo-van quote</strong>
+          <small>Recommended until the table matches ExpediteAll. Turn off to ask ExpediteAll only after the customer awards the load.</small>
+        </span>
+      </label>
       {loading ? <div className="pricing-card-help">Loading…</div> : (
         <div className="pricing-table-wrap">
           <table className="pricing-table">

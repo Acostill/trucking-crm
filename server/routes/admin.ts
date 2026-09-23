@@ -6,6 +6,7 @@ import {
   saveForwardAirCredentials
 } from '../services/carrierConnectionCredentials';
 import { listExpediteRateRules } from '../services/expediteRateTable';
+import { getPricingSettings, updatePricingSettings } from '../services/pricingSettings';
 
 const router = express.Router();
 const SESSION_COOKIE = 'session_token';
@@ -172,6 +173,27 @@ const EXPEDITE_VEHICLE_TYPES = [
   'Cargo Van', 'Box Truck', 'Straight Truck',
   'Reefer Cargo Van', 'Reefer Box Truck', 'Reefer Straight Truck'
 ];
+
+router.get('/pricing-settings', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await getPricingSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/pricing-settings', async function(req: Request, res: Response, next: NextFunction) {
+  if (typeof (req.body && req.body.expediteAllBeforeAward) !== 'boolean') {
+    res.status(400).json({ error: 'expediteAllBeforeAward must be true or false' });
+    return;
+  }
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    res.json(await updatePricingSettings({ expediteAllBeforeAward: req.body.expediteAllBeforeAward }, userId || null));
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.get('/expedite-rate-rules', async function(_req: Request, res: Response, next: NextFunction) {
   try {
