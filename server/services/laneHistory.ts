@@ -241,12 +241,25 @@ export async function estimateLaneMiles(shipment: UnifiedQuoteRequest): Promise<
     const reportedMiles = positive(reported.rows[0] && reported.rows[0].miles);
     if (reportedMiles) return { miles: Math.round(reportedMiles), method: 'lane_history' };
 
+    // PO-box and single-business ZIPs (airports, large shippers) have no
+    // Census centroid, so fall back to the average of their 3-digit area.
     const centroids = await db.query(
-      `SELECT zip, latitude, longitude FROM public.zip_centroids WHERE zip = ANY($1::text[])`,
+      `SELECT wanted.zip,
+              COALESCE(exact.latitude, area.latitude) AS latitude,
+              COALESCE(exact.longitude, area.longitude) AS longitude
+       FROM UNNEST($1::text[]) AS wanted(zip)
+       LEFT JOIN public.zip_centroids exact ON exact.zip = wanted.zip
+       LEFT JOIN LATERAL (
+         SELECT AVG(latitude) AS latitude, AVG(longitude) AS longitude
+         FROM public.zip_centroids
+         WHERE LEFT(zip, 3) = LEFT(wanted.zip, 3)
+       ) area ON TRUE`,
       [[origin, destination]]
     );
     const byZip: Record<string, any> = {};
-    centroids.rows.forEach(function(row: any) { byZip[row.zip] = row; });
+    centroids.rows.forEach(function(row: any) {
+      if (row.latitude != null && row.longitude != null) byZip[row.zip] = row;
+    });
     if (!byZip[origin] || !byZip[destination]) return null;
     const straightLine = haversineMiles(
       { latitude: Number(byZip[origin].latitude), longitude: Number(byZip[origin].longitude) },
