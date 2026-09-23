@@ -2134,8 +2134,12 @@ label {
 
 .pricing-toggle {
   display: flex;
+  flex-direction: row;
   gap: 10px;
   align-items: flex-start;
+  text-transform: none;
+  font-weight: 400;
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px 14px;
@@ -2143,7 +2147,15 @@ label {
 }
 
 .pricing-toggle input {
+  width: auto;
+  flex: none;
   margin-top: 3px;
+  padding: 0;
+}
+
+.pricing-table input[type='checkbox'] {
+  width: auto;
+  padding: 0;
 }
 
 .pricing-toggle span {
