@@ -145,6 +145,9 @@ or access arrangement; do not attempt to bypass the control.
 
 ## Safety and recovery
 
+- The unattended worker keeps one browser context and the same tab alive across RateView and Search Loads jobs. Per-job cleanup releases the job's ownership without closing the browser, so session cookies and tab-scoped session storage survive. Each job still checks the authenticated target before entering search fields. No authentication state is exported or copied.
+- SIGINT/SIGTERM stops the queue loop, lets an active job settle, then closes the browser. A browser crash may reopen the same configured disk profile on the next job; process restarts cannot preserve in-memory state. The worker does not guarantee a fixed outbound IP or prevent DAT from expiring or displacing a session.
+- A genuine login boundary still stops before submission with `AUTH_REQUIRED`; the retained browser is not treated as proof of authentication. Stop the worker before running a separate authentication process against its profile, then follow the manual authentication flow above. CLI quotes and authentication commands retain their one-process browser lifecycle.
 - The local ledger at `runtime/ledger.json` prevents duplicate or uncertain resubmissions, stores completed results for reuse, and records daily usage for audit. It does not impose a daily lookup cap.
 - A completed duplicate returns its stored result without opening DAT.
 - A submitted or uncertain request never resubmits automatically; a human must reconcile it.

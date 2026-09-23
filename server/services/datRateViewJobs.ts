@@ -1380,10 +1380,19 @@ export async function getDatWorkerStatus(): Promise<any> {
        FROM public.dat_rateview_jobs`
     ),
     db.query(
-      `SELECT worker_id, last_seen_at, last_successful_poll_at, last_job_at,
-              active_job_id, last_error_category
-       FROM public.dat_worker_heartbeats
-       ORDER BY last_seen_at DESC
+      `SELECT heartbeat.worker_id, heartbeat.last_seen_at,
+              heartbeat.last_successful_poll_at, heartbeat.last_job_at,
+              heartbeat.active_job_id, heartbeat.last_error_category,
+              (SELECT MAX(completed_at) FROM public.dat_rateview_jobs
+               WHERE worker_id = heartbeat.worker_id AND status = 'needs_auth') AS last_auth_failure_at,
+              (SELECT MAX(LEAST(completed_at,
+                       COALESCE(result_payload->>'lookupTimestamp', result_payload->>'searchTimestamp')::timestamptz))
+               FROM public.dat_rateview_jobs
+               WHERE worker_id = heartbeat.worker_id AND status = 'completed'
+                 AND COALESCE(result_payload->>'lookupTimestamp', result_payload->>'searchTimestamp') IS NOT NULL
+              ) AS last_worker_completed_at
+       FROM public.dat_worker_heartbeats heartbeat
+       ORDER BY heartbeat.last_seen_at DESC
        LIMIT 1`
     )
   ]);
@@ -1400,11 +1409,22 @@ export async function getDatWorkerStatus(): Promise<any> {
   const staleForMs = lastSeenMs ? Math.max(0, Date.now() - lastSeenMs) : null;
   const needsAuth = Number(result.rows[0].needs_auth || 0);
   const active = Number(result.rows[0].active || 0);
+  // Polling and starting a job do not prove DAT authentication. Only a completed
+  // lookup by this worker supersedes its historical authentication failures.
+  // Use the actual lookup time too: delivering a cached result is not new proof.
+  const authFailureMs = heartbeat && heartbeat.last_auth_failure_at
+    ? new Date(heartbeat.last_auth_failure_at).getTime() : 0;
+  const successMs = heartbeat && heartbeat.last_worker_completed_at
+    ? new Date(heartbeat.last_worker_completed_at).getTime() : 0;
+  const authenticationRequired = Boolean(heartbeat && (
+    heartbeat.last_error_category === 'AUTH_REQUIRED' ||
+    (authFailureMs > 0 && authFailureMs >= successMs)
+  ));
   let state = 'online';
   if (!enabled) state = 'disabled';
   else if (!configured) state = 'misconfigured';
-  else if (needsAuth > 0 || (heartbeat && heartbeat.last_error_category === 'AUTH_REQUIRED')) state = 'needs_auth';
   else if (!heartbeat || staleForMs == null || staleForMs > staleAfterMs) state = 'offline';
+  else if (authenticationRequired) state = 'needs_auth';
   else if (active > 0 || heartbeat.active_job_id) state = 'working';
   return {
     enabled,

@@ -3,13 +3,12 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import {
-  chromium,
   expect,
-  type BrowserContext,
   type Locator,
   type Page,
 } from "@playwright/test";
 import type { AppConfig } from "./config.ts";
+import { acquireDatBrowser, type BrowserLease, type WorkerBrowserSession } from "./browserSession.ts";
 import { parseRateCard } from "./parser.ts";
 import {
   type EquipmentType,
@@ -17,11 +16,6 @@ import {
   type QuoteResult,
   WorkflowError,
 } from "./types.ts";
-
-interface OpenedBrowser {
-  context: BrowserContext;
-  page: Page;
-}
 
 type DatTarget = "tools" | "search-loads";
 
@@ -198,57 +192,55 @@ export async function openAuthenticatedTools(
     humanAuthMode?: "prompt" | "observe" | "deny";
     authenticationOnly?: boolean;
     target?: "tools" | "search-loads";
+    browserSession?: WorkerBrowserSession;
   } = {},
-): Promise<OpenedBrowser> {
-  await fs.mkdir(config.userDataDir, { recursive: true, mode: 0o700 });
-  const context = await chromium.launchPersistentContext(config.userDataDir, {
-    ...(config.browserChannel ? { channel: config.browserChannel } : {}),
-    headless: config.headless,
-    viewport: null,
-  });
-  const page = context.pages()[0] || (await context.newPage());
-  const target: DatTarget = options.target === "search-loads" ? "search-loads" : "tools";
-  const targetUrl = target === "search-loads" ? config.searchLoadsUrl : config.toolsUrl;
-  await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
+): Promise<BrowserLease> {
+  const lease = await acquireDatBrowser(config, options.browserSession);
+  const { page } = lease;
+  try {
+    const target: DatTarget = options.target === "search-loads" ? "search-loads" : "tools";
+    const targetUrl = target === "search-loads" ? config.searchLoadsUrl : config.toolsUrl;
+    await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
 
-  const humanAuthMode = options.humanAuthMode ||
-    (options.allowHumanAuth === false ? "deny" : "prompt");
-  let authenticationAttempted = false;
-  while (true) {
-    try {
-      assertApprovedDatOneUrl(page, target);
-      await waitForDatOne(page, config, target);
-      // Authentication setup must prove the same stable authenticated landmark
-      // as a workflow run; a transient one.dat.com URL alone is insufficient.
-      await waitForAuthenticatedTarget(page, target, config.resultTimeoutMs);
-      break;
-    } catch (error) {
-      const delayedAuthRedirect = isLoginUrl(page.url());
-      const requiresAuth = error instanceof WorkflowError &&
-        error.category === "AUTH_REQUIRED";
-      if (!delayedAuthRedirect && !requiresAuth) {
-        await context.close();
-        throw error;
+    const humanAuthMode = options.humanAuthMode ||
+      (options.allowHumanAuth === false ? "deny" : "prompt");
+    let authenticationAttempted = false;
+    while (true) {
+      try {
+        assertApprovedDatOneUrl(page, target);
+        await waitForDatOne(page, config, target);
+        // Authentication setup must prove the same stable authenticated landmark
+        // as a workflow run; a transient one.dat.com URL alone is insufficient.
+        await waitForAuthenticatedTarget(page, target, config.resultTimeoutMs);
+        break;
+      } catch (error) {
+        const delayedAuthRedirect = isLoginUrl(page.url());
+        const requiresAuth = error instanceof WorkflowError &&
+          error.category === "AUTH_REQUIRED";
+        if (!delayedAuthRedirect && !requiresAuth) {
+          throw error;
+        }
+        if (authenticationAttempted || config.headless || humanAuthMode === "deny") {
+          throw authRequired(
+            target,
+            authenticationAttempted
+              ? "DAT is still showing the login boundary."
+              : "DAT requires manual authentication. Run the documented authentication flow on the worker host.",
+          );
+        }
+        authenticationAttempted = true;
+        await waitForHumanAuthentication(page, config, humanAuthMode);
+        if (isLoginUrl(page.url())) {
+          throw authRequired(target, "DAT is still showing the login boundary.");
+        }
+        await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
       }
-      if (authenticationAttempted || config.headless || humanAuthMode === "deny") {
-        await context.close();
-        throw authRequired(
-          target,
-          authenticationAttempted
-            ? "DAT is still showing the login boundary."
-            : "DAT requires manual authentication. Run the documented authentication flow on the worker host.",
-        );
-      }
-      authenticationAttempted = true;
-      await waitForHumanAuthentication(page, config, humanAuthMode);
-      if (isLoginUrl(page.url())) {
-        await context.close();
-        throw authRequired(target, "DAT is still showing the login boundary.");
-      }
-      await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
     }
+    return lease;
+  } catch (error) {
+    await lease.release().catch(() => undefined);
+    throw error;
   }
-  return { context, page };
 }
 
 async function selectCity(

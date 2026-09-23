@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "./config.ts";
+import type { BrowserLease, WorkerBrowserSession } from "./browserSession.ts";
 import { RateViewLedger } from "./ledger.ts";
 import { appendSafeLog, pruneRunArtifacts } from "./logger.ts";
 import {
@@ -24,6 +25,10 @@ import {
 } from "./types.ts";
 import { validateRequest, validateSearchLoadsRequest } from "./validation.ts";
 
+export interface RunnerOptions {
+  browserSession?: WorkerBrowserSession;
+}
+
 export interface RunQuoteInput {
   requestId?: string;
   origin?: string;
@@ -39,7 +44,10 @@ export interface RunQuoteOutcome {
   result: QuoteResult;
 }
 
-export async function runQuote(input: RunQuoteInput): Promise<RunQuoteOutcome> {
+export async function runQuote(
+  input: RunQuoteInput,
+  options: RunnerOptions = {},
+): Promise<RunQuoteOutcome> {
   const config = loadConfig();
   const request = validateRequest(input);
   if (!request.approveSearch) {
@@ -75,11 +83,14 @@ export async function runQuote(input: RunQuoteInput): Promise<RunQuoteOutcome> {
   }
 
   let submitted = false;
-  let context: Awaited<ReturnType<typeof openAuthenticatedTools>>["context"] | undefined;
+  let context: BrowserLease["context"] | undefined;
+  let browserLease: BrowserLease | undefined;
   try {
     const opened = await openAuthenticatedTools(config, {
+      browserSession: options.browserSession,
       allowHumanAuth: input.allowHumanAuth !== false,
     });
+    browserLease = opened;
     context = opened.context;
     if (config.captureTrace) {
       await context.tracing.start({ screenshots: true, snapshots: true });
@@ -153,7 +164,7 @@ export async function runQuote(input: RunQuoteInput): Promise<RunQuoteOutcome> {
         .stop({ path: path.join(runDirectory, "trace.zip") })
         .catch(() => undefined);
     }
-    await context?.close().catch(() => undefined);
+    await browserLease?.release().catch(() => undefined);
   }
 }
 
@@ -165,6 +176,7 @@ export interface RunSearchLoadsOutcome {
 
 export async function runSearchLoads(
   input: Partial<SearchLoadsRequest>,
+  options: RunnerOptions = {},
 ): Promise<RunSearchLoadsOutcome> {
   const config = loadConfig();
   const request = validateSearchLoadsRequest(input, new Date(), config.timezone);
@@ -201,13 +213,16 @@ export async function runSearchLoads(
   }
 
   let submitted = false;
-  let context: Awaited<ReturnType<typeof openAuthenticatedTools>>["context"] | undefined;
+  let context: BrowserLease["context"] | undefined;
+  let browserLease: BrowserLease | undefined;
   try {
     const opened = await openAuthenticatedTools(config, {
+      browserSession: options.browserSession,
       allowHumanAuth: false,
       humanAuthMode: "deny",
       target: "search-loads",
     });
+    browserLease = opened;
     context = opened.context;
     if (config.captureTrace) {
       await context.tracing.start({ screenshots: false, snapshots: true });
@@ -281,6 +296,6 @@ export async function runSearchLoads(
         .stop({ path: path.join(runDirectory, "trace.zip") })
         .catch(() => undefined);
     }
-    await context?.close().catch(() => undefined);
+    await browserLease?.release().catch(() => undefined);
   }
 }

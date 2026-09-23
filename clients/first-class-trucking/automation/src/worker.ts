@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import http from "node:http";
+import { WorkerBrowserSession } from "./browserSession.ts";
 import { loadWorkerConfig } from "./workerConfig.ts";
 import { runQuote, runSearchLoads } from "./runner.ts";
 import {
@@ -56,6 +57,7 @@ async function claim(config: ReturnType<typeof loadWorkerConfig>): Promise<Worke
 async function processJob(
   config: ReturnType<typeof loadWorkerConfig>,
   job: WorkerJob,
+  browserSession: WorkerBrowserSession,
 ): Promise<void> {
   await post(config, `/api/dat-worker/jobs/${encodeURIComponent(job.id)}/start`, {
     workerId: config.workerId,
@@ -69,13 +71,16 @@ async function processJob(
       "workflowId" in job.request &&
       job.request.workflowId === SEARCH_LOADS_WORKFLOW_ID
     ) {
-      outcome = await runSearchLoads({ ...job.request, approveSearch: true });
+      outcome = await runSearchLoads(
+        { ...job.request, approveSearch: true },
+        { browserSession },
+      );
     } else {
       outcome = await runQuote({
         ...job.request,
         approveSearch: true,
         allowHumanAuth: false,
-      });
+      }, { browserSession });
     }
   } catch (error) {
     const category = error instanceof WorkflowError
@@ -174,37 +179,45 @@ async function main(): Promise<void> {
   process.on("SIGTERM", stop);
   process.stdout.write(`${JSON.stringify({ status: "worker_started", workerId: config.workerId, once })}\n`);
 
-  while (!stopping) {
-    try {
-      healthState.lastPollAttemptAt = new Date().toISOString();
-      const job = await claim(config);
-      const successfulPollAtMs = Date.now();
-      healthState.lastSuccessfulCrmPollAtMs = successfulPollAtMs;
-      healthState.lastSuccessfulCrmPollAt = new Date(successfulPollAtMs).toISOString();
-      healthState.lastErrorCategory = null;
-      if (job) {
-        healthState.lastJobAt = new Date().toISOString();
-        healthState.activeJobId = job.id;
-        try {
-          await processJob(config, job);
-        } finally {
-          healthState.activeJobId = null;
+  const browserSession = new WorkerBrowserSession();
+  try {
+    while (!stopping) {
+      try {
+        healthState.lastPollAttemptAt = new Date().toISOString();
+        const job = await claim(config);
+        const successfulPollAtMs = Date.now();
+        healthState.lastSuccessfulCrmPollAtMs = successfulPollAtMs;
+        healthState.lastSuccessfulCrmPollAt = new Date(successfulPollAtMs).toISOString();
+        healthState.lastErrorCategory = null;
+        if (job) {
+          healthState.lastJobAt = new Date().toISOString();
+          healthState.activeJobId = job.id;
+          try {
+            await processJob(config, job, browserSession);
+          } finally {
+            healthState.activeJobId = null;
+          }
         }
+        else if (once) break;
+      } catch (error) {
+        healthState.lastErrorCategory = error instanceof CrmRequestError
+          ? error.category
+          : "WORKER_LOOP_ERROR";
+        process.stderr.write(`${JSON.stringify({
+          status: "worker_error",
+          category: healthState.lastErrorCategory,
+          httpStatus: error instanceof CrmRequestError ? error.status : undefined,
+        })}\n`);
+        if (once) throw error;
       }
-      else if (once) break;
-    } catch (error) {
-      healthState.lastErrorCategory = error instanceof CrmRequestError
-        ? error.category
-        : "WORKER_LOOP_ERROR";
-      process.stderr.write(`${JSON.stringify({
-        status: "worker_error",
-        category: healthState.lastErrorCategory,
-        httpStatus: error instanceof CrmRequestError ? error.status : undefined,
-      })}\n`);
-      if (once) throw error;
+      if (!once && !stopping) await delay(config.pollIntervalMs);
+      if (once) break;
     }
-    if (!once && !stopping) await delay(config.pollIntervalMs);
-    if (once) break;
+  } finally {
+    process.off("SIGINT", stop);
+    process.off("SIGTERM", stop);
+    healthServer?.close();
+    await browserSession.shutdown();
   }
 }
 

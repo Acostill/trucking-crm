@@ -1318,7 +1318,7 @@ export default function EmailQuoteInboxPage() {
             <div className="eq-message error">
               <AlertCircle size={16} />
               {datHealth.state === 'needs_auth'
-                ? 'DAT needs a verified browser sign-in before another lookup can run.'
+                ? 'DAT rejected the worker’s saved login during its last session check. Restore the DAT session on Railway, then retry the waiting lookup.'
                 : datHealth.state === 'disabled'
                   ? 'DAT automation is disabled on the server.'
                   : 'The DAT worker is not reporting a healthy connection. Check Railway before approving another lookup.'}
