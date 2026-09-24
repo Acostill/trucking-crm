@@ -1255,6 +1255,44 @@
   line-height: 1.45;
 }
 
+.eq-carrier-error span {
+  overflow-wrap: anywhere;
+}
+
+.eq-trial-banner {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.eq-margin-warning {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.eq-extras-field {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.eq-extras-field > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-weight: 400;
+}
+
+.eq-extras-field .eq-checkbox-field input {
+  width: auto;
+}
+
 .eq-manual-price {
   display: flex;
   flex-wrap: wrap;

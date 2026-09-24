@@ -60,8 +60,9 @@ export function buildPricingPlan(
 ): PricingPlan {
   const mode = pricingModeFor(shipment);
   const reasons: string[] = [];
-  const callForwardAir = hasConfirmedFreightClass(shipment);
-  if (!callForwardAir) reasons.push('Forward Air skipped: no confirmed LTL freight class.');
+  // LTL only: a full truckload is never rated as partial freight.
+  const callForwardAir = hasConfirmedFreightClass(shipment) && mode !== 'truckload';
+  if (!hasConfirmedFreightClass(shipment)) reasons.push('Forward Air skipped: no confirmed LTL freight class.');
 
   const useRateTable = mode === 'expedite';
   // Until the rate table is proven against real carrier prices, ExpediteAll

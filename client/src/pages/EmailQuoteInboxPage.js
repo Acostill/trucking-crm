@@ -32,6 +32,18 @@ import { buildApiUrl } from '../config';
 import { buildQuoteEmailHtml } from '../utils/quoteEmailTemplate';
 import './EmailQuoteInboxPage.css';
 
+// Extras staff can tick; the codes feed carrier APIs and the extras price list.
+const EXTRA_OPTIONS = [
+  ['LIFTGATE_PICKUP', 'Liftgate at pickup'],
+  ['LIFTGATE_DELIVERY', 'Liftgate at delivery'],
+  ['RESIDENTIAL_DELIVERY', 'Residential'],
+  ['INSIDE_DELIVERY', 'Inside delivery'],
+  ['LIMITED_ACCESS', 'Limited access'],
+  ['AFTER_HOURS', 'After-hours / weekend'],
+  ['APPOINTMENT', 'Appointment / call ahead']
+];
+const EXTRA_CODES = EXTRA_OPTIONS.map(function(option) { return option[0]; });
+
 const EMPTY_EDITOR = {
   pickupCity: '',
   pickupState: '',
@@ -50,7 +62,8 @@ const EMPTY_EDITOR = {
   temperatureControlled: false,
   truckType: '',
   truckTypeSource: '',
-  datEquipmentType: ''
+  datEquipmentType: '',
+  extras: []
 };
 
 const PREVIEW_USER = {
@@ -660,7 +673,8 @@ function shipmentToEditor(shipment) {
     temperatureControlled: Boolean(shipment && shipment.temperatureControlled),
     truckType: (shipment && shipment.truckType) || '',
     truckTypeSource: (shipment && shipment.truckAssignment && shipment.truckAssignment.source) || '',
-    datEquipmentType: (shipment && shipment.datEquipmentType) || ''
+    datEquipmentType: (shipment && shipment.datEquipmentType) || '',
+    extras: ((shipment && shipment.accessorialCodes) || []).filter(function(code) { return EXTRA_CODES.indexOf(code) > -1; })
   };
 }
 
@@ -715,7 +729,11 @@ function buildShipment(editor, existing) {
     forwardAirFreightClassSource: suppliedClass ? 'staff_confirmed' : estimatedClass ? 'density_estimate' : undefined,
     temperatureControlled: Boolean(editor.temperatureControlled),
     truckType: editor.truckType,
-    datEquipmentType: editor.datEquipmentType
+    datEquipmentType: editor.datEquipmentType,
+    // Keep extras the email parser found that are not on the checklist.
+    accessorialCodes: (((existing && existing.accessorialCodes) || []).filter(function(code) {
+      return EXTRA_CODES.indexOf(code) === -1;
+    })).concat(editor.extras || [])
   };
 
   if (!editor.truckType) {
@@ -798,6 +816,8 @@ export default function EmailQuoteInboxPage() {
   const [truckCost, setTruckCost] = useState('');
   const [truckCarrierName, setTruckCarrierName] = useState('');
   const [requestingCoverRate, setRequestingCoverRate] = useState(false);
+  const [pricingSettings, setPricingSettings] = useState({ minMarginAmount: 0, trialMode: false });
+  const pricingSettingsRef = useRef(pricingSettings);
   const [manualCarrier, setManualCarrier] = useState('');
   const [manualPrice, setManualPrice] = useState('');
   const [savingManualPrice, setSavingManualPrice] = useState(false);
@@ -825,12 +845,26 @@ export default function EmailQuoteInboxPage() {
     return data;
   }
 
+  useEffect(function() {
+    if (previewMode) return;
+    requestJson('/api/email-quotes/pricing-settings')
+      .then(function(settings) {
+        pricingSettingsRef.current = settings;
+        setPricingSettings(settings);
+      })
+      .catch(function() {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewMode]);
+
   function applyDetail(detail) {
     setSelected(detail);
+    // Trial mode: staff price the way they always have; the system's
+    // suggestion is recorded in the background for comparison.
+    const trial = pricingSettingsRef.current.trialMode && !(detail && detail.selection && detail.selection.carrierKey);
     setEditor(shipmentToEditor(detail && detail.shipment));
     const recommendedKey =
       (detail && detail.selection && detail.selection.carrierKey) ||
-      (detail && detail.recommendation && detail.recommendation.carrierKey) ||
+      (!trial && detail && detail.recommendation && detail.recommendation.carrierKey) ||
       '';
     const recommendedMargin =
       detail && detail.selection && detail.selection.marginPct != null
@@ -1037,8 +1071,11 @@ export default function EmailQuoteInboxPage() {
         : selected && selected.recommendation && selected.recommendation.defaultMarginPct != null
           ? Number(selected.recommendation.defaultMarginPct)
           : Number(marginPct || 0);
-    setMarginPct(String(defaultMargin));
-    setClientPrice(String(Number((Number(option.cost) * (1 + defaultMargin / 100)).toFixed(2))));
+    // Margin % or the minimum profit per load, whichever is higher.
+    const byPct = Number(option.cost) * (1 + defaultMargin / 100);
+    const price = Math.max(byPct, Number(option.cost) + Number(pricingSettings.minMarginAmount || 0));
+    setClientPrice(String(Number(price.toFixed(2))));
+    setMarginPct(String(Number((((price - Number(option.cost)) / Number(option.cost)) * 100).toFixed(2))));
     setNotice('');
   }
 
@@ -1612,6 +1649,27 @@ export default function EmailQuoteInboxPage() {
                             Refrigerated / controlled
                           </span>
                         </label>
+                        <div className="eq-extras-field">
+                          <span>Extras</span>
+                          <div>
+                            {EXTRA_OPTIONS.map(function(option) {
+                              const checked = (editor.extras || []).indexOf(option[0]) > -1;
+                              return (
+                                <label key={option[0]} className="eq-checkbox-field">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={function(e) {
+                                      const current = (editor.extras || []).filter(function(code) { return code !== option[0]; });
+                                      setEditor({ ...editor, extras: e.target.checked ? current.concat(option[0]) : current });
+                                    }}
+                                  />
+                                  {option[1]}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
                         <label className="truck-assignment">
                           Assigned truck
                           <select
@@ -1667,7 +1725,7 @@ export default function EmailQuoteInboxPage() {
                   <section className="eq-section">
                     <div className="eq-section-heading">
                       <div><Truck size={18} /><span><strong>Truck cost basis</strong><small>{selected.pricingMode === 'expedite'
-                        ? 'Expedite loads are priced from the First Class rate table. Ask ExpediteAll for a van only after the customer awards the load.'
+                        ? 'Priced from the First Class rate table, with a live ExpediteAll price for cargo vans. Extras and same/next-day premiums are included.'
                         : selected.pricingMode === 'truckload'
                           ? 'Truckload is priced from the DAT spot market. Find the truck after the customer awards the load.'
                           : 'Pick the cost to build the customer price from.'}</small></span></div>
@@ -1719,6 +1777,7 @@ export default function EmailQuoteInboxPage() {
                                       <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi' : 'Per-mile unavailable'}</span>
                                       <span>{option.miles ? option.miles.toLocaleString() + (option.mileageMethod === 'zip_centroid' ? ' mi (estimated)' : ' mi') : 'Miles unavailable'}</span>
                                       <span>{option.note || option.timeframe}</span>
+                                      {option.extrasNote && <span>{option.extrasNote}</span>}
                                       {expediteAllCost && (
                                         <span>{'vs ExpediteAll ' + formatMoney(expediteAllCost) + ' (' + (option.cost >= expediteAllCost ? '+' : '') + Math.round(((option.cost - expediteAllCost) / expediteAllCost) * 100) + '%)'}</span>
                                       )}
@@ -1734,6 +1793,7 @@ export default function EmailQuoteInboxPage() {
                                         <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi avg' : 'Per-mile unavailable'}</span>
                                         <span>{option.miles ? option.miles.toLocaleString() + ' mi' : 'Miles unavailable'}</span>
                                         <span>{option.timeframe || 'Market timeframe unavailable'}</span>
+                                        {option.extrasNote && <span>{option.extrasNote}</span>}
                                         <span>{option.truckType || 'Equipment confirmed by DAT'}</span>
                                       </div>
                                     </>
@@ -1769,7 +1829,7 @@ export default function EmailQuoteInboxPage() {
                     {forwardAirHint && (
                       <p className="eq-rate-hint"><AlertCircle size={14} /> Forward Air (LTL) wasn't asked. Add a freight class in the shipment details and save to get a Forward Air rate.</p>
                     )}
-                    {selected.pricingMode === 'expedite' && !previewMode && (
+                    {selected.pricingMode === 'expedite' && /(^|\s)Cargo Van$/.test(String(shipment.truckType || '')) && !previewMode && (
                       <div className="eq-pricing-footer">
                         <p><Truck size={15} /> Customer awarded the load? Ask ExpediteAll for a van only now, or source one directly.</p>
                         <button type="button" className="eq-secondary-button" onClick={requestExpediteAllCoverRate} disabled={requestingCoverRate}>
@@ -1871,6 +1931,11 @@ export default function EmailQuoteInboxPage() {
                       <div><CircleDollarSign size={18} /><span><strong>Set the client price</strong><small>Staff controls the final margin and amount charged.</small></span></div>
                       {selected.quoteId && <span className="eq-quote-reference">Quote {selected.quoteId}</span>}
                     </div>
+                    {pricingSettings.trialMode && !(selected.selection && selected.selection.carrierKey) && (
+                      <div className="eq-trial-banner">
+                        <strong>Trial run:</strong> price this quote the way you normally would. The system records its own suggestion for comparison and won't change your price.
+                      </div>
+                    )}
                     <div className="eq-pricing-grid">
                       <div className="eq-cost-summary">
                         <small>Selected carrier cost</small>
@@ -1889,6 +1954,9 @@ export default function EmailQuoteInboxPage() {
                         <small>Gross profit</small>
                         <strong>{marginAmount != null ? formatMoney(marginAmount) : '—'}</strong>
                         <span>{marginPct ? Number(marginPct).toFixed(2) + '% margin' : 'No margin entered'}</span>
+                        {marginAmount != null && pricingSettings.minMarginAmount > 0 && marginAmount < pricingSettings.minMarginAmount && (
+                          <span className="eq-margin-warning">Below the {formatMoney(pricingSettings.minMarginAmount)} minimum profit per load</span>
+                        )}
                       </div>
                       <label className="eq-money-field">
                         <span><CalendarDays size={14} /> Quote valid through</span>

@@ -2,6 +2,7 @@ import db from '../db';
 import { buildCarrierRecommendation, CarrierQuoteOption } from './carrierQuoteOptions';
 import { estimateLaneMiles, recordLaneObservation } from './laneHistory';
 import { getDefaultProfitMarginPct } from './unifiedQuoteService';
+import { getPricingSettings } from './pricingSettings';
 
 function jsonValue(value: any, fallback: any) {
   if (value == null) return fallback;
@@ -45,7 +46,8 @@ export async function addManualCarrierPrice(
   const options: CarrierQuoteOption[] = jsonValue(row.carrier_quotes, [])
     .filter(function(existing: CarrierQuoteOption) { return existing.key !== 'manualQuote'; })
     .concat(option);
-  const recommendation = buildCarrierRecommendation(options, await getDefaultProfitMarginPct());
+  const settings = await getPricingSettings();
+  const recommendation = buildCarrierRecommendation(options, await getDefaultProfitMarginPct(), settings.minMarginAmount);
   const updated = await db.query(
     `UPDATE public.email_quote_requests
      SET carrier_quotes = $2::jsonb,

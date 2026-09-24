@@ -22,6 +22,7 @@ import { pricingFingerprint, pricingModeFor } from '../services/quoteRouting';
 import { recordLaneObservation } from '../services/laneHistory';
 import { requestExpediteAllCoverRate } from '../services/coverRates';
 import { addManualCarrierPrice } from '../services/manualCarrierPrice';
+import { getPricingSettings } from '../services/pricingSettings';
 import { buildPricingReport } from '../services/pricingReport';
 import { buildQuoteAdvisor } from '../services/quoteAdvisor';
 import { answerQuoteAdvisorQuestion } from '../services/quoteAdvisorChat';
@@ -125,6 +126,13 @@ function rowToEmailQuote(row: any, includeRaw = false) {
     truckCost: numericValue(row.truck_cost),
     truckCarrierName: row.truck_carrier_name || null,
     truckCoveredAt: row.truck_covered_at || null,
+    systemSuggestion: row.system_suggested_price != null
+      ? {
+          price: numericValue(row.system_suggested_price),
+          cost: numericValue(row.system_suggested_cost),
+          basis: row.system_suggested_basis || null
+        }
+      : null,
     quoteId: row.quote_id,
     lastRatedAt: row.last_rated_at,
     pricedAt: row.priced_at,
@@ -221,6 +229,17 @@ router.get('/', async function(req: Request, res: Response, next: NextFunction) 
     query += ` ORDER BY COALESCE(received_at, created_at) DESC LIMIT $${params.length}`;
     const result = await db.query(query, params);
     res.json(result.rows.map(function(row) { return rowToEmailQuote(row); }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Pricing rules staff need on the quote screen (minimum profit, trial mode).
+router.get('/pricing-settings', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!await requireOperationsUser(req, res)) return;
+    const settings = await getPricingSettings();
+    res.json({ minMarginAmount: settings.minMarginAmount, trialMode: settings.trialMode });
   } catch (err) {
     next(err);
   }
@@ -470,6 +489,7 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
       return;
     }
     const carrierCost = Number(selected.cost);
+    const systemRecommendation = jsonValue(row.recommendation, null);
     const inputMarginPct = numericValue(req.body && req.body.marginPct);
     const inputClientPrice = numericValue(req.body && req.body.clientPrice);
     let clientPrice = inputClientPrice;
@@ -569,7 +589,11 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
              priced_by = $10,
              advisor_acknowledged_at = NOW(),
              advisor_acknowledged_by = $10,
-             quote_valid_until = $11
+             quote_valid_until = $11,
+             -- Trial comparison: what the system would have charged.
+             system_suggested_price = $12,
+             system_suggested_cost = $13,
+             system_suggested_basis = $14
          WHERE id = $1
          RETURNING *`,
         [
@@ -583,7 +607,10 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
           staffNotes,
           quoteId,
           userId,
-          quoteValidUntil
+          quoteValidUntil,
+          systemRecommendation ? systemRecommendation.suggestedClientPrice : null,
+          systemRecommendation ? systemRecommendation.carrierCost : null,
+          systemRecommendation ? systemRecommendation.carrierKey : null
         ]
       );
       await recordLaneObservation({

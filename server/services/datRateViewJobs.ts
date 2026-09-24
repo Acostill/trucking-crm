@@ -5,6 +5,8 @@ import { UnifiedQuoteRequest } from '../types/quote';
 import { pricingModeFor } from './quoteRouting';
 import { getDefaultProfitMarginPct } from './unifiedQuoteService';
 import { recordLaneObservation } from './laneHistory';
+import { applyEstimateExtras, loadQuoteExtras } from './quoteExtras';
+import { getPricingSettings } from './pricingSettings';
 import {
   buildCarrierRecommendation,
   CarrierQuoteOption,
@@ -905,6 +907,7 @@ export async function requestDatRateViewLookup(
     return writeDatOptionsAndRecommendation(
       client,
       emailQuoteRequestId,
+      shipment,
       mergeDatCarrierOptions(currentOptions, datOptions)
     );
   }, approvedBy);
@@ -1218,10 +1221,16 @@ export async function startDatRateViewJob(id: string, workerId: string): Promise
 async function writeDatOptionsAndRecommendation(
   client: any,
   emailQuoteRequestId: string,
+  shipment: UnifiedQuoteRequest,
   options: CarrierQuoteOption[]
 ): Promise<any> {
-  const marginPct = await getDefaultProfitMarginPct();
-  const recommendation = buildCarrierRecommendation(options, marginPct);
+  const [marginPct, settings, extras] = await Promise.all([
+    getDefaultProfitMarginPct(),
+    getPricingSettings(),
+    loadQuoteExtras(shipment)
+  ]);
+  options = applyEstimateExtras(options, extras);
+  const recommendation = buildCarrierRecommendation(options, marginPct, settings.minMarginAmount);
   const updated = await client.query(
     `UPDATE public.email_quote_requests
      SET carrier_quotes = $2::jsonb,
@@ -1387,6 +1396,7 @@ export async function completeDatRateViewJob(
     await writeDatOptionsAndRecommendation(
       client,
       updated.rows[0].email_quote_request_id,
+      jsonValue(quote.shipment_request, {}),
       mergeDatCarrierOptions(options, datOptions)
     );
     if (!isSearchLoads) {

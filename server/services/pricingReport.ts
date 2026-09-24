@@ -21,7 +21,7 @@ export async function buildPricingReport(days: number): Promise<any> {
   const params = [String(days)];
   const window = `received_at > NOW() - ($1::text || ' days')::interval AND archived_at IS NULL`;
 
-  const [summary, byMode, lanes, carriers, dat] = await Promise.all([
+  const [summary, byMode, lanes, carriers, dat, trial] = await Promise.all([
     db.query(
       `SELECT COUNT(*)::int AS quotes,
               COUNT(*) FILTER (WHERE client_price IS NOT NULL)::int AS priced,
@@ -85,7 +85,24 @@ export async function buildPricingReport(days: number): Promise<any> {
        WHERE created_at > NOW() - ($1::text || ' days')::interval
          AND COALESCE(input_payload->>'workflowId', '') = ''`,
       params
-    ).catch(function() { return { rows: [{}] }; })
+    ).catch(function() { return { rows: [{}] }; }),
+    // Trial run: staff price vs the system's suggestion, and the system's truck
+    // cost estimate vs what was actually paid once a load was covered.
+    db.query(
+      `SELECT ${MODE_SQL} AS mode,
+              COUNT(*)::int AS compared,
+              AVG((client_price - system_suggested_price) / NULLIF(system_suggested_price, 0) * 100) AS staff_vs_system_pct,
+              COUNT(*) FILTER (WHERE ABS(client_price - system_suggested_price) <= 0.05 * system_suggested_price)::int AS within_5pct,
+              COUNT(*) FILTER (WHERE truck_cost IS NOT NULL AND system_suggested_cost IS NOT NULL)::int AS covered,
+              PERCENTILE_CONT(0.5) WITHIN GROUP (
+                ORDER BY ABS(system_suggested_cost - truck_cost) / NULLIF(truck_cost, 0) * 100
+              ) FILTER (WHERE truck_cost IS NOT NULL AND system_suggested_cost IS NOT NULL) AS cost_error_pct
+       FROM public.email_quote_requests
+       WHERE ${window} AND client_price IS NOT NULL AND system_suggested_price IS NOT NULL
+       GROUP BY 1
+       ORDER BY 2 DESC`,
+      params
+    ).catch(function() { return { rows: [] }; })
   ]);
 
   const s = summary.rows[0] || {};
@@ -130,6 +147,16 @@ export async function buildPricingReport(days: number): Promise<any> {
         reusedFromHistory: row.reused_from_history,
         awardedOnRate: row.awarded_on_rate,
         requestsPerBooking: row.awarded_on_rate ? num(row.live_requests / row.awarded_on_rate) : null
+      };
+    }),
+    trial: trial.rows.map(function(row: any) {
+      return {
+        mode: row.mode,
+        compared: row.compared,
+        staffVsSystemPct: num(row.staff_vs_system_pct),
+        withinFivePct: row.compared ? num((row.within_5pct / row.compared) * 100) : null,
+        covered: row.covered,
+        truckCostErrorPct: num(row.cost_error_pct)
       };
     }),
     datRateView: {

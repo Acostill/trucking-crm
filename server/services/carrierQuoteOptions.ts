@@ -51,6 +51,11 @@ export interface CarrierQuoteOption {
   fuelAdjustment?: number;
   laneFactor?: number;
   laneSamples?: number;
+  // Estimates only: cost before extras/urgency, and what was added.
+  baseCost?: number;
+  extrasTotal?: number;
+  urgencyAmount?: number;
+  extrasNote?: string;
   note?: string;
 }
 
@@ -71,13 +76,21 @@ export interface CarrierRecommendation {
   carrierSource: string;
   carrierCost: number;
   defaultMarginPct: number;
+  minMarginAmount?: number;
   suggestedClientPrice: number;
   reason: string;
 }
 
+/** Margin % or the minimum profit per load, whichever gives the higher price. */
+export function clientPriceFor(cost: number, marginPct: number, minMarginAmount = 0): number {
+  const byPct = cost * (1 + marginPct / 100);
+  return Number(Math.max(byPct, cost + (minMarginAmount || 0)).toFixed(2));
+}
+
 export function buildCarrierRecommendation(
   options: CarrierQuoteOption[],
-  defaultMarginPct: number
+  defaultMarginPct: number,
+  minMarginAmount = 0
 ): CarrierRecommendation | null {
   const available = options
     .filter(isPriceableOption)
@@ -98,9 +111,8 @@ export function buildCarrierRecommendation(
     carrierSource: recommended.source,
     carrierCost,
     defaultMarginPct,
-    suggestedClientPrice: Number(
-      (carrierCost * (1 + defaultMarginPct / 100)).toFixed(2)
-    ),
+    ...(minMarginAmount ? { minMarginAmount } : {}),
+    suggestedClientPrice: clientPriceFor(carrierCost, defaultMarginPct, minMarginAmount),
     reason: recommendationReason(recommended, available.length)
   };
 }

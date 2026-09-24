@@ -8,6 +8,7 @@ import {
 import { listExpediteRateRules } from '../services/expediteRateTable';
 import { getPricingSettings, updatePricingSettings } from '../services/pricingSettings';
 import { dieselOn, refreshDieselPrices } from '../services/marketData';
+import { listAccessorialCharges } from '../services/quoteExtras';
 import { applyRateSuggestion, buildMarketReport, recordRateChange } from '../services/marketReport';
 
 const router = express.Router();
@@ -185,13 +186,66 @@ router.get('/pricing-settings', async function(_req: Request, res: Response, nex
 });
 
 router.put('/pricing-settings', async function(req: Request, res: Response, next: NextFunction) {
-  if (typeof (req.body && req.body.expediteAllBeforeAward) !== 'boolean') {
-    res.status(400).json({ error: 'expediteAllBeforeAward must be true or false' });
-    return;
+  const body = req.body || {};
+  const changes: any = {};
+  for (const key of ['expediteAllBeforeAward', 'trialMode']) {
+    if (body[key] === undefined) continue;
+    if (typeof body[key] !== 'boolean') {
+      res.status(400).json({ error: `${key} must be true or false` });
+      return;
+    }
+    changes[key] = body[key];
+  }
+  const limits: Record<string, [number, number]> = {
+    minMarginAmount: [0, 5000],
+    sameDayPremiumPct: [0, 200],
+    nextDayPremiumPct: [0, 200]
+  };
+  for (const key of Object.keys(limits)) {
+    if (body[key] === undefined) continue;
+    const value = Number(body[key]);
+    if (!Number.isFinite(value) || value < limits[key][0] || value > limits[key][1]) {
+      res.status(400).json({ error: `${key} must be between ${limits[key][0]} and ${limits[key][1]}` });
+      return;
+    }
+    changes[key] = value;
   }
   try {
     const userId = (req as any).user && (req as any).user.id;
-    res.json(await updatePricingSettings({ expediteAllBeforeAward: req.body.expediteAllBeforeAward }, userId || null));
+    res.json(await updatePricingSettings(changes, userId || null));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/accessorial-charges', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ charges: await listAccessorialCharges() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/accessorial-charges/:code', async function(req: Request, res: Response, next: NextFunction) {
+  const amount = Number(req.body && req.body.amount);
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10000) {
+    res.status(400).json({ error: 'amount must be between 0 and 10,000' });
+    return;
+  }
+  const isActive = !(req.body && req.body.isActive === false);
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    const result = await db.queryWithUser(
+      `UPDATE public.accessorial_charges SET amount = $2, is_active = $3, updated_at = NOW()
+       WHERE code = $1 RETURNING code`,
+      [String(req.params.code || ''), amount, isActive],
+      userId
+    );
+    if (!result.rows.length) {
+      res.status(404).json({ error: 'Unknown extra charge' });
+      return;
+    }
+    res.json({ charges: await listAccessorialCharges() });
   } catch (err) {
     next(err);
   }

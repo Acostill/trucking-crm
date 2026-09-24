@@ -6,6 +6,7 @@ import { buildApiUrl } from '../config';
 import ExpediteRateTable from '../components/ExpediteRateTable';
 import PricingScorecard from '../components/PricingScorecard';
 import MarketWatch from '../components/MarketWatch';
+import PricingRules from '../components/PricingRules';
 
 const DEFAULT_RULE_ID = 1;
 
@@ -156,6 +157,7 @@ export default function AdminProfitMarginPage() {
           )}
           {isAdmin && (
             <div className="pricing-admin-stack">
+              <PricingRules />
               <ExpediteRateTable reloadKey={pricingVersion} onSaved={bumpPricingVersion} />
               <MarketWatch reloadKey={pricingVersion} onApplied={bumpPricingVersion} />
               <PricingScorecard />

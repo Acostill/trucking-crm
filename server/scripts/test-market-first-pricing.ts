@@ -2,7 +2,8 @@ import assert from 'assert';
 import db from '../db';
 import { buildPricingPlan, pricingFingerprint, pricingModeFor } from '../services/quoteRouting';
 import { fuelAdjustment, priceFromRule } from '../services/expediteRateTable';
-import { buildCarrierRecommendation, isPriceableOption } from '../services/carrierQuoteOptions';
+import { buildCarrierRecommendation, clientPriceFor, isPriceableOption } from '../services/carrierQuoteOptions';
+import { applyEstimateExtras, computeQuoteExtras } from '../services/quoteExtras';
 import {
   buildDatRateViewRequest,
   mapDatRateViewResult,
@@ -53,6 +54,7 @@ assert.strictEqual(pricingModeFor(shipment({ truckType: 'Reefer Dry Van' })), 't
 // LTL rating only with a confirmed freight class.
 assert.strictEqual(buildPricingPlan(shipment({ forwardAirFreightClass: '70' })).callForwardAir, true);
 assert.strictEqual(buildPricingPlan(shipment({ forwardAirFreightClass: 'abc' })).callForwardAir, false);
+assert.strictEqual(buildPricingPlan(shipment({ truckType: 'Dry Van', forwardAirFreightClass: '70' })).callForwardAir, false);
 
 // Non-pricing edits keep the same fingerprint; pricing edits change it.
 const base = shipment();
@@ -123,6 +125,44 @@ const manualRecommendation = buildCarrierRecommendation([
   spot
 ], 10);
 assert.strictEqual(manualRecommendation!.carrierKey, 'manualQuote');
+
+// Minimum profit per load: 10% of $350 is $35, so the $150 floor wins.
+assert.strictEqual(clientPriceFor(350, 10, 150), 500);
+assert.strictEqual(clientPriceFor(3000, 10, 150), 3300);
+assert.strictEqual(buildCarrierRecommendation([{ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 350 }], 10, 150)!.suggestedClientPrice, 500);
+
+// Extras and urgency on estimates only.
+const charges = [
+  { code: 'LIFTGATE', label: 'Liftgate', amount: 100, perHour: false, isActive: true },
+  { code: 'RESIDENTIAL', label: 'Residential', amount: 100, perHour: false, isActive: true },
+  { code: 'HAZMAT', label: 'Hazmat', amount: 150, perHour: false, isActive: true },
+  { code: 'AFTER_HOURS', label: 'After hours', amount: 150, perHour: false, isActive: true },
+  { code: 'DETENTION', label: 'Detention', amount: 75, perHour: true, isActive: true }
+];
+const premiums = { sameDayPremiumPct: 50, nextDayPremiumPct: 15 };
+const monday = new Date('2099-06-01T15:00:00Z');
+const extras = computeQuoteExtras(shipment({
+  pickup: { location: {}, date: '2099-06-02' },
+  accessorialCodes: ['LIFTGATE_PICKUP', 'LIFTGATE_DELIVERY', 'RESIDENTIAL_DELIVERY'],
+  hazardousMaterial: { unNumbers: ['UN1203'] }
+}), charges, premiums, monday);
+assert.deepStrictEqual(extras.items.map(function(item) { return item.code; }), ['LIFTGATE', 'LIFTGATE', 'RESIDENTIAL', 'HAZMAT']);
+assert.strictEqual(extras.urgency, 'next_day');
+assert.strictEqual(computeQuoteExtras(shipment({ pickup: { location: {}, date: '2099-06-01' } }), charges, premiums, monday).urgencyPct, 50);
+// Saturday pickup two weeks out: weekend extra, no urgency.
+const weekend = computeQuoteExtras(shipment({ pickup: { location: {}, date: '2099-06-13' } }), charges, premiums, monday);
+assert.deepStrictEqual(weekend.items.map(function(item) { return item.code; }), ['AFTER_HOURS']);
+assert.strictEqual(weekend.urgency, null);
+
+const withExtras = applyEstimateExtras([
+  { key: 'rateTable', source: 'Rate table', available: true, selectable: true, benchmark: true, cost: 1000 },
+  { key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 900 }
+], extras);
+// $1,000 + $450 extras + 15% next-day ($150) = $1,600; live carrier price untouched.
+assert.strictEqual(withExtras[0].cost, 1600);
+assert.strictEqual(withExtras[1].cost, 900);
+// Re-applying starts from the base cost, so it never stacks.
+assert.strictEqual(applyEstimateExtras(withExtras, extras)[0].cost, 1600);
 
 // Plain carrier options stay priceable; unavailable ones do not.
 assert.strictEqual(isPriceableOption({ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 400 }), true);

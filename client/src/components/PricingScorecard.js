@@ -9,7 +9,7 @@ function money(value) {
   return value == null ? '—' : '$' + Number(value).toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-const SOURCE_LABELS = { forwardAir: 'Forward Air', expediteAll: 'ExpediteAll' };
+const SOURCE_LABELS = { forwardAir: 'Forward Air', expediteAll: 'ExpediteAll', manualQuote: 'Recorded by staff' };
 
 /**
  * Broker scorecard: win rate, margin actually earned after the truck was
@@ -61,6 +61,29 @@ export default function PricingScorecard() {
             <div><span>Actual margin</span><strong>{pct(summary.actualMarginPct)}</strong></div>
             <div><span>Gross profit</span><strong>{money(summary.grossProfit)}</strong></div>
           </div>
+
+          <h3 className="pricing-subtitle">Trial run: staff price vs system suggestion</h3>
+          {report.trial && report.trial.length ? (
+            <div className="pricing-table-wrap">
+              <table className="pricing-table">
+                <thead><tr><th>Load type</th><th>Quotes compared</th><th>Staff vs system</th><th>Within 5%</th><th>Covered loads</th><th>System truck-cost error</th></tr></thead>
+                <tbody>
+                  {report.trial.map(function(row) {
+                    return (
+                      <tr key={row.mode}>
+                        <td>{row.mode}</td>
+                        <td>{row.compared}</td>
+                        <td>{row.staffVsSystemPct == null ? '—' : (row.staffVsSystemPct > 0 ? '+' : '') + row.staffVsSystemPct + '%'}</td>
+                        <td>{pct(row.withinFivePct)}</td>
+                        <td>{row.covered}</td>
+                        <td>{row.truckCostErrorPct == null ? '—' : '±' + row.truckCostErrorPct + '%'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : <p className="pricing-card-help">Fills in as staff price quotes. "Staff vs system" above 0% means staff priced higher than the system would have.</p>}
 
           <h3 className="pricing-subtitle">Carrier rate requests</h3>
           <div className="pricing-table-wrap">

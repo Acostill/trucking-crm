@@ -25,6 +25,7 @@ import {
 import { buildPricingPlan, pricingModeFor } from './quoteRouting';
 import { buildRateTableOption, findExpediteRateRule } from './expediteRateTable';
 import { getPricingSettings } from './pricingSettings';
+import { applyEstimateExtras, loadQuoteExtras } from './quoteExtras';
 import {
   carrierRequestFingerprint,
   findCachedCarrierOption,
@@ -446,14 +447,16 @@ export async function rateEmailQuoteRequest(
       error: 'DAT worker queue is unavailable. Connected carrier rates are still current.'
     }];
   }
-  const carrierQuotes = estimateOptions.concat(connectedCarrierQuotes, datOptions);
+  // Extras (liftgate, residential, ...) and same/next-day urgency on estimates.
+  const extras = await loadQuoteExtras(advisedShipment);
+  const carrierQuotes = applyEstimateExtras(estimateOptions.concat(connectedCarrierQuotes, datOptions), extras);
   await recordCarrierOptions(
     id,
     advisedShipment,
     carrierQuotes.filter(function(option) { return option.key !== 'laneHistory' && !String(option.key).startsWith('dat'); })
   );
   const defaultMarginPct = await getDefaultProfitMarginPct();
-  const recommendation = buildCarrierRecommendation(carrierQuotes, defaultMarginPct);
+  const recommendation = buildCarrierRecommendation(carrierQuotes, defaultMarginPct, settings.minMarginAmount);
   const waitingForDat = !recommendation && plan.queueDat && isDatWorkerEnabled();
   const status = recommendation ? 'ready' : 'needs_review';
   const carrierErrors = connectedCarrierQuotes

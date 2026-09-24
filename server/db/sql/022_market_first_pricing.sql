@@ -71,6 +71,45 @@ CREATE TABLE IF NOT EXISTS public.pricing_settings (
 
 INSERT INTO public.pricing_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
+ALTER TABLE public.pricing_settings
+  -- Never quote a load for less profit than this, whatever the margin %.
+  ADD COLUMN IF NOT EXISTS min_margin_amount NUMERIC(10,2) NOT NULL DEFAULT 150,
+  -- Added to rate-table and DAT truck costs when pickup is today / tomorrow.
+  ADD COLUMN IF NOT EXISTS same_day_premium_pct NUMERIC(5,2) NOT NULL DEFAULT 50,
+  ADD COLUMN IF NOT EXISTS next_day_premium_pct NUMERIC(5,2) NOT NULL DEFAULT 15,
+  -- Trial run: staff price as usual; the system's suggestion is recorded
+  -- next to theirs so the two can be compared before staff rely on it.
+  ADD COLUMN IF NOT EXISTS trial_mode BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- What carriers charge First Class for extras, added to estimated truck
+-- costs (live carrier APIs price their own extras).
+CREATE TABLE IF NOT EXISTS public.accessorial_charges (
+  code TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  amount NUMERIC(10,2) NOT NULL,
+  per_hour BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO public.accessorial_charges (code, label, amount, per_hour, sort_order) VALUES
+  ('LIFTGATE', 'Liftgate (each stop)', 100, FALSE, 1),
+  ('RESIDENTIAL', 'Residential pickup or delivery', 100, FALSE, 2),
+  ('INSIDE_DELIVERY', 'Inside delivery', 125, FALSE, 3),
+  ('LIMITED_ACCESS', 'Limited access (school, military, construction)', 100, FALSE, 4),
+  ('HAZMAT', 'Hazmat', 150, FALSE, 5),
+  ('AFTER_HOURS', 'After-hours or weekend', 150, FALSE, 6),
+  ('APPOINTMENT', 'Appointment / call ahead', 25, FALSE, 7),
+  ('DETENTION', 'Detention after 2 free hours', 75, TRUE, 8)
+ON CONFLICT (code) DO NOTHING;
+
+-- Trial-run comparison: what the system would have charged at pricing time.
+ALTER TABLE public.email_quote_requests
+  ADD COLUMN IF NOT EXISTS system_suggested_price NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS system_suggested_cost NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS system_suggested_basis TEXT;
+
 -- Append-only lane history. Every carrier rate, market rate, customer price,
 -- and actual truck cost is kept so pricing can be learned from past loads.
 CREATE TABLE IF NOT EXISTS public.lane_rate_history (
