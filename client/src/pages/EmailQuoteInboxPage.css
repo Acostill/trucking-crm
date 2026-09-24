@@ -1255,6 +1255,23 @@
   line-height: 1.45;
 }
 
+.eq-manual-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.eq-manual-price input {
+  width: auto;
+  min-width: 120px;
+  flex: 1 1 140px;
+  padding: 7px 10px;
+}
+
 .eq-rate-hint {
   display: flex;
   align-items: center;

@@ -1,5 +1,6 @@
 import db from '../db';
 import {
+  CalibrationSample,
   calibrationSamples,
   ExpediteRateRule,
   listExpediteRateRules
@@ -37,13 +38,27 @@ export interface RateSuggestion {
   reason: string;
 }
 
+function describeSamples(samples: CalibrationSample[]): string {
+  const counts: Record<string, number> = {};
+  samples.forEach(function(sample) { counts[sample.kind] = (counts[sample.kind] || 0) + 1; });
+  const labels: Record<string, string> = { paid: 'paid truck cost', manual: 'recorded carrier price', expediteAll: 'ExpediteAll price' };
+  return Object.keys(counts).map(function(kind) {
+    return `${counts[kind]} ${labels[kind]}${counts[kind] === 1 ? '' : 's'}`;
+  }).join(', ');
+}
+
 async function suggestionFor(rule: ExpediteRateRule): Promise<{ samples: number; gapPct: number | null; suggestion: RateSuggestion | null }> {
   const samples = await calibrationSamples(rule);
   if (!samples.length) return { samples: 0, gapPct: null, suggestion: null };
-  const ratio = median(samples.map(function(sample) { return sample.ratio; }));
+  // One vote per lane: lane differences are handled by the per-lane
+  // correction, so a heavily quoted lane must not drag the whole table.
+  const byLane: Record<string, number[]> = {};
+  samples.forEach(function(sample) { (byLane[sample.lane] = byLane[sample.lane] || []).push(sample.ratio); });
+  const laneRatios = Object.keys(byLane).map(function(lane) { return median(byLane[lane]); });
+  const ratio = median(laneRatios);
   // Positive gap: the table is priced above ExpediteAll.
   const gapPct = round((1 / ratio - 1) * 100, 1);
-  if (samples.length < CALIBRATION_MIN_SAMPLES || Math.abs(ratio - 1) < CALIBRATION_TRIGGER) {
+  if (laneRatios.length < CALIBRATION_MIN_SAMPLES || Math.abs(ratio - 1) < CALIBRATION_TRIGGER) {
     return { samples: samples.length, gapPct, suggestion: null };
   }
   const step = Math.min(1 + CALIBRATION_MAX_STEP, Math.max(1 - CALIBRATION_MAX_STEP, ratio));
@@ -62,7 +77,7 @@ async function suggestionFor(rule: ExpediteRateRule): Promise<{ samples: number;
       tableVsExpediteAllPct: gapPct,
       current,
       suggested,
-      reason: `Across ${samples.length} ExpediteAll prices in the last 120 days the table is ${Math.abs(gapPct)}% ${gapPct > 0 ? 'above' : 'below'} ExpediteAll (fuel-adjusted). ${step !== ratio ? 'Change capped at 15% per update.' : ''}`.trim()
+      reason: `Across ${describeSamples(samples)} on ${laneRatios.length} lanes from the last 120 days the table is ${Math.abs(gapPct)}% ${gapPct > 0 ? 'above' : 'below'} real prices (fuel-adjusted). ${step !== ratio ? 'Change capped at 15% per update.' : ''}`.trim()
     }
   };
 }
@@ -121,6 +136,7 @@ export async function buildMarketReport(): Promise<any> {
       fuelPerMileNow: latest && rule.fuelBaselineDiesel != null
         ? round((latest.value - rule.fuelBaselineDiesel) / rule.milesPerGallon, 3)
         : null,
+      reeferSurchargePct: rule.reeferSurchargePct,
       expediteAllSamples: calibration.samples,
       tableVsExpediteAllPct: calibration.gapPct
     });

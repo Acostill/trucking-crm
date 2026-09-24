@@ -32,7 +32,9 @@ ALTER TABLE public.expedite_rate_rules
   ADD COLUMN IF NOT EXISTS base_charge NUMERIC(10,2) NOT NULL DEFAULT 0,
   -- Weekly U.S. diesel ($/gal) when these rates were set.
   ADD COLUMN IF NOT EXISTS fuel_baseline_diesel NUMERIC(6,3),
-  ADD COLUMN IF NOT EXISTS miles_per_gallon NUMERIC(5,1);
+  ADD COLUMN IF NOT EXISTS miles_per_gallon NUMERIC(5,1),
+  -- Reefer loads without their own row use the dry rate plus this surcharge.
+  ADD COLUMN IF NOT EXISTS reefer_surcharge_pct NUMERIC(5,2) NOT NULL DEFAULT 20;
 
 -- External market series (weekly diesel from EIA; room for SONAR later).
 CREATE TABLE IF NOT EXISTS public.market_indicators (

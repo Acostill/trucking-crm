@@ -184,6 +184,11 @@ export async function findCachedCarrierOption(
          AND from_cache = FALSE
          AND observation_type = 'carrier_quote'
          AND observed_at > NOW() - ($3::text || ' days')::interval
+         -- Forward Air resets its fuel surcharge weekly: a saved rate expires
+         -- once a newer weekly diesel price has been published.
+         AND ($1 <> 'forwardAir' OR observed_at::date >= COALESCE(
+               (SELECT MAX(period) FROM public.market_indicators WHERE series = 'EMD_EPD2D_PTE_NUS_DPG'),
+               '-infinity'::date))
        ORDER BY observed_at DESC
        LIMIT 1`,
       [source, fingerprint, String(maxAgeDays)]
@@ -298,6 +303,20 @@ export async function laneHistoryOption(shipment: UnifiedQuoteRequest): Promise<
     );
     const row = result.rows[0];
     if (!row || !Number(row.loads)) return null;
+    // Truckload: how paid truck costs compared with DAT spot on the same quotes.
+    const versusDat = await db.query(
+      `SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY paid.total_usd / dat.total_usd) AS ratio, COUNT(*)::int AS n
+       FROM public.lane_rate_history paid
+       JOIN public.lane_rate_history dat
+         ON dat.email_quote_request_id = paid.email_quote_request_id
+        AND dat.source = 'datSpot' AND dat.observation_type = 'market_rate' AND dat.total_usd > 0
+       WHERE paid.observation_type = 'truck_cost'
+         AND LEFT(paid.origin_zip, 3) = LEFT($1, 3)
+         AND LEFT(paid.destination_zip, 3) = LEFT($2, 3)
+         AND paid.observed_at > NOW() - INTERVAL '180 days'`,
+      [origin, destination]
+    );
+    const datRatio = versusDat.rows[0] && Number(versusDat.rows[0].n) >= 2 ? Number(versusDat.rows[0].ratio) : null;
     return {
       key: 'laneHistory',
       source: 'First Class lane history',
@@ -311,7 +330,8 @@ export async function laneHistoryOption(shipment: UnifiedQuoteRequest): Promise<
       marketHigh: Number(row.high),
       ...(positive(row.rpm) ? { ratePerMile: Number(Number(row.rpm).toFixed(2)) } : {}),
       ...(positive(row.miles) ? { miles: Math.round(Number(row.miles)) } : {}),
-      timeframe: `Paid to trucks · last 90 days · ${row.loads} load${Number(row.loads) === 1 ? '' : 's'}`,
+      timeframe: `Paid to trucks · last 90 days · ${row.loads} load${Number(row.loads) === 1 ? '' : 's'}` +
+        (datRatio ? ` · usually ${Math.abs(Math.round((datRatio - 1) * 100))}% ${datRatio < 1 ? 'under' : 'over'} DAT spot` : ''),
       truckType: shipment.truckType
     };
   } catch (err: any) {

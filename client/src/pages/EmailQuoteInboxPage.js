@@ -798,6 +798,9 @@ export default function EmailQuoteInboxPage() {
   const [truckCost, setTruckCost] = useState('');
   const [truckCarrierName, setTruckCarrierName] = useState('');
   const [requestingCoverRate, setRequestingCoverRate] = useState(false);
+  const [manualCarrier, setManualCarrier] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
+  const [savingManualPrice, setSavingManualPrice] = useState(false);
   const [savingWorkflow, setSavingWorkflow] = useState(false);
   const [chatView, setChatView] = useState(null);
   const detailRequest = useRef(0);
@@ -1155,6 +1158,30 @@ export default function EmailQuoteInboxPage() {
       setError(requestError.message || 'Unable to request an ExpediteAll rate');
     } finally {
       setRequestingCoverRate(false);
+    }
+  }
+
+  // A carrier price staff got by phone, portal, or from a driver. It becomes a
+  // selectable price and trains the rate table (box and straight trucks rely on it).
+  async function addCarrierPrice() {
+    if (!selected || previewMode) return;
+    setSavingManualPrice(true);
+    setError('');
+    setNotice('');
+    try {
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/carrier-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carrierName: manualCarrier.trim(), cost: Number(manualPrice) })
+      });
+      applyDetail(detail);
+      setManualCarrier('');
+      setManualPrice('');
+      setNotice('Carrier price added and saved to lane history.');
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to add the carrier price');
+    } finally {
+      setSavingManualPrice(false);
     }
   }
 
@@ -1713,7 +1740,9 @@ export default function EmailQuoteInboxPage() {
                                   ) : (
                                     <div className="eq-carrier-details">
                                       <span>{option.truckType || 'Service confirmed by carrier'}</span>
-                                      <span>{option.transitTime ? option.transitTime + ' day transit' : 'Transit pending'}</span>
+                                      {option.key === 'manualQuote'
+                                        ? <span>{option.note || 'Recorded by staff'}{option.ratePerMile ? ' · ' + formatMoney(option.ratePerMile) + '/mi' : ''}</span>
+                                        : <span>{option.transitTime ? option.transitTime + ' day transit' : 'Transit pending'}</span>}
                                     </div>
                                   )}
                                 </>
@@ -1726,6 +1755,16 @@ export default function EmailQuoteInboxPage() {
                       </div>
                     ) : (
                       <div className="eq-rate-empty"><Truck size={22} /><p>Complete the shipment details to request carrier rates.</p></div>
+                    )}
+                    {!previewMode && (
+                      <div className="eq-manual-price">
+                        <span>Got a price by phone, portal, or from a driver?</span>
+                        <input placeholder="Carrier or driver" value={manualCarrier} onChange={function(e) { setManualCarrier(e.target.value); }} />
+                        <input inputMode="decimal" placeholder="Price $" value={manualPrice} onChange={function(e) { setManualPrice(e.target.value); }} />
+                        <button type="button" className="eq-secondary-button" onClick={addCarrierPrice} disabled={savingManualPrice || !manualCarrier.trim() || !(Number(manualPrice) > 0)}>
+                          {savingManualPrice ? 'Adding...' : 'Add carrier price'}
+                        </button>
+                      </div>
                     )}
                     {forwardAirHint && (
                       <p className="eq-rate-hint"><AlertCircle size={14} /> Forward Air (LTL) wasn't asked. Add a freight class in the shipment details and save to get a Forward Air rate.</p>

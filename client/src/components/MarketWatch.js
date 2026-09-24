@@ -82,10 +82,10 @@ export default function MarketWatch({ reloadKey, onApplied }) {
             <div><span>vs 4 weeks ago</span><strong>{signed(diesel.monthChangePct, '%')}</strong></div>
           </div>
 
-          <h3 className="pricing-subtitle">Rate table vs ExpediteAll</h3>
+          <h3 className="pricing-subtitle">Rate table vs real prices</h3>
           <div className="pricing-table-wrap">
             <table className="pricing-table">
-              <thead><tr><th>Vehicle</th><th>Rates</th><th>Fuel now</th><th>ExpediteAll prices compared</th><th>Table vs ExpediteAll</th></tr></thead>
+              <thead><tr><th>Vehicle</th><th>Rates</th><th>Fuel now</th><th>Real prices compared</th><th>Table vs real prices</th></tr></thead>
               <tbody>
                 {report.vehicles.length ? report.vehicles.map(function(row) {
                   return (

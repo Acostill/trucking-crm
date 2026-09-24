@@ -6,7 +6,8 @@ export type CarrierQuoteKey =
   | 'datContract'
   | 'datLoadOffers'
   | 'rateTable'
-  | 'laneHistory';
+  | 'laneHistory'
+  | 'manualQuote';
 
 export interface CarrierQuoteOption {
   key: CarrierQuoteKey;
@@ -85,7 +86,9 @@ export function buildCarrierRecommendation(
   // Truckload leads with the DAT market estimate. For expedite, a live
   // ExpediteAll price beats the rate table (it is a real bookable number);
   // otherwise the lowest carrier bid (LTL).
-  const recommended = available.find(function(option) { return option.key === 'datSpot'; }) ||
+  // A price staff recorded from a carrier is the most concrete number there is.
+  const recommended = available.find(function(option) { return option.key === 'manualQuote'; }) ||
+    available.find(function(option) { return option.key === 'datSpot'; }) ||
     available.find(function(option) { return option.key === 'expediteAll'; }) ||
     available.find(function(option) { return option.key === 'rateTable'; }) ||
     available[0];
@@ -105,6 +108,9 @@ export function buildCarrierRecommendation(
 function recommendationReason(option: CarrierQuoteOption, count: number): string {
   if (option.key === 'datSpot') {
     return 'Priced from the DAT spot market average. Cover the truck after the customer awards the load, targeting at or below this cost.';
+  }
+  if (option.key === 'manualQuote') {
+    return 'Priced from the carrier price recorded by staff. It is also saved to lane history to keep the rate table accurate.';
   }
   if (option.key === 'expediteAll') {
     return 'Priced from the live ExpediteAll rate. Compare it with the First Class rate table to keep the table accurate.';

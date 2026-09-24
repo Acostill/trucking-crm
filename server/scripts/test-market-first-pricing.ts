@@ -116,6 +116,14 @@ const vanRecommendation = buildCarrierRecommendation([
 ], 15);
 assert.strictEqual(vanRecommendation!.carrierKey, 'expediteAll');
 
+// A price staff recorded from a carrier leads over every estimate.
+const manualRecommendation = buildCarrierRecommendation([
+  { key: 'rateTable', source: 'First Class rate table', available: true, selectable: true, benchmark: true, cost: 1060 },
+  { key: 'manualQuote', source: 'Test Carrier (phone)', available: true, cost: 1350 },
+  spot
+], 10);
+assert.strictEqual(manualRecommendation!.carrierKey, 'manualQuote');
+
 // Plain carrier options stay priceable; unavailable ones do not.
 assert.strictEqual(isPriceableOption({ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 400 }), true);
 assert.strictEqual(isPriceableOption({ key: 'expediteAll', source: 'ExpediteAll', available: false, cost: 400 }), false);

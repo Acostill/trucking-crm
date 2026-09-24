@@ -216,6 +216,11 @@ router.put('/expedite-rate-rules/:vehicleType', async function(req: Request, res
   const baseCharge = Number(body.baseCharge != null && body.baseCharge !== '' ? body.baseCharge : 0);
   const minimumCharge = Number(body.minimumCharge != null && body.minimumCharge !== '' ? body.minimumCharge : 0);
   const milesPerGallon = body.milesPerGallon != null && body.milesPerGallon !== '' ? Number(body.milesPerGallon) : null;
+  const reeferSurchargePct = body.reeferSurchargePct != null && body.reeferSurchargePct !== '' ? Number(body.reeferSurchargePct) : 20;
+  if (!Number.isFinite(reeferSurchargePct) || reeferSurchargePct < 0 || reeferSurchargePct > 100) {
+    res.status(400).json({ error: 'reeferSurchargePct must be between 0 and 100' });
+    return;
+  }
   if (!Number.isFinite(ratePerMile) || ratePerMile <= 0 || ratePerMile > 50) {
     res.status(400).json({ error: 'ratePerMile must be between 0 and 50' });
     return;
@@ -255,8 +260,8 @@ router.put('/expedite-rate-rules/:vehicleType', async function(req: Request, res
       await client.query(
         `INSERT INTO public.expedite_rate_rules (
            vehicle_type, base_charge, rate_per_mile, minimum_charge, miles_per_gallon,
-           fuel_baseline_diesel, is_active, notes, updated_by
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           fuel_baseline_diesel, is_active, notes, updated_by, reefer_surcharge_pct
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (vehicle_type) DO UPDATE SET
            base_charge = EXCLUDED.base_charge,
            rate_per_mile = EXCLUDED.rate_per_mile,
@@ -265,8 +270,9 @@ router.put('/expedite-rate-rules/:vehicleType', async function(req: Request, res
            fuel_baseline_diesel = EXCLUDED.fuel_baseline_diesel,
            is_active = EXCLUDED.is_active,
            notes = EXCLUDED.notes,
-           updated_by = EXCLUDED.updated_by`,
-        [vehicleType, baseCharge, ratePerMile, minimumCharge, milesPerGallon, fuelBaseline, isActive, notes, userId || null]
+           updated_by = EXCLUDED.updated_by,
+           reefer_surcharge_pct = EXCLUDED.reefer_surcharge_pct`,
+        [vehicleType, baseCharge, ratePerMile, minimumCharge, milesPerGallon, fuelBaseline, isActive, notes, userId || null, reeferSurchargePct]
       );
       if (ratesChanged) {
         await recordRateChange(

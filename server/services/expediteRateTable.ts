@@ -24,6 +24,9 @@ export interface ExpediteRateRule {
   minimumCharge: number;
   fuelBaselineDiesel: number | null;
   milesPerGallon: number;
+  reeferSurchargePct: number;
+  // Set when a reefer load is priced from the dry rule plus the surcharge.
+  reeferSurchargeApplied?: number;
   isActive: boolean;
   notes: string | null;
   updatedAt: string | null;
@@ -52,6 +55,7 @@ function rowToRule(row: any): ExpediteRateRule {
     minimumCharge: Number(row.minimum_charge),
     fuelBaselineDiesel: row.fuel_baseline_diesel == null ? null : Number(row.fuel_baseline_diesel),
     milesPerGallon: Number(row.miles_per_gallon) > 0 ? Number(row.miles_per_gallon) : (DEFAULT_MPG[base] || 10),
+    reeferSurchargePct: row.reefer_surcharge_pct == null ? 20 : Number(row.reefer_surcharge_pct),
     isActive: row.is_active !== false,
     notes: row.notes || null,
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null
@@ -78,7 +82,20 @@ export async function findExpediteRateRule(shipment: UnifiedQuoteRequest): Promi
        LIMIT 1`,
       [[exact, base].filter(Boolean), exact]
     );
-    return result.rows.length ? rowToRule(result.rows[0]) : null;
+    if (!result.rows.length) return null;
+    const rule = rowToRule(result.rows[0]);
+    // A reefer load priced from the dry vehicle's row pays the reefer surcharge.
+    if (/^Reefer\s/i.test(exact) && rule.vehicleType !== exact && rule.reeferSurchargePct > 0) {
+      const multiplier = 1 + rule.reeferSurchargePct / 100;
+      return {
+        ...rule,
+        baseCharge: rule.baseCharge * multiplier,
+        ratePerMile: rule.ratePerMile * multiplier,
+        minimumCharge: rule.minimumCharge * multiplier,
+        reeferSurchargeApplied: rule.reeferSurchargePct
+      };
+    }
+    return rule;
   } catch (err: any) {
     // Missing migration: behave as if no rate is configured.
     console.error('Expedite rate rule lookup failed:', err && err.message ? err.message : err);
@@ -110,6 +127,7 @@ function median(values: number[]): number {
 }
 
 export interface CalibrationSample {
+  kind: 'expediteAll' | 'manual' | 'paid';
   lane: string;
   miles: number;
   observedAt: string;
@@ -119,8 +137,10 @@ export interface CalibrationSample {
 }
 
 /**
- * Past live ExpediteAll prices compared with what this rule would have
- * priced the same trip at, using the diesel price of that week.
+ * Real prices for this vehicle — what First Class actually paid trucks,
+ * prices staff recorded by hand, and live ExpediteAll quotes — compared with
+ * what this rule would have priced the same trip at, using that week's diesel.
+ * Reefer prices are compared against the reefer-adjusted rule.
  */
 export async function calibrationSamples(
   rule: ExpediteRateRule,
@@ -135,23 +155,38 @@ export async function calibrationSamples(
   try {
     const [rows, series] = await Promise.all([
       db.query(
-        `SELECT origin_zip, destination_zip, miles, total_usd, observed_at
+        `SELECT origin_zip, destination_zip, miles, total_usd, observed_at, truck_type,
+                CASE WHEN observation_type = 'truck_cost' THEN 'paid'
+                     WHEN source = 'manualQuote' THEN 'manual'
+                     ELSE 'expediteAll' END AS kind
          FROM public.lane_rate_history
-         WHERE source = 'expediteAll' AND observation_type = 'carrier_quote' AND from_cache = FALSE
+         WHERE ((observation_type = 'carrier_quote' AND source IN ('expediteAll', 'manualQuote') AND from_cache = FALSE)
+                OR observation_type = 'truck_cost')
            AND miles > 0 AND total_usd > 0
            AND LOWER(REGEXP_REPLACE(COALESCE(truck_type, 'Cargo Van'), '^Reefer ', '', 'i')) = LOWER($1)
+           ${/^Reefer\s/i.test(rule.vehicleType) ? "AND truck_type ILIKE 'reefer %'" : ''}
            AND observed_at > NOW() - ($2::text || ' days')::interval
            ${laneFilter}`,
         params
       ),
       recentDiesel(80)
     ]);
+    // Compare against the dry rule; reefer observations get the surcharge.
+    const dryRule = rule.reeferSurchargeApplied
+      ? { ...rule, baseCharge: rule.baseCharge / (1 + rule.reeferSurchargeApplied / 100), ratePerMile: rule.ratePerMile / (1 + rule.reeferSurchargeApplied / 100), minimumCharge: rule.minimumCharge / (1 + rule.reeferSurchargeApplied / 100) }
+      : rule;
     return rows.rows.map(function(row: any) {
       const miles = Number(row.miles);
       const observedAt = new Date(row.observed_at).toISOString();
-      const modelCost = priceFromRule(rule, miles) + fuelAdjustment(rule, miles, dieselAt(series, observedAt));
+      // ExpediteAll's API prices every cargo van the same whether or not it is
+      // refrigerated, so only paid and recorded prices count as reefer evidence.
+      const reefer = row.kind !== 'expediteAll' &&
+        /^reefer\s/i.test(String(row.truck_type || '')) && !/^reefer\s/i.test(rule.vehicleType);
+      const multiplier = reefer ? 1 + (rule.reeferSurchargePct || 0) / 100 : 1;
+      const modelCost = (priceFromRule(dryRule, miles) + fuelAdjustment(dryRule, miles, dieselAt(series, observedAt))) * multiplier;
       const expediteAllCost = Number(row.total_usd);
       return {
+        kind: row.kind,
         lane: `${row.origin_zip || '?'}→${row.destination_zip || '?'}`,
         miles,
         observedAt,
@@ -203,7 +238,8 @@ export async function buildRateTableOption(
   const notes: string[] = [];
   if (tableCost === rule.minimumCharge) notes.push('Minimum charge applies.');
   if (fuel) notes.push(`Fuel ${fuel > 0 ? '+' : '−'}$${Math.abs(fuel).toFixed(0)} (diesel $${diesel!.value.toFixed(2)} vs $${rule.fuelBaselineDiesel!.toFixed(2)} when set)`);
-  if (lane) notes.push(`Lane ${lane.factor >= 1 ? '+' : '−'}${Math.abs(Math.round((lane.factor - 1) * 100))}% from ${lane.samples} ExpediteAll prices`);
+  if (rule.reeferSurchargeApplied) notes.push(`Reefer +${rule.reeferSurchargeApplied}%`);
+  if (lane) notes.push(`Lane ${lane.factor >= 1 ? '+' : '−'}${Math.abs(Math.round((lane.factor - 1) * 100))}% from ${lane.samples} real prices`);
   return {
     key: 'rateTable',
     source: 'First Class rate table',

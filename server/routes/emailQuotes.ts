@@ -21,6 +21,7 @@ import { isPriceableOption } from '../services/carrierQuoteOptions';
 import { pricingFingerprint, pricingModeFor } from '../services/quoteRouting';
 import { recordLaneObservation } from '../services/laneHistory';
 import { requestExpediteAllCoverRate } from '../services/coverRates';
+import { addManualCarrierPrice } from '../services/manualCarrierPrice';
 import { buildPricingReport } from '../services/pricingReport';
 import { buildQuoteAdvisor } from '../services/quoteAdvisor';
 import { answerQuoteAdvisorQuestion } from '../services/quoteAdvisorChat';
@@ -384,6 +385,29 @@ router.post('/:id/cover/expedite-all', async function(req: Request, res: Respons
   try {
     if (!await requireOperationsUser(req, res)) return;
     const record = await requestExpediteAllCoverRate(req.params.id);
+    res.json(rowToEmailQuote(record, true));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// A carrier price staff got by phone, portal, or from a driver.
+router.post('/:id/carrier-prices', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = await requireOperationsUser(req, res);
+    if (!userId) return;
+    const carrierName = String(req.body && req.body.carrierName || '').trim().slice(0, 120);
+    const cost = numericValue(req.body && req.body.cost);
+    if (!carrierName) {
+      res.status(400).json({ error: 'Enter who gave you the price' });
+      return;
+    }
+    if (cost == null || cost <= 0 || cost > 500000) {
+      res.status(400).json({ error: 'Enter the carrier price in dollars' });
+      return;
+    }
+    const note = req.body && req.body.note ? String(req.body.note).slice(0, 300) : null;
+    const record = await addManualCarrierPrice(req.params.id, { carrierName, cost, note }, userId);
     res.json(rowToEmailQuote(record, true));
   } catch (err) {
     next(err);
