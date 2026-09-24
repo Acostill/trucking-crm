@@ -20,6 +20,7 @@ import { sendGmailMessage } from '../services/gmailQuoteInbox';
 import { isPriceableOption } from '../services/carrierQuoteOptions';
 import { pricingFingerprint, pricingModeFor } from '../services/quoteRouting';
 import { recordLaneObservation } from '../services/laneHistory';
+import { syncCarrierPay } from '../services/carrierPay';
 import { requestExpediteAllCoverRate } from '../services/coverRates';
 import { addManualCarrierPrice } from '../services/manualCarrierPrice';
 import { getPricingSettings } from '../services/pricingSettings';
@@ -687,20 +688,7 @@ router.put('/:id/workflow', async function(req: Request, res: Response, next: Ne
       );
       if (!result.rows.length) return null;
       if (truckCost != null) {
-        const options: any[] = jsonValue(result.rows[0].carrier_quotes, []);
-        const withMiles = options.find(function(option) { return Number(option && option.miles) > 0; });
-        const miles = withMiles ? Number(withMiles.miles) : null;
-        await recordLaneObservation({
-          observationType: 'truck_cost',
-          source: truckCarrierName || 'covered_truck',
-          emailQuoteRequestId: req.params.id,
-          shipment: jsonValue(result.rows[0].shipment_request, {}),
-          miles,
-          totalUsd: truckCost,
-          ratePerMile: miles ? truckCost / miles : null,
-          payload: { clientPrice: numericValue(result.rows[0].client_price), carrierName: truckCarrierName },
-          replaceForQuote: true
-        }, client);
+        await syncCarrierPay(client, { emailQuoteRequestId: req.params.id, quoteId: result.rows[0].quote_id }, truckCost, truckCarrierName);
       }
       const quoteId = result.rows[0].quote_id;
       if (quoteId && outcome !== 'open') {
@@ -737,9 +725,9 @@ router.put('/:id/workflow', async function(req: Request, res: Response, next: Ne
                  source_quote_id, customer, load_number, bill_to, dispatcher, status, type, rate, currency,
                  carrier_or_driver, equipment_type, shipper, shipper_location, ship_date,
                  show_ship_time, description, qty, weight, value, consignee, consignee_location,
-                 delivery_date, show_delivery_time, delivery_notes
+                 delivery_date, show_delivery_time, delivery_notes, carrier_pay, carrier_name
                ) VALUES (
-                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24
+                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26
                )`,
               [
                 quoteId,
@@ -765,7 +753,9 @@ router.put('/:id/workflow', async function(req: Request, res: Response, next: Ne
                 shipmentLocationLine(deliveryLocation) || null,
                 delivery.date || null,
                 true,
-                result.rows[0].quote_sent_to || result.rows[0].sender_email || null
+                result.rows[0].quote_sent_to || result.rows[0].sender_email || null,
+                numericValue(result.rows[0].truck_cost),
+                result.rows[0].truck_carrier_name || null
               ]
             );
           }

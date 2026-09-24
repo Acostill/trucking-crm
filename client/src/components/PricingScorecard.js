@@ -43,7 +43,7 @@ export default function PricingScorecard() {
       <div className="pricing-card-heading">
         <div>
           <h2 className="pricing-card-title">Pricing scorecard</h2>
-          <p className="pricing-card-help">Record the truck cost when you mark a load awarded so actual margin and lane history fill in.</p>
+          <p className="pricing-card-help">Enter the carrier pay on every covered load (on the load or the quote) so actual margin and lane history fill in.</p>
         </div>
         <select value={days} onChange={function(e) { setDays(Number(e.target.value)); }}>
           <option value={30}>Last 30 days</option>
@@ -66,7 +66,7 @@ export default function PricingScorecard() {
           {report.trial && report.trial.length ? (
             <div className="pricing-table-wrap">
               <table className="pricing-table">
-                <thead><tr><th>Load type</th><th>Quotes compared</th><th>Staff vs system</th><th>Within 5%</th><th>Covered loads</th><th>System truck-cost error</th></tr></thead>
+                <thead><tr><th>Load type</th><th>Quotes compared</th><th>Staff vs system</th><th>Within 5%</th><th>Covered loads</th><th>System buy-rate error</th></tr></thead>
                 <tbody>
                   {report.trial.map(function(row) {
                     return (
@@ -115,7 +115,7 @@ export default function PricingScorecard() {
           <h3 className="pricing-subtitle">Top lanes</h3>
           <div className="pricing-table-wrap">
             <table className="pricing-table">
-              <thead><tr><th>Lane</th><th>Equipment</th><th>Quotes</th><th>Won</th><th>Win rate</th><th>Avg quoted</th><th>Avg truck cost</th></tr></thead>
+              <thead><tr><th>Lane</th><th>Equipment</th><th>Quotes</th><th>Won</th><th>Win rate</th><th>Avg quoted</th><th>Avg carrier pay</th></tr></thead>
               <tbody>
                 {report.lanes.map(function(row) {
                   return (

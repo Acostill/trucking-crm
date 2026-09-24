@@ -130,7 +130,7 @@ export default function ExpediteRateTable({ onSaved, reloadKey }) {
       <div>
         <h2 className="pricing-card-title">Expedite rate table</h2>
         <p className="pricing-card-help">
-          What you expect to pay for the truck: a base charge per trip plus a rate per mile, never below the minimum.
+          Your buy rates: what you expect to pay the carrier, as a base charge per trip plus a rate per mile, never below the minimum.
           Rates are saved at this week's diesel price; when diesel moves, quotes add or subtract fuel automatically, and each lane is corrected from real prices: what you paid trucks, prices staff recorded, and ExpediteAll quotes.
           Reefer loads use the dry rate plus the reefer % unless a reefer row is set.
           Every quote shows the table price next to the live ExpediteAll price, so you can see how close the table is.

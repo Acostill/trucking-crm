@@ -1724,7 +1724,7 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section">
                     <div className="eq-section-heading">
-                      <div><Truck size={18} /><span><strong>Truck cost basis</strong><small>{selected.pricingMode === 'expedite'
+                      <div><Truck size={18} /><span><strong>Buy rate</strong><small>{selected.pricingMode === 'expedite'
                         ? 'Priced from the First Class rate table, with a live ExpediteAll price for cargo vans. Extras and same/next-day premiums are included.'
                         : selected.pricingMode === 'truckload'
                           ? 'Truckload is priced from the DAT spot market. Find the truck after the customer awards the load.'
@@ -1768,10 +1768,10 @@ export default function EmailQuoteInboxPage() {
                                 <>
                                   <strong>{formatMoney(option.cost)}</strong>
                                   <p>{option.key === 'rateTable'
-                                    ? 'Estimated truck cost — cover after award'
+                                    ? 'Estimated buy rate — cover after award'
                                     : estimate
-                                      ? 'Market average — estimated truck cost, cover after award'
-                                      : benchmark ? 'Reference only — not a price basis' : 'Carrier cost'}</p>
+                                      ? 'Market average — estimated buy rate, cover after award'
+                                      : benchmark ? 'Reference only — not a buy rate' : 'Carrier buy rate'}</p>
                                   {option.key === 'rateTable' ? (
                                     <div className="eq-carrier-details">
                                       <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi' : 'Per-mile unavailable'}</span>
@@ -1865,7 +1865,7 @@ export default function EmailQuoteInboxPage() {
 
                     <div className="eq-dat-market-warning">
                       <AlertCircle size={15} />
-                      <span><strong>Do not book from this table.</strong> It shows what other brokers are posting on this lane. Price from the truck cost basis above.</span>
+                      <span><strong>Do not book from this table.</strong> It shows what other brokers are posting on this lane. Price from the buy rate above.</span>
                     </div>
 
                     {!datLoadsOption ? (
@@ -1928,7 +1928,7 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section pricing">
                     <div className="eq-section-heading">
-                      <div><CircleDollarSign size={18} /><span><strong>Set the client price</strong><small>Staff controls the final margin and amount charged.</small></span></div>
+                      <div><CircleDollarSign size={18} /><span><strong>Set the sell rate</strong><small>What the customer pays: buy rate plus your margin.</small></span></div>
                       {selected.quoteId && <span className="eq-quote-reference">Quote {selected.quoteId}</span>}
                     </div>
                     {pricingSettings.trialMode && !(selected.selection && selected.selection.carrierKey) && (
@@ -1938,8 +1938,8 @@ export default function EmailQuoteInboxPage() {
                     )}
                     <div className="eq-pricing-grid">
                       <div className="eq-cost-summary">
-                        <small>Selected carrier cost</small>
-                        <strong>{selectedCarrier ? formatMoney(selectedCarrier.cost) : 'Choose a carrier'}</strong>
+                        <small>Buy rate</small>
+                        <strong>{selectedCarrier ? formatMoney(selectedCarrier.cost) : 'Choose a buy rate'}</strong>
                         <span>{selectedCarrier && selectedCarrier.source}</span>
                       </div>
                       <label className="eq-money-field">
@@ -1947,7 +1947,7 @@ export default function EmailQuoteInboxPage() {
                         <div><input type="number" min="0" step="0.01" value={marginPct} onChange={function(e) { changeMargin(e.target.value); }} disabled={!selectedCarrier} /><em>%</em></div>
                       </label>
                       <label className="eq-money-field primary">
-                        <span>Client price</span>
+                        <span>Sell rate</span>
                         <div><em>$</em><input type="number" min="0" step="0.01" value={clientPrice} onChange={function(e) { changeClientPrice(e.target.value); }} disabled={!selectedCarrier} /></div>
                       </label>
                       <div className="eq-profit-summary">
@@ -2094,8 +2094,8 @@ export default function EmailQuoteInboxPage() {
                         </label>
                         {outcome === 'awarded' && (
                           <>
-                            <label>Truck cost paid
-                              <input inputMode="decimal" placeholder="What you paid the carrier" value={truckCost} onChange={function(e) { setTruckCost(e.target.value); }} />
+                            <label>Carrier pay (buy rate)
+                              <input inputMode="decimal" placeholder="What you pay the carrier" value={truckCost} onChange={function(e) { setTruckCost(e.target.value); }} />
                             </label>
                             <label>Covering carrier
                               <input placeholder="Carrier or driver name" value={truckCarrierName} onChange={function(e) { setTruckCarrierName(e.target.value); }} />

@@ -86,7 +86,7 @@ export default function PricingRules() {
     <div className="profit-margin-card">
       <div>
         <h2 className="pricing-card-title">Pricing rules</h2>
-        <p className="pricing-card-help">Applied to every quote. Extras and urgency are added to rate-table and DAT truck costs; live carrier prices already include their own.</p>
+        <p className="pricing-card-help">Applied to every quote. Extras and urgency are added to rate-table and DAT buy rates; live carrier prices already include their own.</p>
       </div>
       {settings && (
         <>

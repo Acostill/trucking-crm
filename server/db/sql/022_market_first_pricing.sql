@@ -104,6 +104,18 @@ INSERT INTO public.accessorial_charges (code, label, amount, per_hour, sort_orde
   ('DETENTION', 'Detention after 2 free hours', 75, TRUE, 8)
 ON CONFLICT (code) DO NOTHING;
 
+-- Carrier pay (buy rate) lives on the load, where the truck is booked. It is
+-- mirrored to the source quote and lane history so pricing learns from it.
+ALTER TABLE public.loads
+  ADD COLUMN IF NOT EXISTS carrier_pay NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS carrier_name TEXT;
+
+-- The loads audit trigger copies every column; its table must match or
+-- every load insert and update fails.
+ALTER TABLE audit.loads_audit
+  ADD COLUMN IF NOT EXISTS carrier_pay NUMERIC(12,2),
+  ADD COLUMN IF NOT EXISTS carrier_name TEXT;
+
 -- Trial-run comparison: what the system would have charged at pricing time.
 ALTER TABLE public.email_quote_requests
   ADD COLUMN IF NOT EXISTS system_suggested_price NUMERIC(12,2),
