@@ -6,7 +6,7 @@ import { buildApiUrl } from '../config';
  * per loaded mile for each vehicle. Expedite quotes are priced from this
  * table (plus margin) instead of asking ExpediteAll on every inquiry.
  */
-export default function ExpediteRateTable() {
+export default function ExpediteRateTable({ onSaved, reloadKey }) {
   const [vehicleTypes, setVehicleTypes] = useState([]);
   const [drafts, setDrafts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -23,8 +23,11 @@ export default function ExpediteRateTable() {
     (data.vehicleTypes || []).forEach(function(type) {
       const rule = byType[type];
       next[type] = {
+        baseCharge: rule ? String(rule.baseCharge) : '',
         ratePerMile: rule ? String(rule.ratePerMile) : '',
         minimumCharge: rule ? String(rule.minimumCharge) : '',
+        milesPerGallon: rule ? String(rule.milesPerGallon) : '',
+        fuelBaselineDiesel: rule ? rule.fuelBaselineDiesel : null,
         isActive: rule ? rule.isActive : true,
         saved: Boolean(rule),
         updatedAt: rule ? rule.updatedAt : null
@@ -53,7 +56,7 @@ export default function ExpediteRateTable() {
       }
     }
     load();
-  }, []);
+  }, [reloadKey]);
 
   function update(type, field, value) {
     setDrafts(function(current) {
@@ -88,7 +91,9 @@ export default function ExpediteRateTable() {
   async function save(type) {
     const draft = drafts[type];
     const ratePerMile = parseFloat(draft.ratePerMile);
+    const baseCharge = draft.baseCharge === '' ? 0 : parseFloat(draft.baseCharge);
     const minimumCharge = draft.minimumCharge === '' ? 0 : parseFloat(draft.minimumCharge);
+    const milesPerGallon = draft.milesPerGallon === '' ? null : parseFloat(draft.milesPerGallon);
     if (!(ratePerMile > 0)) {
       setError(type + ': enter a rate per mile above 0');
       return;
@@ -104,12 +109,13 @@ export default function ExpediteRateTable() {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ratePerMile, minimumCharge, isActive: draft.isActive })
+        body: JSON.stringify({ baseCharge, ratePerMile, minimumCharge, milesPerGallon, isActive: draft.isActive })
       });
       const data = await resp.json().catch(function() { return null; });
       if (!resp.ok) throw new Error((data && data.error) || 'Failed to save the rate');
       applyResponse(data);
-      setStatus(type + ' rate saved. New quotes use it immediately.');
+      setStatus(type + ' rate saved at today\'s diesel price. New quotes use it immediately.');
+      if (onSaved) onSaved();
     } catch (err) {
       setError(err && err.message ? err.message : 'Failed to save the rate');
     } finally {
@@ -122,7 +128,8 @@ export default function ExpediteRateTable() {
       <div>
         <h2 className="pricing-card-title">Expedite rate table</h2>
         <p className="pricing-card-help">
-          What you expect to pay the driver per loaded mile (fuel included), plus a minimum for short runs.
+          What you expect to pay for the truck: a base charge per trip plus a rate per mile, never below the minimum.
+          Rates are saved at this week's diesel price; when diesel moves, quotes add or subtract fuel automatically, and each lane is corrected from past ExpediteAll prices.
           Every quote shows the table price next to the live ExpediteAll price, so you can see how close the table is.
         </p>
       </div>
@@ -142,7 +149,7 @@ export default function ExpediteRateTable() {
         <div className="pricing-table-wrap">
           <table className="pricing-table">
             <thead>
-              <tr><th>Vehicle</th><th>$ / mile</th><th>Minimum $</th><th>Active</th><th /></tr>
+              <tr><th>Vehicle</th><th>Base $</th><th>$ / mile</th><th>Minimum $</th><th>MPG</th><th>Set at diesel</th><th>Active</th><th /></tr>
             </thead>
             <tbody>
               {vehicleTypes.map(function(type) {
@@ -150,8 +157,11 @@ export default function ExpediteRateTable() {
                 return (
                   <tr key={type}>
                     <td>{type}{!draft.saved && <span className="pricing-missing">Not set</span>}</td>
-                    <td><input type="number" min="0" step="0.01" value={draft.ratePerMile || ''} onChange={function(e) { update(type, 'ratePerMile', e.target.value); }} placeholder="e.g. 1.75" /></td>
-                    <td><input type="number" min="0" step="1" value={draft.minimumCharge || ''} onChange={function(e) { update(type, 'minimumCharge', e.target.value); }} placeholder="e.g. 250" /></td>
+                    <td><input type="number" min="0" step="1" value={draft.baseCharge || ''} onChange={function(e) { update(type, 'baseCharge', e.target.value); }} placeholder="e.g. 325" /></td>
+                    <td><input type="number" min="0" step="0.01" value={draft.ratePerMile || ''} onChange={function(e) { update(type, 'ratePerMile', e.target.value); }} placeholder="e.g. 0.60" /></td>
+                    <td><input type="number" min="0" step="1" value={draft.minimumCharge || ''} onChange={function(e) { update(type, 'minimumCharge', e.target.value); }} placeholder="e.g. 300" /></td>
+                    <td><input type="number" min="2" step="0.5" value={draft.milesPerGallon || ''} onChange={function(e) { update(type, 'milesPerGallon', e.target.value); }} placeholder="auto" /></td>
+                    <td>{draft.fuelBaselineDiesel != null ? '$' + Number(draft.fuelBaselineDiesel).toFixed(2) + '/gal' : '—'}</td>
                     <td><input type="checkbox" checked={draft.isActive !== false} onChange={function(e) { update(type, 'isActive', e.target.checked); }} /></td>
                     <td><button className="primary-btn" onClick={function() { save(type); }} disabled={savingType === type}>{savingType === type ? 'Saving…' : 'Save'}</button></td>
                   </tr>

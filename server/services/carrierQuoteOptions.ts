@@ -47,6 +47,9 @@ export interface CarrierQuoteOption {
   fromCache?: boolean;
   cachedAt?: string;
   mileageMethod?: string;
+  fuelAdjustment?: number;
+  laneFactor?: number;
+  laneSamples?: number;
   note?: string;
 }
 

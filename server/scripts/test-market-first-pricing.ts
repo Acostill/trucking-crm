@@ -1,7 +1,7 @@
 import assert from 'assert';
 import db from '../db';
 import { buildPricingPlan, pricingFingerprint, pricingModeFor } from '../services/quoteRouting';
-import { priceFromRule } from '../services/expediteRateTable';
+import { fuelAdjustment, priceFromRule } from '../services/expediteRateTable';
 import { buildCarrierRecommendation, isPriceableOption } from '../services/carrierQuoteOptions';
 import {
   buildDatRateViewRequest,
@@ -70,10 +70,16 @@ assert.notStrictEqual(
   carrierRequestFingerprint('expediteAll', { ...base, weight: { value: 2000 } })
 );
 
-// Rate table: per mile with a minimum.
-const rule = { id: 1, vehicleType: 'Cargo Van', ratePerMile: 1.8, minimumCharge: 250, isActive: true, notes: null, updatedAt: null };
+// Rate table: per mile with a minimum, plus an optional base charge.
+const rule = { baseCharge: 0, ratePerMile: 1.8, minimumCharge: 250 };
 assert.strictEqual(priceFromRule(rule, 800), 1440);
 assert.strictEqual(priceFromRule(rule, 50), 250);
+assert.strictEqual(priceFromRule({ baseCharge: 328, ratePerMile: 0.57, minimumCharge: 300 }, 700), 727);
+
+// Fuel: miles x diesel change / mpg. 700 mi, +$0.80/gal, 16 mpg = +$35.
+const fuelRule: any = { fuelBaselineDiesel: 5.73, milesPerGallon: 16 };
+assert.strictEqual(fuelAdjustment(fuelRule, 700, 6.53), 35);
+assert.strictEqual(fuelAdjustment({ ...fuelRule, fuelBaselineDiesel: null }, 700, 6.53), 0);
 
 // Atlanta → Dallas is ~720 straight-line miles.
 const straight = haversineMiles({ latitude: 33.749, longitude: -84.388 }, { latitude: 32.776, longitude: -96.797 });

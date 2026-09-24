@@ -36,6 +36,7 @@
     "db:migrate:quote-operations": "ts-node ./scripts/run-quote-operations-migration.ts",
     "db:migrate:market-first-pricing": "ts-node ./scripts/run-market-first-pricing-migration.ts",
     "db:seed:zip-centroids": "ts-node ./scripts/seed-zip-centroids.ts",
+    "db:backfill:lane-history": "ts-node ./scripts/backfill-lane-history.ts",
     "test:market-first-pricing": "ts-node ./scripts/test-market-first-pricing.ts",
     "db:migrate:quote-advisor-chat": "ts-node ./scripts/run-quote-advisor-chat-migration.ts",
     "db:migrate:carrier-connection-credentials": "ts-node ./scripts/run-carrier-connection-credentials-migration.ts",

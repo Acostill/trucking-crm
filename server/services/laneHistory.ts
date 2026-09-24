@@ -292,7 +292,7 @@ export async function laneHistoryOption(shipment: UnifiedQuoteRequest): Promise<
        WHERE observation_type = 'truck_cost'
          AND LEFT(origin_zip, 3) = LEFT($1, 3)
          AND LEFT(destination_zip, 3) = LEFT($2, 3)
-         AND REGEXP_REPLACE(COALESCE(truck_type, ''), '^Reefer ', '') = REGEXP_REPLACE($3, '^Reefer ', '')
+         AND LOWER(REGEXP_REPLACE(COALESCE(truck_type, ''), '^Reefer ', '', 'i')) = LOWER(REGEXP_REPLACE($3, '^Reefer ', '', 'i'))
          AND observed_at > NOW() - INTERVAL '90 days'`,
       [origin, destination, shipment.truckType]
     );

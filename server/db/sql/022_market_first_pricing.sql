@@ -26,6 +26,35 @@ CREATE TRIGGER trg_expedite_rate_rules_updated_at
 BEFORE UPDATE ON public.expedite_rate_rules
 FOR EACH ROW EXECUTE PROCEDURE public.set_updated_at();
 
+-- Price = MAX(minimum, base + per-mile x miles), then a fuel adjustment for
+-- diesel moves since the rates were set, then a learned lane correction.
+ALTER TABLE public.expedite_rate_rules
+  ADD COLUMN IF NOT EXISTS base_charge NUMERIC(10,2) NOT NULL DEFAULT 0,
+  -- Weekly U.S. diesel ($/gal) when these rates were set.
+  ADD COLUMN IF NOT EXISTS fuel_baseline_diesel NUMERIC(6,3),
+  ADD COLUMN IF NOT EXISTS miles_per_gallon NUMERIC(5,1);
+
+-- External market series (weekly diesel from EIA; room for SONAR later).
+CREATE TABLE IF NOT EXISTS public.market_indicators (
+  series TEXT NOT NULL,
+  period DATE NOT NULL,
+  value NUMERIC(12,4) NOT NULL,
+  source TEXT NOT NULL,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (series, period)
+);
+
+-- Every approved rate change, so "what changed and why" is answerable later.
+CREATE TABLE IF NOT EXISTS public.rate_rule_changes (
+  id BIGSERIAL PRIMARY KEY,
+  vehicle_type TEXT NOT NULL,
+  previous_values JSONB,
+  new_values JSONB NOT NULL,
+  reason TEXT NOT NULL,
+  changed_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Brokerage-wide pricing switches (single row).
 CREATE TABLE IF NOT EXISTS public.pricing_settings (
   id INTEGER PRIMARY KEY DEFAULT 1,

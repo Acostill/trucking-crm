@@ -279,6 +279,11 @@ function carrierOption(
     ...(total ? { cost: total } : {}),
     ...(finiteNumber(quote && quote.lineHaul) ? { lineHaul: Number(quote!.lineHaul) } : {}),
     ...(finiteNumber(quote && quote.ratePerMile) ? { ratePerMile: Number(quote!.ratePerMile) } : {}),
+    // ExpediteAll reports rate per mile on its line haul; the trip miles it
+    // implies feed lane history (mileage and rate-table calibration).
+    ...(finiteNumber(quote && quote.lineHaul) && finiteNumber(quote && quote.ratePerMile)
+      ? { miles: Math.round(Number(quote!.lineHaul) / Number(quote!.ratePerMile)) }
+      : {}),
     truckType: quote && quote.additionalInfo && quote.additionalInfo.truckType
       ? quote.additionalInfo.truckType
       : key === 'forwardAir' ? 'LTL' : undefined,

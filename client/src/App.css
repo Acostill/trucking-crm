@@ -2168,6 +2168,35 @@ label {
   color: var(--text-muted, #64748b);
 }
 
+.market-suggestion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.market-suggestion div {
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.market-suggestion small {
+  color: var(--text-muted, #64748b);
+}
+
+.market-changes {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  display: grid;
+  gap: 4px;
+}
+
 .pricing-missing {
   margin-left: 8px;
   font-size: 11px;

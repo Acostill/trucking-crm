@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../config';
 import ExpediteRateTable from '../components/ExpediteRateTable';
 import PricingScorecard from '../components/PricingScorecard';
+import MarketWatch from '../components/MarketWatch';
 
 const DEFAULT_RULE_ID = 1;
 
@@ -17,6 +18,9 @@ export default function AdminProfitMarginPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
+  // Bumped when rates change so the rate table and market watch reload together.
+  const [pricingVersion, setPricingVersion] = useState(0);
+  function bumpPricingVersion() { setPricingVersion(function(value) { return value + 1; }); }
 
   useEffect(function() {
     if (!user || !isAdmin) {
@@ -152,7 +156,8 @@ export default function AdminProfitMarginPage() {
           )}
           {isAdmin && (
             <div className="pricing-admin-stack">
-              <ExpediteRateTable />
+              <ExpediteRateTable reloadKey={pricingVersion} onSaved={bumpPricingVersion} />
+              <MarketWatch reloadKey={pricingVersion} onApplied={bumpPricingVersion} />
               <PricingScorecard />
             </div>
           )}

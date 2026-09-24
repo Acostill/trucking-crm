@@ -7,6 +7,8 @@ import {
 } from '../services/carrierConnectionCredentials';
 import { listExpediteRateRules } from '../services/expediteRateTable';
 import { getPricingSettings, updatePricingSettings } from '../services/pricingSettings';
+import { dieselOn, refreshDieselPrices } from '../services/marketData';
+import { applyRateSuggestion, buildMarketReport, recordRateChange } from '../services/marketReport';
 
 const router = express.Router();
 const SESSION_COOKIE = 'session_token';
@@ -209,35 +211,108 @@ router.put('/expedite-rate-rules/:vehicleType', async function(req: Request, res
     res.status(400).json({ error: 'Unknown expedite vehicle type' });
     return;
   }
-  const ratePerMile = Number(req.body && req.body.ratePerMile);
-  const minimumCharge = Number(req.body && req.body.minimumCharge != null ? req.body.minimumCharge : 0);
+  const body = req.body || {};
+  const ratePerMile = Number(body.ratePerMile);
+  const baseCharge = Number(body.baseCharge != null && body.baseCharge !== '' ? body.baseCharge : 0);
+  const minimumCharge = Number(body.minimumCharge != null && body.minimumCharge !== '' ? body.minimumCharge : 0);
+  const milesPerGallon = body.milesPerGallon != null && body.milesPerGallon !== '' ? Number(body.milesPerGallon) : null;
   if (!Number.isFinite(ratePerMile) || ratePerMile <= 0 || ratePerMile > 50) {
     res.status(400).json({ error: 'ratePerMile must be between 0 and 50' });
+    return;
+  }
+  if (!Number.isFinite(baseCharge) || baseCharge < 0 || baseCharge > 100000) {
+    res.status(400).json({ error: 'baseCharge must be 0 or more' });
     return;
   }
   if (!Number.isFinite(minimumCharge) || minimumCharge < 0 || minimumCharge > 100000) {
     res.status(400).json({ error: 'minimumCharge must be 0 or more' });
     return;
   }
-  const isActive = !(req.body && req.body.isActive === false);
-  const notes = req.body && req.body.notes ? String(req.body.notes).slice(0, 1000) : null;
+  if (milesPerGallon != null && (!Number.isFinite(milesPerGallon) || milesPerGallon < 2 || milesPerGallon > 40)) {
+    res.status(400).json({ error: 'milesPerGallon must be between 2 and 40' });
+    return;
+  }
+  const isActive = !(body.isActive === false);
+  const notes = body.notes ? String(body.notes).slice(0, 1000) : null;
   try {
     const userId = (req as any).user && (req as any).user.id;
-    await db.queryWithUser(
-      `INSERT INTO public.expedite_rate_rules (vehicle_type, rate_per_mile, minimum_charge, is_active, notes, updated_by)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (vehicle_type) DO UPDATE SET
-         rate_per_mile = EXCLUDED.rate_per_mile,
-         minimum_charge = EXCLUDED.minimum_charge,
-         is_active = EXCLUDED.is_active,
-         notes = EXCLUDED.notes,
-         updated_by = EXCLUDED.updated_by`,
-      [vehicleType, ratePerMile, minimumCharge, isActive, notes, userId || null],
-      userId
-    );
+    // Rates are entered at today's fuel price; later diesel moves are added
+    // to quotes automatically as a fuel adjustment.
+    const diesel = await dieselOn();
+    await db.transactionWithUser(async function(client) {
+      const previous = await client.query(
+        'SELECT base_charge, rate_per_mile, minimum_charge, miles_per_gallon, fuel_baseline_diesel FROM public.expedite_rate_rules WHERE vehicle_type = $1',
+        [vehicleType]
+      );
+      const prior = previous.rows[0];
+      const ratesChanged = !prior ||
+        Number(prior.base_charge) !== baseCharge ||
+        Number(prior.rate_per_mile) !== ratePerMile ||
+        Number(prior.minimum_charge) !== minimumCharge;
+      const fuelBaseline = ratesChanged
+        ? (diesel ? diesel.value : null)
+        : (prior.fuel_baseline_diesel == null ? null : Number(prior.fuel_baseline_diesel));
+      await client.query(
+        `INSERT INTO public.expedite_rate_rules (
+           vehicle_type, base_charge, rate_per_mile, minimum_charge, miles_per_gallon,
+           fuel_baseline_diesel, is_active, notes, updated_by
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (vehicle_type) DO UPDATE SET
+           base_charge = EXCLUDED.base_charge,
+           rate_per_mile = EXCLUDED.rate_per_mile,
+           minimum_charge = EXCLUDED.minimum_charge,
+           miles_per_gallon = EXCLUDED.miles_per_gallon,
+           fuel_baseline_diesel = EXCLUDED.fuel_baseline_diesel,
+           is_active = EXCLUDED.is_active,
+           notes = EXCLUDED.notes,
+           updated_by = EXCLUDED.updated_by`,
+        [vehicleType, baseCharge, ratePerMile, minimumCharge, milesPerGallon, fuelBaseline, isActive, notes, userId || null]
+      );
+      if (ratesChanged) {
+        await recordRateChange(
+          client,
+          vehicleType,
+          prior ? { baseCharge: Number(prior.base_charge), ratePerMile: Number(prior.rate_per_mile), minimumCharge: Number(prior.minimum_charge) } : null,
+          { baseCharge, ratePerMile, minimumCharge, fuelBaselineDiesel: fuelBaseline },
+          'Edited on the Pricing page',
+          userId || null
+        );
+      }
+    }, userId);
     res.json({ vehicleTypes: EXPEDITE_VEHICLE_TYPES, rules: await listExpediteRateRules() });
   } catch (err) {
     next(err);
+  }
+});
+
+router.post('/expedite-rate-rules/:vehicleType/apply-suggestion', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    const applied = await applyRateSuggestion(String(req.params.vehicleType || ''), userId || null);
+    res.json({ applied, report: await buildMarketReport() });
+  } catch (err: any) {
+    if (err && err.status) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
+router.get('/market-report', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await buildMarketReport());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/market-data/refresh', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    await refreshDieselPrices();
+    res.json(await buildMarketReport());
+  } catch (err: any) {
+    res.status(502).json({ error: err && err.message ? err.message : 'Unable to refresh market data' });
   }
 });
 
