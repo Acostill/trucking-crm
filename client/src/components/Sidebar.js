@@ -88,7 +88,7 @@ function Sidebar(props) {
 
   const adminItems = isAdmin ? [
     { id: '/admin-portal', label: 'Admin', icon: ShieldCheck, path: '/admin-portal' },
-    { id: '/admin-profit-margin', label: 'Profit Margin', icon: Percent, path: '/admin-profit-margin' },
+    { id: '/admin-profit-margin', label: 'Pricing', icon: Percent, path: '/admin-profit-margin' },
   ] : [];
 
   const isActive = (path) => location.pathname === path;

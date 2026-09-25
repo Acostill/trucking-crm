@@ -205,13 +205,18 @@ export interface UnifiedQuoteResponse {
 export interface UnifiedQuoteOptions {
   includeDat?: boolean;
   applyDefaultMargin?: boolean;
+  // Skip a carrier entirely (no API call) when the pricing plan does not need it.
+  includeForwardAir?: boolean;
+  includeExpediteAll?: boolean;
 }
+
+const SKIPPED = Symbol('skipped');
 
 /**
  * Ensure pickup/delivery have normalized state (2-letter code) and zip when only city/state present.
  * ExpediteAll and DAT require state to be a 2-letter code (e.g. CT not "Connecticut").
  */
-async function ensureZipsAndStateInQuoteRequest(body: UnifiedQuoteRequest): Promise<UnifiedQuoteRequest> {
+export async function ensureZipsAndStateInQuoteRequest(body: UnifiedQuoteRequest): Promise<UnifiedQuoteRequest> {
   const pickup = body.pickup || {};
   const pickupLoc = pickup.location || {};
   const delivery = body.delivery || {};
@@ -286,9 +291,11 @@ export async function getUnifiedQuotes(
   const normalizedBody = await ensureZipsAndStateInQuoteRequest(body || {});
 
   // Forward Air and ExpediteAll are the phase-one operational connections.
+  const includeExpediteAll = options.includeExpediteAll !== false;
+  const includeForwardAir = options.includeForwardAir !== false;
   const [expediteAllResult, forwardAirResult] = await Promise.allSettled([
-    callExpediteAllAPI(normalizedBody),
-    callForwardAirAPI(normalizedBody)
+    includeExpediteAll ? callExpediteAllAPI(normalizedBody) : Promise.reject(SKIPPED),
+    includeForwardAir ? callForwardAirAPI(normalizedBody) : Promise.reject(SKIPPED)
   ]);
   const datForecastResult = includeDat
     ? await Promise.resolve(callDATForecastAPI(normalizedBody))
@@ -299,7 +306,9 @@ export async function getUnifiedQuotes(
   // Extract and normalize results, handling both success and failure cases
   const expediteAll: StandardizedQuote = expediteAllResult.status === 'fulfilled' 
     ? normalizeExpediteAll(expediteAllResult.value.data as ExpediteAllResponse)
-    : (() => {
+    : expediteAllResult.reason === SKIPPED
+      ? { source: 'ExpediteAll', error: 'Not requested for this load.', skipped: true }
+      : (() => {
         const error = expediteAllResult.reason?.message || 'Failed to fetch ExpediteAll quote';
         console.error('[ExpediteAll] Error:', error, expediteAllResult.reason);
         return { source: 'ExpediteAll', error };
@@ -307,7 +316,9 @@ export async function getUnifiedQuotes(
   
   const forwardAir: StandardizedQuote = forwardAirResult.status === 'fulfilled' 
     ? normalizeForwardAir(forwardAirResult.value.data as ForwardAirResponse)
-    : (() => {
+    : forwardAirResult.reason === SKIPPED
+      ? { source: 'ForwardAir', error: 'Not requested for this load.', skipped: true }
+      : (() => {
         const error = forwardAirResult.reason?.message || 'Failed to fetch Forward Air quote';
         console.error('[ForwardAir] Error:', error, forwardAirResult.reason);
         return { source: 'ForwardAir', error };

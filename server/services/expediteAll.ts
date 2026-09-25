@@ -106,6 +106,9 @@ export interface ExpediteAllResponse {
   [key: string]: any; // Allow additional properties from API
 }
 
+// A slow carrier must not leave a quote stuck in "rating".
+const CARRIER_API_TIMEOUT_MS = Number(process.env.CARRIER_API_TIMEOUT_MS) || 20000;
+
 export function expediteAllEligibilityError(body: UnifiedQuoteRequest): string | null {
   const truckType = String(body && body.truckType || '').trim();
   if (!truckType) return null;
@@ -192,7 +195,8 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
         'Accept': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
         'X-API-Key': config.apiKey
-      }
+      },
+      timeout: CARRIER_API_TIMEOUT_MS
     };
 
     const apiReq = https.request(options, function(apiRes) {
@@ -235,6 +239,9 @@ export function callExpediteAllAPI(body: UnifiedQuoteRequest): Promise<APIRespon
       });
     });
 
+    apiReq.on('timeout', function() {
+      apiReq.destroy(new Error(`ExpediteAll did not respond within ${CARRIER_API_TIMEOUT_MS / 1000}s.`));
+    });
     apiReq.on('error', function(err) {
       reject(err);
     });

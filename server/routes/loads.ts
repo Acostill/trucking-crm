@@ -1,6 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import db from '../db';
 import { getUserIdFromRequest, requirePermission } from '../utils/auth';
+import { syncCarrierPay } from '../services/carrierPay';
+
+// A load cannot move past booking without the carrier pay (buy rate) that
+// pricing learns from.
+const STATUSES_REQUIRING_CARRIER_PAY = ['In Transit', 'Delivered', 'Invoiced', 'Paid'];
 
 const router = express.Router();
 
@@ -43,6 +48,8 @@ function toClientRow(row: any) {
     status: row.status,
     type: row.type,
     rate: row.rate,
+    carrierPay: row.carrier_pay,
+    carrierName: row.carrier_name,
     currency: row.currency,
     equipmentType: row.equipment_type,
     shipper: row.shipper,
@@ -133,6 +140,15 @@ router.put('/:id', requirePermission('loads.manage'), async function(req: Reques
     const consignee = req.body?.consignee ?? null;
     const consigneeLocation = req.body?.consigneeLocation ?? null;
     const deliveryDate = req.body?.deliveryDate ?? null;
+    const carrierPayInput = req.body?.carrierPay;
+    const carrierPay = carrierPayInput === undefined || carrierPayInput === null || carrierPayInput === ''
+      ? null
+      : Number(carrierPayInput);
+    const carrierName = req.body?.carrierName ? String(req.body.carrierName).trim().slice(0, 200) : null;
+    if (carrierPay != null && (!Number.isFinite(carrierPay) || carrierPay <= 0)) {
+      res.status(400).json({ error: 'Carrier pay must be a dollar amount above 0' });
+      return;
+    }
 
     const updateSql = `
       UPDATE loads
@@ -149,10 +165,27 @@ router.put('/:id', requirePermission('loads.manage'), async function(req: Reques
           consignee = COALESCE($12, consignee),
           consignee_location = COALESCE($13, consignee_location),
           delivery_date = COALESCE($14, delivery_date),
+          carrier_pay = COALESCE($15, carrier_pay),
+          carrier_name = COALESCE($16, carrier_name),
           updated_at = NOW()
       WHERE id = $1
       RETURNING *
     `;
+
+    const current = await db.query('SELECT status, carrier_pay FROM loads WHERE id = $1', [id]);
+    if (!current.rows.length) {
+      res.status(404).json({ error: 'Load not found' });
+      return;
+    }
+    const nextStatus = status || current.rows[0].status;
+    if (
+      STATUSES_REQUIRING_CARRIER_PAY.indexOf(nextStatus) > -1 &&
+      carrierPay == null &&
+      current.rows[0].carrier_pay == null
+    ) {
+      res.status(400).json({ error: `Enter the carrier pay before moving this load to ${nextStatus}.` });
+      return;
+    }
 
     const result = await db.queryWithUser(
       updateSql,
@@ -170,13 +203,20 @@ router.put('/:id', requirePermission('loads.manage'), async function(req: Reques
         shipDate,
         consignee,
         consigneeLocation,
-        deliveryDate
+        deliveryDate,
+        carrierPay,
+        carrierName
       ],
       userId || undefined
     );
     if (!result.rows.length) {
       res.status(404).json({ error: 'Load not found' });
       return;
+    }
+    if (carrierPay != null) {
+      await db.transactionWithUser(async function(client) {
+        await syncCarrierPay(client, { loadId: id }, carrierPay, carrierName);
+      }, userId || undefined);
     }
 
     res.json(toClientRow(result.rows[0]));

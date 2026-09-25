@@ -32,6 +32,18 @@ import { buildApiUrl } from '../config';
 import { buildQuoteEmailHtml } from '../utils/quoteEmailTemplate';
 import './EmailQuoteInboxPage.css';
 
+// Extras staff can tick; the codes feed carrier APIs and the extras price list.
+const EXTRA_OPTIONS = [
+  ['LIFTGATE_PICKUP', 'Liftgate at pickup'],
+  ['LIFTGATE_DELIVERY', 'Liftgate at delivery'],
+  ['RESIDENTIAL_DELIVERY', 'Residential'],
+  ['INSIDE_DELIVERY', 'Inside delivery'],
+  ['LIMITED_ACCESS', 'Limited access'],
+  ['AFTER_HOURS', 'After-hours / weekend'],
+  ['APPOINTMENT', 'Appointment / call ahead']
+];
+const EXTRA_CODES = EXTRA_OPTIONS.map(function(option) { return option[0]; });
+
 const EMPTY_EDITOR = {
   pickupCity: '',
   pickupState: '',
@@ -50,7 +62,8 @@ const EMPTY_EDITOR = {
   temperatureControlled: false,
   truckType: '',
   truckTypeSource: '',
-  datEquipmentType: ''
+  datEquipmentType: '',
+  extras: []
 };
 
 const PREVIEW_USER = {
@@ -175,9 +188,7 @@ function buildPreviewAdvisorExchange(quote, question) {
   const part = Array.isArray(pieces.parts) ? pieces.parts[0] : null;
   const options = quote && Array.isArray(quote.carrierQuotes) ? quote.carrierQuotes : [];
   const connected = options
-    .filter(function(option) {
-      return option.available && option.selectable !== false && option.benchmark !== true && Number(option.cost) > 0;
-    })
+    .filter(isPriceableOption)
     .sort(function(a, b) { return Number(a.cost) - Number(b.cost); });
   const benchmark = options.find(function(option) { return option.key === 'datSpot' && Number(option.miles) > 0; });
   const miles = benchmark && Number(benchmark.miles);
@@ -211,6 +222,20 @@ function buildPreviewAdvisorExchange(quote, question) {
   };
 }
 
+// A price staff can quote from: a carrier bid, or a market / rate-table
+// estimate of the truck cost that opts in with selectable: true.
+function isPriceableOption(option) {
+  if (!option || !option.available || !(Number(option.cost) > 0)) return false;
+  if (option.selectable === true) return true;
+  return option.selectable !== false && option.benchmark !== true;
+}
+
+function daysAgo(value) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return null;
+  return Math.max(0, Math.floor((Date.now() - time) / 86400000));
+}
+
 function defaultValidUntil() {
   const date = new Date();
   date.setDate(date.getDate() + 7);
@@ -220,9 +245,7 @@ function defaultValidUntil() {
 function fallbackAdvisor(quote) {
   const shipment = (quote && quote.shipment) || {};
   const options = quote && Array.isArray(quote.carrierQuotes) ? quote.carrierQuotes : [];
-  const connected = options.filter(function(option) {
-    return option.available && option.selectable !== false && option.benchmark !== true && option.cost != null;
-  });
+  const connected = options.filter(isPriceableOption);
   const hasDat = options.some(function(option) { return ['datRateView', 'datSpot', 'datContract'].includes(option.key) && option.available; });
   return {
     reviewRequired: !shipment.truckType || !connected.length,
@@ -301,7 +324,34 @@ const PREVIEW_QUOTES = [
       },
       datEquipmentType: 'Van'
     },
+    pricingMode: 'expedite',
     carrierQuotes: [
+      {
+        key: 'rateTable',
+        source: 'First Class rate table',
+        available: true,
+        selectable: true,
+        benchmark: true,
+        status: 'estimate',
+        pricingBasis: 'rate_table',
+        cost: 1204.2,
+        lineHaul: 1204.2,
+        ratePerMile: 1.8,
+        miles: 669,
+        mileageMethod: 'lane_history',
+        truckType: 'Cargo Van',
+        timeframe: 'Cargo Van rate · carrier-reported miles'
+      },
+      {
+        key: 'expediteAll',
+        source: 'ExpediteAll',
+        available: true,
+        cost: 1285.5,
+        lineHaul: 1285.5,
+        ratePerMile: 1.92,
+        truckType: 'Cargo Van',
+        transitTime: 1
+      },
       {
         key: 'forwardAir',
         source: 'Forward Air',
@@ -309,23 +359,77 @@ const PREVIEW_QUOTES = [
         cost: 1248.62,
         lineHaul: 1248.62,
         truckType: 'LTL',
-        transitTime: 2
+        transitTime: 2,
+        fromCache: true,
+        cachedAt: new Date(Date.now() - 2 * 86400000).toISOString()
       },
       {
-        key: 'expediteAll',
-        source: 'ExpediteAll',
-        available: true,
-        cost: 1396.4,
-        lineHaul: 1396.4,
-        truckType: 'Expedited LTL',
-        transitTime: 1
+        key: 'datRateView',
+        source: 'DAT RateView',
+        available: false,
+        selectable: false,
+        benchmark: true,
+        status: 'not_applicable',
+        error: 'DAT prices 53\' trucks. This expedite load is priced from the First Class rate table.'
+      }
+    ],
+    recommendation: {
+      carrierKey: 'expediteAll',
+      carrierSource: 'ExpediteAll',
+      carrierCost: 1285.5,
+      defaultMarginPct: 18,
+      suggestedClientPrice: 1516.89,
+      reason: 'Priced from the live ExpediteAll rate. Compare it with the First Class rate table to keep the table accurate.'
+    },
+    selection: {
+      carrierKey: null,
+      carrierSource: null,
+      carrierCost: null,
+      marginPct: null,
+      marginAmount: null,
+      clientPrice: null
+    },
+    staffNotes: '',
+    quoteId: null
+  },
+  {
+    id: 'email-quote-preview-3',
+    sender: { name: 'Dispatch Team', email: 'dispatch@truckfirstclass.com' },
+    subject: 'Fwd: FTL Miami, FL to Atlanta, GA — 18 pallets',
+    receivedAt: '2026-07-30T18:05:00.000Z',
+    rawText: 'Subject: Fwd: FTL Miami, FL to Atlanta, GA — 18 pallets\n\n'
+      + 'Need a 53 ft dry van for 18 pallets, 32,000 lbs, Miami FL 33166 to Atlanta GA 30336, pickup 8/3.',
+    status: 'ready',
+    pricingMode: 'truckload',
+    shipment: {
+      pickup: {
+        location: { city: 'Miami', state: 'FL', zip: '33166', country: 'US' },
+        date: '2026-08-03T12:00:00.000Z'
       },
+      delivery: {
+        location: { city: 'Atlanta', state: 'GA', zip: '30336', country: 'US' }
+      },
+      pieces: { quantity: 18, unit: 'in', parts: [{ count: 18, length: 48, width: 40, height: 60 }] },
+      weight: { value: 32000, unit: 'lbs' },
+      commodity: 'Packaged beverages',
+      temperatureControlled: false,
+      truckType: 'Dry Van',
+      truckAssignment: {
+        status: 'assigned',
+        source: 'auto',
+        ruleVersion: 'fct-truck-assignment-v6',
+        reason: '18 pallets at 32,000 lb require a 53 ft dry van.'
+      },
+      datEquipmentType: 'Van'
+    },
+    carrierQuotes: [
       {
         key: 'datSpot',
         source: 'DAT Spot Market',
         available: true,
-        selectable: false,
+        selectable: true,
         benchmark: true,
+        pricingBasis: 'market_estimate',
         status: 'completed',
         cost: 1285,
         marketAverage: 1285,
@@ -384,24 +488,33 @@ const PREVIEW_QUOTES = [
           { rank: 2, datLoadId: 'table-row-preview-2', displayedTotal: '$2,300', totalUsd: 2300, rpm: '$3.44/mi', tripMiles: '669 mi', origin: 'Miami, FL', destination: 'Atlanta, GA', originDeadhead: 'DH-O 25 mi', destinationDeadhead: 'DH-D 9 mi', pickup: 'Aug 3', equipmentCode: 'V', weight: '500 lbs', lengthLoadType: 'Van · Full', company: 'Demo Carrier Two', creditScore: '94', daysToPay: '21 DTP', comments: null, commentsStatus: 'not_displayed' },
           { rank: 3, datLoadId: 'table-row-preview-3', displayedTotal: '$2,150', totalUsd: 2150, rpm: '$3.21/mi', tripMiles: '669 mi', origin: 'Miami, FL', destination: 'Atlanta, GA', originDeadhead: 'DH-O 31 mi', destinationDeadhead: 'DH-D 22 mi', pickup: 'Aug 3', equipmentCode: 'V', weight: '500 lbs', lengthLoadType: 'Van · Full', company: 'Demo Carrier Three', creditScore: '91', daysToPay: '25 DTP', comments: 'No touch freight.', commentsStatus: 'displayed' }
         ]
+      },
+      {
+        key: 'laneHistory',
+        source: 'First Class lane history',
+        available: true,
+        selectable: false,
+        benchmark: true,
+        status: 'completed',
+        cost: 1240,
+        marketAverage: 1240,
+        marketLow: 1150,
+        marketHigh: 1325,
+        ratePerMile: 1.85,
+        miles: 669,
+        timeframe: 'Paid to trucks · last 90 days · 4 loads',
+        truckType: 'Dry Van'
       }
     ],
     recommendation: {
-      carrierKey: 'forwardAir',
-      carrierSource: 'Forward Air',
-      carrierCost: 1248.62,
+      carrierKey: 'datSpot',
+      carrierSource: 'DAT Spot Market',
+      carrierCost: 1285,
       defaultMarginPct: 18,
-      suggestedClientPrice: 1473.37,
-      reason: 'Lowest available carrier cost. Compare it with the DAT market benchmark, then confirm service and transit before sending.'
+      suggestedClientPrice: 1516.3,
+      reason: 'Priced from the DAT spot market average. Cover the truck after the customer awards the load, targeting at or below this cost.'
     },
-    selection: {
-      carrierKey: null,
-      carrierSource: null,
-      carrierCost: null,
-      marginPct: null,
-      marginAmount: null,
-      clientPrice: null
-    },
+    selection: {},
     staffNotes: '',
     quoteId: null
   },
@@ -560,7 +673,8 @@ function shipmentToEditor(shipment) {
     temperatureControlled: Boolean(shipment && shipment.temperatureControlled),
     truckType: (shipment && shipment.truckType) || '',
     truckTypeSource: (shipment && shipment.truckAssignment && shipment.truckAssignment.source) || '',
-    datEquipmentType: (shipment && shipment.datEquipmentType) || ''
+    datEquipmentType: (shipment && shipment.datEquipmentType) || '',
+    extras: ((shipment && shipment.accessorialCodes) || []).filter(function(code) { return EXTRA_CODES.indexOf(code) > -1; })
   };
 }
 
@@ -615,7 +729,11 @@ function buildShipment(editor, existing) {
     forwardAirFreightClassSource: suppliedClass ? 'staff_confirmed' : estimatedClass ? 'density_estimate' : undefined,
     temperatureControlled: Boolean(editor.temperatureControlled),
     truckType: editor.truckType,
-    datEquipmentType: editor.datEquipmentType
+    datEquipmentType: editor.datEquipmentType,
+    // Keep extras the email parser found that are not on the checklist.
+    accessorialCodes: (((existing && existing.accessorialCodes) || []).filter(function(code) {
+      return EXTRA_CODES.indexOf(code) === -1;
+    })).concat(editor.extras || [])
   };
 
   if (!editor.truckType) {
@@ -695,6 +813,14 @@ export default function EmailQuoteInboxPage() {
   const [followUpAt, setFollowUpAt] = useState('');
   const [followUpStatus, setFollowUpStatus] = useState('not_needed');
   const [outcomeNotes, setOutcomeNotes] = useState('');
+  const [truckCost, setTruckCost] = useState('');
+  const [truckCarrierName, setTruckCarrierName] = useState('');
+  const [requestingCoverRate, setRequestingCoverRate] = useState(false);
+  const [pricingSettings, setPricingSettings] = useState({ minMarginAmount: 0, trialMode: false });
+  const pricingSettingsRef = useRef(pricingSettings);
+  const [manualCarrier, setManualCarrier] = useState('');
+  const [manualPrice, setManualPrice] = useState('');
+  const [savingManualPrice, setSavingManualPrice] = useState(false);
   const [savingWorkflow, setSavingWorkflow] = useState(false);
   const [chatView, setChatView] = useState(null);
   const detailRequest = useRef(0);
@@ -719,12 +845,26 @@ export default function EmailQuoteInboxPage() {
     return data;
   }
 
+  useEffect(function() {
+    if (previewMode) return;
+    requestJson('/api/email-quotes/pricing-settings')
+      .then(function(settings) {
+        pricingSettingsRef.current = settings;
+        setPricingSettings(settings);
+      })
+      .catch(function() {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewMode]);
+
   function applyDetail(detail) {
     setSelected(detail);
+    // Trial mode: staff price the way they always have; the system's
+    // suggestion is recorded in the background for comparison.
+    const trial = pricingSettingsRef.current.trialMode && !(detail && detail.selection && detail.selection.carrierKey);
     setEditor(shipmentToEditor(detail && detail.shipment));
     const recommendedKey =
       (detail && detail.selection && detail.selection.carrierKey) ||
-      (detail && detail.recommendation && detail.recommendation.carrierKey) ||
+      (!trial && detail && detail.recommendation && detail.recommendation.carrierKey) ||
       '';
     const recommendedMargin =
       detail && detail.selection && detail.selection.marginPct != null
@@ -741,6 +881,8 @@ export default function EmailQuoteInboxPage() {
     setFollowUpAt((detail && detail.followUpAt && String(detail.followUpAt).slice(0, 10)) || '');
     setFollowUpStatus((detail && detail.followUpStatus) || 'not_needed');
     setOutcomeNotes((detail && detail.outcomeNotes) || '');
+    setTruckCost(detail && detail.truckCost != null ? String(detail.truckCost) : '');
+    setTruckCarrierName((detail && detail.truckCarrierName) || '');
 
     const options = detail && Array.isArray(detail.carrierQuotes) ? detail.carrierQuotes : [];
     const carrier = options.find(function(option) { return option.key === recommendedKey; });
@@ -892,8 +1034,27 @@ export default function EmailQuoteInboxPage() {
     selected && selected.selection && selected.selection.carrierKey,
     selected && selected.selection && selected.selection.clientPrice
   ]);
-  const emailFuelSurcharge = (emailRateDrafts[emailRateDraftKey] || {}).fuelSurcharge || 'unconfirmed';
-  const emailIncludedServices = (emailRateDrafts[emailRateDraftKey] || {}).includedServices || '';
+  // Quotes are all-in by default (fuel and ticked extras included); staff can
+  // change either for a customer who wants fuel or extras listed separately.
+  const emailDraft = emailRateDrafts[emailRateDraftKey] || {};
+  const emailFuelSurcharge = emailDraft.fuelSurcharge || 'included';
+  const quoteShipment = (selected && selected.shipment) || {};
+  const quoteVehicle = String(quoteShipment.truckType || '').replace(/^Reefer\s+/i, '');
+  const tickedExtras = EXTRA_OPTIONS
+    .filter(function(option) { return (quoteShipment.accessorialCodes || []).indexOf(option[0]) > -1; })
+    .map(function(option) { return option[1]; });
+  const emailIncludedServices = emailDraft.includedServices !== undefined
+    ? emailDraft.includedServices
+    : tickedExtras.join(', ');
+  const tonuVehicle = ['Cargo Van', 'Box Truck', 'Straight Truck'].indexOf(quoteVehicle) > -1 ? quoteVehicle : quoteVehicle ? 'Truckload' : '';
+  const emailAdditionalCharges = (pricingSettings.conditionalCharges || [])
+    .filter(function(charge) { return !charge.appliesTo || charge.appliesTo === tonuVehicle; })
+    .map(function(charge) {
+      return charge.perHour
+        ? 'Detention and layover after 2 free hours, based on wait time'
+        : 'Truck ordered not used: $' + Number(charge.amount).toFixed(0);
+    })
+    .join('. ');
 
   function updateEmailRateDraft(changes) {
     setEmailRateDrafts(function(current) {
@@ -915,13 +1076,14 @@ export default function EmailQuoteInboxPage() {
       recipientEmail: emailTo.trim(),
       fuelSurcharge: emailFuelSurcharge,
       includedServices: emailIncludedServices,
+      additionalCharges: emailAdditionalCharges,
       // Email recipients need an absolute, publicly served image URL.
       logoUrl: new URL('/brand/logo.png', window.location.origin).href
     });
-  }, [selected, emailNote, quoteValidUntil, emailTo, emailFuelSurcharge, emailIncludedServices]);
+  }, [selected, emailNote, quoteValidUntil, emailTo, emailFuelSurcharge, emailIncludedServices, emailAdditionalCharges]);
 
   function chooseCarrier(option) {
-    if (!option.available || option.selectable === false || option.benchmark === true) return;
+    if (!isPriceableOption(option)) return;
     setCarrierKey(option.key);
     const defaultMargin =
       selected && selected.selection && selected.selection.marginPct != null
@@ -929,8 +1091,11 @@ export default function EmailQuoteInboxPage() {
         : selected && selected.recommendation && selected.recommendation.defaultMarginPct != null
           ? Number(selected.recommendation.defaultMarginPct)
           : Number(marginPct || 0);
-    setMarginPct(String(defaultMargin));
-    setClientPrice(String(Number((Number(option.cost) * (1 + defaultMargin / 100)).toFixed(2))));
+    // Margin % or the minimum profit per load, whichever is higher.
+    const byPct = Number(option.cost) * (1 + defaultMargin / 100);
+    const price = Math.max(byPct, Number(option.cost) + Number(pricingSettings.minMarginAmount || 0));
+    setClientPrice(String(Number(price.toFixed(2))));
+    setMarginPct(String(Number((((price - Number(option.cost)) / Number(option.cost)) * 100).toFixed(2))));
     setNotice('');
   }
 
@@ -1032,6 +1197,48 @@ export default function EmailQuoteInboxPage() {
       setError(requestError.message || 'Unable to reprocess the email');
     } finally {
       setReprocessing(false);
+    }
+  }
+
+  // Cover step: ask ExpediteAll for a bookable van rate only once a truck is
+  // actually needed, instead of on every quote.
+  async function requestExpediteAllCoverRate() {
+    if (!selected || previewMode) return;
+    setRequestingCoverRate(true);
+    setError('');
+    setNotice('');
+    try {
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/cover/expedite-all', { method: 'POST' });
+      applyDetail(detail);
+      setNotice('ExpediteAll rate added. Use it to cover the load, or keep sourcing a van directly.');
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to request an ExpediteAll rate');
+    } finally {
+      setRequestingCoverRate(false);
+    }
+  }
+
+  // A carrier price staff got by phone, portal, or from a driver. It becomes a
+  // selectable price and trains the rate table (box and straight trucks rely on it).
+  async function addCarrierPrice() {
+    if (!selected || previewMode) return;
+    setSavingManualPrice(true);
+    setError('');
+    setNotice('');
+    try {
+      const detail = await requestJson('/api/email-quotes/' + selected.id + '/carrier-prices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carrierName: manualCarrier.trim(), cost: Number(manualPrice) })
+      });
+      applyDetail(detail);
+      setManualCarrier('');
+      setManualPrice('');
+      setNotice('Carrier price added and saved to lane history.');
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to add the carrier price');
+    } finally {
+      setSavingManualPrice(false);
     }
   }
 
@@ -1152,7 +1359,14 @@ export default function EmailQuoteInboxPage() {
       const detail = await requestJson('/api/email-quotes/' + selected.id + '/workflow', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcome, outcomeNotes, followUpAt: followUpAt || null, followUpStatus })
+        body: JSON.stringify({
+          outcome,
+          outcomeNotes,
+          followUpAt: followUpAt || null,
+          followUpStatus,
+          truckCost: outcome === 'awarded' && truckCost.trim() ? Number(truckCost) : null,
+          truckCarrierName: outcome === 'awarded' && truckCarrierName.trim() ? truckCarrierName.trim() : null
+        })
       });
       applyDetail(detail);
       setNotice('Customer outcome and follow-up saved.');
@@ -1258,7 +1472,15 @@ export default function EmailQuoteInboxPage() {
   const datLoadsRetryDisabled = runningDatLoads || datLoadsBusy || datLoadsCompleted ||
     !datEquipmentSaved || !datSearchPickupDateCurrent || !searchLoadsSnapshotSaved ||
     (datLoadsOption && datLoadsOption.status === 'disabled');
+  const expediteAllOption = carrierQuotes.find(function(option) { return option.key === 'expediteAll' && option.available; });
+  const expediteAllCost = expediteAllOption ? Number(expediteAllOption.cost) : null;
+  const forwardAirHint = selected && selected.pricingMode !== 'truckload' &&
+    carrierQuotes.length > 0 &&
+    !carrierQuotes.some(function(option) { return option.key === 'forwardAir'; }) &&
+    !(shipment && shipment.forwardAirFreightClass);
   const carrierCostOptions = carrierQuotes.filter(function(option) {
+    // The header badge already says DAT is not used for expedite loads.
+    if (option.status === 'not_applicable') return false;
     return option.key !== 'datLoadOffers';
   });
   const mailboxReady = mailbox && ['online', 'checking'].indexOf(mailbox.state) > -1;
@@ -1447,6 +1669,27 @@ export default function EmailQuoteInboxPage() {
                             Refrigerated / controlled
                           </span>
                         </label>
+                        <div className="eq-extras-field">
+                          <span>Extras</span>
+                          <div>
+                            {EXTRA_OPTIONS.map(function(option) {
+                              const checked = (editor.extras || []).indexOf(option[0]) > -1;
+                              return (
+                                <label key={option[0]} className="eq-checkbox-field">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={function(e) {
+                                      const current = (editor.extras || []).filter(function(code) { return code !== option[0]; });
+                                      setEditor({ ...editor, extras: e.target.checked ? current.concat(option[0]) : current });
+                                    }}
+                                  />
+                                  {option[1]}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
                         <label className="truck-assignment">
                           Assigned truck
                           <select
@@ -1501,7 +1744,11 @@ export default function EmailQuoteInboxPage() {
 
                   <section className="eq-section">
                     <div className="eq-section-heading">
-                      <div><Truck size={18} /><span><strong>Carrier costs + DAT market benchmarks</strong><small>Carrier pricing and DAT benchmarks run automatically. Select the best confirmed carrier cost when the results are ready.</small></span></div>
+                      <div><Truck size={18} /><span><strong>Buy rate</strong><small>{selected.pricingMode === 'expedite'
+                        ? 'Priced from the First Class rate table, with a live ExpediteAll price for cargo vans. Extras and same/next-day premiums are included.'
+                        : selected.pricingMode === 'truckload'
+                          ? 'Truckload is priced from the DAT spot market. Find the truck after the customer awards the load.'
+                          : 'Pick the cost to build the customer price from.'}</small></span></div>
                       {datRetryable ? (
                         <button type="button" className="eq-secondary-button eq-dat-button" onClick={retryDatLookup} disabled={datRetryDisabled} title={!editor.datEquipmentType ? 'Confirm shipment details and save to assign a truck first' : !datEquipmentSaved ? 'Save shipment details before retrying DAT' : ''}>
                           <RefreshCw size={14} className={runningDat ? 'spinning' : ''} />
@@ -1510,15 +1757,17 @@ export default function EmailQuoteInboxPage() {
                       ) : (
                         <span className={'eq-auto-status ' + (datCompleted ? 'complete' : datBusy ? 'working' : datUncertain ? 'review' : datStatusOption && datStatusOption.status === 'disabled' ? 'offline' : '')}>
                           {datCompleted ? <CheckCircle2 size={14} /> : datUncertain ? <AlertCircle size={14} /> : <RefreshCw size={14} className={datBusy ? 'spinning' : ''} />}
-                          {datCompleted ? 'DAT pricing ready' : datBusy ? 'Running automatically' : datUncertain ? 'Reconcile required' : datStatusOption && datStatusOption.status === 'disabled' ? 'DAT worker offline' : 'Queues automatically'}
+                          {datCompleted ? 'DAT pricing ready' : datBusy ? 'Running automatically' : datUncertain ? 'Reconcile required' : datStatusOption && datStatusOption.status === 'disabled' ? 'DAT worker offline' : datStatusOption && datStatusOption.status === 'not_applicable' ? 'DAT not used for expedite' : 'Queues automatically'}
                         </span>
                       )}
                     </div>
                     {carrierCostOptions.length ? (
                       <div className="eq-carrier-grid">
                         {carrierCostOptions.map(function(option) {
-                          const active = carrierKey === option.key && option.selectable !== false;
+                          const active = carrierKey === option.key && isPriceableOption(option);
                           const benchmark = option.benchmark === true;
+                          const estimate = benchmark && option.selectable === true;
+                          const cachedDays = option.fromCache ? daysAgo(option.cachedAt) : null;
                           return (
                             <button
                               type="button"
@@ -1529,14 +1778,31 @@ export default function EmailQuoteInboxPage() {
                             >
                               <div className="eq-carrier-top">
                                 <span>{option.source}</span>
-                                {benchmark && <em className="market">Market benchmark</em>}
+                                {estimate
+                                  ? <em className="market">{option.key === 'rateTable' ? 'Rate table' : 'Market price'}</em>
+                                  : benchmark && <em className="market">Reference only</em>}
+                                {option.fromCache && <em className="market">From history{cachedDays != null ? ' · ' + (cachedDays === 0 ? 'today' : cachedDays + 'd old') : ''}</em>}
                                 {active && <Check size={16} />}
                               </div>
                               {option.available ? (
                                 <>
                                   <strong>{formatMoney(option.cost)}</strong>
-                                  <p>{benchmark ? 'Market average — not a bookable carrier quote' : 'Carrier cost'}</p>
-                                  {benchmark ? (
+                                  <p>{option.key === 'rateTable'
+                                    ? 'Estimated buy rate — cover after award'
+                                    : estimate
+                                      ? 'Market average — estimated buy rate, cover after award'
+                                      : benchmark ? 'Reference only — not a buy rate' : 'Carrier buy rate'}</p>
+                                  {option.key === 'rateTable' ? (
+                                    <div className="eq-carrier-details">
+                                      <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi' : 'Per-mile unavailable'}</span>
+                                      <span>{option.miles ? option.miles.toLocaleString() + (option.mileageMethod === 'zip_centroid' ? ' mi (estimated)' : ' mi') : 'Miles unavailable'}</span>
+                                      <span>{option.note || option.timeframe}</span>
+                                      {option.extrasNote && <span>{option.extrasNote}</span>}
+                                      {expediteAllCost && (
+                                        <span>{'vs ExpediteAll ' + formatMoney(expediteAllCost) + ' (' + (option.cost >= expediteAllCost ? '+' : '') + Math.round(((option.cost - expediteAllCost) / expediteAllCost) * 100) + '%)'}</span>
+                                      )}
+                                    </div>
+                                  ) : benchmark ? (
                                     <>
                                       {option.marketLow != null && option.marketHigh != null ? (
                                         <div className="eq-market-range"><span>Low {formatMoney(option.marketLow)}</span><span>High {formatMoney(option.marketHigh)}</span></div>
@@ -1547,13 +1813,16 @@ export default function EmailQuoteInboxPage() {
                                         <span>{option.ratePerMile ? formatMoney(option.ratePerMile) + '/mi avg' : 'Per-mile unavailable'}</span>
                                         <span>{option.miles ? option.miles.toLocaleString() + ' mi' : 'Miles unavailable'}</span>
                                         <span>{option.timeframe || 'Market timeframe unavailable'}</span>
+                                        {option.extrasNote && <span>{option.extrasNote}</span>}
                                         <span>{option.truckType || 'Equipment confirmed by DAT'}</span>
                                       </div>
                                     </>
                                   ) : (
                                     <div className="eq-carrier-details">
                                       <span>{option.truckType || 'Service confirmed by carrier'}</span>
-                                      <span>{option.transitTime ? option.transitTime + ' day transit' : 'Transit pending'}</span>
+                                      {option.key === 'manualQuote'
+                                        ? <span>{option.note || 'Recorded by staff'}{option.ratePerMile ? ' · ' + formatMoney(option.ratePerMile) + '/mi' : ''}</span>
+                                        : <span>{option.transitTime ? option.transitTime + ' day transit' : 'Transit pending'}</span>}
                                     </div>
                                   )}
                                 </>
@@ -1567,8 +1836,31 @@ export default function EmailQuoteInboxPage() {
                     ) : (
                       <div className="eq-rate-empty"><Truck size={22} /><p>Complete the shipment details to request carrier rates.</p></div>
                     )}
+                    {!previewMode && (
+                      <div className="eq-manual-price">
+                        <span>Got a price by phone, portal, or from a driver?</span>
+                        <input placeholder="Carrier or driver" value={manualCarrier} onChange={function(e) { setManualCarrier(e.target.value); }} />
+                        <input inputMode="decimal" placeholder="Price $" value={manualPrice} onChange={function(e) { setManualPrice(e.target.value); }} />
+                        <button type="button" className="eq-secondary-button" onClick={addCarrierPrice} disabled={savingManualPrice || !manualCarrier.trim() || !(Number(manualPrice) > 0)}>
+                          {savingManualPrice ? 'Adding...' : 'Add carrier price'}
+                        </button>
+                      </div>
+                    )}
+                    {forwardAirHint && (
+                      <p className="eq-rate-hint"><AlertCircle size={14} /> Forward Air (LTL) wasn't asked. Add a freight class in the shipment details and save to get a Forward Air rate.</p>
+                    )}
+                    {selected.pricingMode === 'expedite' && /(^|\s)Cargo Van$/.test(String(shipment.truckType || '')) && !previewMode && (
+                      <div className="eq-pricing-footer">
+                        <p><Truck size={15} /> Customer awarded the load? Ask ExpediteAll for a van only now, or source one directly.</p>
+                        <button type="button" className="eq-secondary-button" onClick={requestExpediteAllCoverRate} disabled={requestingCoverRate}>
+                          <RefreshCw size={14} className={requestingCoverRate ? 'spinning' : ''} />
+                          {requestingCoverRate ? 'Requesting...' : 'Get ExpediteAll rate'}
+                        </button>
+                      </div>
+                    )}
                   </section>
 
+                  {selected.pricingMode !== 'expedite' && (
                   <section className="eq-section eq-dat-loads-section">
                     <div className="eq-section-heading">
                       <div><Truck size={18} /><span><strong>DAT Market Offers — pricing context only</strong><small>Loads within 50 miles of the pickup and delivery cities, ranked by total rate. Each row shows the load’s actual locations.</small></span></div>
@@ -1593,7 +1885,7 @@ export default function EmailQuoteInboxPage() {
 
                     <div className="eq-dat-market-warning">
                       <AlertCircle size={15} />
-                      <span><strong>Do not book from this table.</strong> Select only a confirmed carrier cost above after availability and service are verified.</span>
+                      <span><strong>Do not book from this table.</strong> It shows what other brokers are posting on this lane. Price from the buy rate above.</span>
                     </div>
 
                     {!datLoadsOption ? (
@@ -1652,16 +1944,22 @@ export default function EmailQuoteInboxPage() {
                       </>
                     )}
                   </section>
+                  )}
 
                   <section className="eq-section pricing">
                     <div className="eq-section-heading">
-                      <div><CircleDollarSign size={18} /><span><strong>Set the client price</strong><small>Staff controls the final margin and amount charged.</small></span></div>
+                      <div><CircleDollarSign size={18} /><span><strong>Set the sell rate</strong><small>What the customer pays: buy rate plus your margin.</small></span></div>
                       {selected.quoteId && <span className="eq-quote-reference">Quote {selected.quoteId}</span>}
                     </div>
+                    {pricingSettings.trialMode && !(selected.selection && selected.selection.carrierKey) && (
+                      <div className="eq-trial-banner">
+                        <strong>Trial run:</strong> price this quote the way you normally would. The system records its own suggestion for comparison and won't change your price.
+                      </div>
+                    )}
                     <div className="eq-pricing-grid">
                       <div className="eq-cost-summary">
-                        <small>Selected carrier cost</small>
-                        <strong>{selectedCarrier ? formatMoney(selectedCarrier.cost) : 'Choose a carrier'}</strong>
+                        <small>Buy rate</small>
+                        <strong>{selectedCarrier ? formatMoney(selectedCarrier.cost) : 'Choose a buy rate'}</strong>
                         <span>{selectedCarrier && selectedCarrier.source}</span>
                       </div>
                       <label className="eq-money-field">
@@ -1669,13 +1967,16 @@ export default function EmailQuoteInboxPage() {
                         <div><input type="number" min="0" step="0.01" value={marginPct} onChange={function(e) { changeMargin(e.target.value); }} disabled={!selectedCarrier} /><em>%</em></div>
                       </label>
                       <label className="eq-money-field primary">
-                        <span>Client price</span>
+                        <span>Sell rate</span>
                         <div><em>$</em><input type="number" min="0" step="0.01" value={clientPrice} onChange={function(e) { changeClientPrice(e.target.value); }} disabled={!selectedCarrier} /></div>
                       </label>
                       <div className="eq-profit-summary">
                         <small>Gross profit</small>
                         <strong>{marginAmount != null ? formatMoney(marginAmount) : '—'}</strong>
                         <span>{marginPct ? Number(marginPct).toFixed(2) + '% margin' : 'No margin entered'}</span>
+                        {marginAmount != null && pricingSettings.minMarginAmount > 0 && marginAmount < pricingSettings.minMarginAmount && (
+                          <span className="eq-margin-warning">Below the {formatMoney(pricingSettings.minMarginAmount)} minimum profit per load</span>
+                        )}
                       </div>
                       <label className="eq-money-field">
                         <span><CalendarDays size={14} /> Quote valid through</span>
@@ -1811,6 +2112,16 @@ export default function EmailQuoteInboxPage() {
                         <label>Follow-up date
                           <input type="date" value={followUpAt} onChange={function(e) { setFollowUpAt(e.target.value); }} />
                         </label>
+                        {outcome === 'awarded' && (
+                          <>
+                            <label>Carrier pay (buy rate)
+                              <input inputMode="decimal" placeholder="What you pay the carrier" value={truckCost} onChange={function(e) { setTruckCost(e.target.value); }} />
+                            </label>
+                            <label>Covering carrier
+                              <input placeholder="Carrier or driver name" value={truckCarrierName} onChange={function(e) { setTruckCarrierName(e.target.value); }} />
+                            </label>
+                          </>
+                        )}
                       </div>
                       <label className="eq-notes-field">Outcome / follow-up notes
                         <textarea value={outcomeNotes} onChange={function(e) { setOutcomeNotes(e.target.value); }} placeholder="Customer response, loss reason, or next action..." />

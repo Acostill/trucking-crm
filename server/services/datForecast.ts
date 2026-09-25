@@ -1,6 +1,8 @@
 import https from 'https';
 import { UnifiedQuoteRequest, APIResponse, ErrorResponse } from '../types/quote';
 
+const DAT_API_TIMEOUT_MS = Number(process.env.CARRIER_API_TIMEOUT_MS) || 20000;
+
 /**
  * DAT Forecast API request structure (internal format sent to DAT API)
  */
@@ -100,7 +102,8 @@ function getDATAccessToken(): Promise<string> {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Content-Length': Buffer.byteLength(payload)
-      }
+      },
+      timeout: DAT_API_TIMEOUT_MS
     };
 
     const apiReq = https.request(options, function(apiRes) {
@@ -124,6 +127,9 @@ function getDATAccessToken(): Promise<string> {
       });
     });
 
+    apiReq.on('timeout', function() {
+      apiReq.destroy(new Error('DAT authentication timed out.'));
+    });
     apiReq.on('error', function(err) {
       reject(err);
     });
@@ -201,7 +207,8 @@ export function callDATForecastAPI(body: UnifiedQuoteRequest): Promise<APIRespon
           'Accept': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
           'Content-Length': Buffer.byteLength(payload)
-        }
+        },
+        timeout: DAT_API_TIMEOUT_MS
       };
 
       const apiReq = https.request(options, function(apiRes) {
@@ -261,6 +268,9 @@ export function callDATForecastAPI(body: UnifiedQuoteRequest): Promise<APIRespon
         });
       });
 
+      apiReq.on('timeout', function() {
+        apiReq.destroy(new Error('DAT forecast timed out.'));
+      });
       apiReq.on('error', function(err) {
         reject(err);
       });

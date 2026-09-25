@@ -49,6 +49,10 @@ class FakeQueueClient {
       }
       return { rows: [] };
     }
+    if (statement.startsWith('SELECT id, result_payload, completed_at FROM public.dat_rateview_jobs')) {
+      // Cross-quote RateView reuse: nothing recent on this lane in the fake.
+      return { rows: [] };
+    }
     if (statement.startsWith('SELECT * FROM public.dat_rateview_jobs')) {
       return {
         rows: this.jobs.filter(function(job) {

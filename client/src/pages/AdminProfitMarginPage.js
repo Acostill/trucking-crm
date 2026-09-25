@@ -3,6 +3,10 @@ import Sidebar from '../components/Sidebar';
 import AuthForm from '../components/AuthForm';
 import { useAuth } from '../context/AuthContext';
 import { buildApiUrl } from '../config';
+import ExpediteRateTable from '../components/ExpediteRateTable';
+import PricingScorecard from '../components/PricingScorecard';
+import MarketWatch from '../components/MarketWatch';
+import PricingRules from '../components/PricingRules';
 
 const DEFAULT_RULE_ID = 1;
 
@@ -15,6 +19,9 @@ export default function AdminProfitMarginPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
+  // Bumped when rates change so the rate table and market watch reload together.
+  const [pricingVersion, setPricingVersion] = useState(0);
+  function bumpPricingVersion() { setPricingVersion(function(value) { return value + 1; }); }
 
   useEffect(function() {
     if (!user || !isAdmin) {
@@ -112,8 +119,8 @@ export default function AdminProfitMarginPage() {
       <main className="app-main">
         <div className="app-content admin-profit-page">
           <div className="page-header">
-            <h1 className="page-title">Profit Margin</h1>
-            <p className="page-subtitle">Set the default profit margin for future loads.</p>
+            <h1 className="page-title">Pricing</h1>
+            <p className="page-subtitle">Default margin, expedite rates, and how your quotes are performing.</p>
           </div>
 
           {!isAdmin ? (
@@ -146,6 +153,14 @@ export default function AdminProfitMarginPage() {
                   {saving ? 'Saving…' : (status ? 'Saved' : 'Save changes')}
                 </button>
               </div>
+            </div>
+          )}
+          {isAdmin && (
+            <div className="pricing-admin-stack">
+              <PricingRules />
+              <ExpediteRateTable reloadKey={pricingVersion} onSaved={bumpPricingVersion} />
+              <MarketWatch reloadKey={pricingVersion} onApplied={bumpPricingVersion} />
+              <PricingScorecard />
             </div>
           )}
         </div>

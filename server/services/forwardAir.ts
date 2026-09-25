@@ -98,6 +98,9 @@ function toWeightType(unit: string): string {
   return normalized === 'kg' || normalized === 'kilogram' || normalized === 'kilograms' ? 'K' : 'L';
 }
 
+// A slow carrier must not leave a quote stuck in "rating".
+const CARRIER_API_TIMEOUT_MS = Number(process.env.CARRIER_API_TIMEOUT_MS) || 20000;
+
 function ymd(value: any): string | undefined {
   const match = String(value || '').match(/^(\d{4}-\d{2}-\d{2})(?:T|$)/);
   return match ? match[1] : undefined;
@@ -162,7 +165,8 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
     return new Promise<APIResponse<ForwardAirResponse | ErrorResponse>>((resolve, reject) => {
       const request = https.request({
         method: 'POST', hostname: config.endpoint!.hostname, path: config.endpoint!.pathname,
-        headers: { 'Content-Type': 'application/xml', 'Accept': 'application/xml', 'Content-Length': Buffer.byteLength(xmlBody), user: config.username!, password: config.password!, customerId: config.customerId! }
+        headers: { 'Content-Type': 'application/xml', 'Accept': 'application/xml', 'Content-Length': Buffer.byteLength(xmlBody), user: config.username!, password: config.password!, customerId: config.customerId! },
+        timeout: CARRIER_API_TIMEOUT_MS
       }, function(response) {
         let raw = '';
         response.on('data', function(chunk) { raw += chunk; });
@@ -175,6 +179,9 @@ export function callForwardAirAPI(body: UnifiedQuoteRequest): Promise<APIRespons
             });
           } else resolve({ statusCode: response.statusCode || 502, data: { error: 'Forward Air returned an unexpected response format.' } });
         });
+      });
+      request.on('timeout', function() {
+        request.destroy(new Error(`Forward Air did not respond within ${CARRIER_API_TIMEOUT_MS / 1000}s.`));
       });
       request.on('error', reject);
       request.write(xmlBody);

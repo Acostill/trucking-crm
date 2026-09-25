@@ -16,6 +16,9 @@ export function buildQuoteAdvisor(shipment: any, carrierQuotes: any[]): QuoteAdv
   const directRates = (carrierQuotes || []).filter(function(option) {
     return option && option.available && option.selectable !== false && option.benchmark !== true && numberValue(option.cost);
   });
+  const estimates = (carrierQuotes || []).filter(function(option) {
+    return option && option.available && option.selectable === true && option.benchmark === true && numberValue(option.cost);
+  });
   const datBenchmark = (carrierQuotes || []).find(function(option) {
     return option && ['datRateView', 'datSpot', 'datContract'].includes(option.key) && option.available;
   });
@@ -37,9 +40,19 @@ export function buildQuoteAdvisor(shipment: any, carrierQuotes: any[]): QuoteAdv
     });
   }
 
-  checks.push(directRates.length
-    ? { tone: 'good', label: 'Bookable pricing', detail: `${directRates.length} connected carrier rate${directRates.length === 1 ? '' : 's'} available.` }
-    : { tone: 'warning', label: 'Bookable pricing', detail: 'No connected carrier returned a selectable rate.' });
+  if (directRates.length) {
+    checks.push({ tone: 'good', label: 'Bookable pricing', detail: `${directRates.length} connected carrier rate${directRates.length === 1 ? '' : 's'} available.` });
+  } else if (estimates.length) {
+    // Market-first quoting: the truck is covered after award, so confirm the
+    // estimate leaves room to find one at or below this cost.
+    checks.push({
+      tone: 'info',
+      label: 'Priced from estimate',
+      detail: `${estimates.map(function(option) { return option.source; }).join(' and ')} sets the expected truck cost. Cover the load after award at or below it.`
+    });
+  } else {
+    checks.push({ tone: 'warning', label: 'Bookable pricing', detail: 'No carrier rate, market rate, or rate-table price is available yet.' });
+  }
 
   if (datBenchmark) {
     const market = datBenchmark.market || datBenchmark;
@@ -67,7 +80,7 @@ export function buildQuoteAdvisor(shipment: any, carrierQuotes: any[]): QuoteAdv
     !aiRecommendation.accepted &&
     (!assignment || assignment.source !== 'staff')
   );
-  const reviewRequired = !assignment || assignment.status !== 'assigned' || !directRates.length || unNumbers.length > 0 || aiNeedsReview;
+  const reviewRequired = !assignment || assignment.status !== 'assigned' || !(directRates.length || estimates.length) || unNumbers.length > 0 || aiNeedsReview;
   return {
     reviewRequired,
     summary: reviewRequired
