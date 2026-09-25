@@ -16,10 +16,18 @@ export interface AccessorialCharge {
   amount: number;
   perHour: boolean;
   isActive: boolean;
+  // 'auto': added to estimated buy rates. 'if_applicable': shown on quotes
+  // as a term, billed only if it happens (detention, truck ordered not used).
+  billing: 'auto' | 'if_applicable';
+  // Vehicles whose all-in rate already covers this extra (liftgate on box trucks).
+  includedFor: string[];
+  // For per-vehicle terms: Cargo Van, Box Truck, Straight Truck, or Truckload.
+  appliesTo: string | null;
 }
 
 export interface QuoteExtras {
   items: Array<{ code: string; label: string; amount: number }>;
+  // Extras the vehicle's all-in rate already covers (shown, not charged).
   notes: string[];
   urgency: 'same_day' | 'next_day' | null;
   urgencyPct: number;
@@ -49,7 +57,10 @@ export async function listAccessorialCharges(): Promise<AccessorialCharge[]> {
         label: row.label,
         amount: Number(row.amount),
         perHour: row.per_hour === true,
-        isActive: row.is_active !== false
+        isActive: row.is_active !== false,
+        billing: row.billing === 'if_applicable' ? 'if_applicable' : 'auto',
+        includedFor: Array.isArray(row.included_for) ? row.included_for : [],
+        appliesTo: row.applies_to || null
       };
     });
   } catch (_err) {
@@ -70,10 +81,17 @@ export function computeQuoteExtras(
 ): QuoteExtras {
   const byCode: Record<string, AccessorialCharge> = {};
   charges.filter(function(charge) { return charge.isActive; }).forEach(function(charge) { byCode[charge.code] = charge; });
+  const vehicle = String(shipment.truckType || '').replace(/^Reefer\s+/i, '');
   const items: QuoteExtras['items'] = [];
+  const included: string[] = [];
   const add = function(code: string) {
     const charge = byCode[code];
-    if (charge && !charge.perHour) items.push({ code, label: charge.label, amount: charge.amount });
+    if (!charge || charge.perHour || charge.billing !== 'auto') return;
+    if (charge.includedFor.indexOf(vehicle) > -1) {
+      if (included.indexOf(charge.label) === -1) included.push(charge.label);
+      return;
+    }
+    items.push({ code, label: charge.label, amount: charge.amount });
   };
 
   const codes = (shipment.accessorialCodes || []).map(function(code) { return String(code || '').toUpperCase(); });
@@ -106,9 +124,7 @@ export function computeQuoteExtras(
     else if (pickupDay === tomorrow) { urgency = 'next_day'; urgencyPct = settings.nextDayPremiumPct; }
   }
 
-  const notes: string[] = [];
-  const detention = byCode.DETENTION;
-  if (detention && detention.isActive) notes.push(`Detention ${'$'}${detention.amount}/hr after 2 free hours is billed separately if it happens.`);
+  const notes: string[] = included.map(function(label) { return `${label} included in the ${vehicle.toLowerCase()} rate`; });
   return { items, notes, urgency, urgencyPct };
 }
 
@@ -126,6 +142,7 @@ export function applyEstimateExtras(options: CarrierQuoteOption[], extras: Quote
     const urgencyAmount = Number((baseCost * extras.urgencyPct / 100).toFixed(2));
     const parts: string[] = [];
     if (extras.items.length) parts.push(extras.items.map(function(item) { return `${item.label} +$${item.amount}`; }).join(', '));
+    if (extras.notes.length) parts.push(extras.notes.join(', '));
     if (urgencyAmount) parts.push(`${extras.urgency === 'same_day' ? 'Same-day' : 'Next-day'} +${extras.urgencyPct}% ($${Math.round(urgencyAmount)})`);
     return {
       ...option,

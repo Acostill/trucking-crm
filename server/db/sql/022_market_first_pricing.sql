@@ -116,6 +116,30 @@ ALTER TABLE audit.loads_audit
   ADD COLUMN IF NOT EXISTS carrier_pay NUMERIC(12,2),
   ADD COLUMN IF NOT EXISTS carrier_name TEXT;
 
+-- Jack, Sept 2026: box and straight trucks come with a liftgate, so it is
+-- included in their all-in rate. Detention/layover and truck-ordered-not-used
+-- are billed only if they happen, so they appear on quotes as terms instead
+-- of being added to the price.
+ALTER TABLE public.accessorial_charges
+  ADD COLUMN IF NOT EXISTS billing TEXT NOT NULL DEFAULT 'auto',
+  ADD COLUMN IF NOT EXISTS included_for TEXT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS applies_to TEXT;
+
+UPDATE public.accessorial_charges
+SET included_for = ARRAY['Box Truck', 'Straight Truck']
+WHERE code = 'LIFTGATE' AND included_for = '{}';
+
+UPDATE public.accessorial_charges
+SET billing = 'if_applicable', label = 'Detention / layover after 2 free hours'
+WHERE code = 'DETENTION' AND billing = 'auto';
+
+INSERT INTO public.accessorial_charges (code, label, amount, per_hour, sort_order, billing, applies_to) VALUES
+  ('TONU_CARGO_VAN', 'Truck ordered not used: cargo van', 150, FALSE, 9, 'if_applicable', 'Cargo Van'),
+  ('TONU_BOX_TRUCK', 'Truck ordered not used: box truck', 200, FALSE, 10, 'if_applicable', 'Box Truck'),
+  ('TONU_STRAIGHT_TRUCK', 'Truck ordered not used: straight truck', 250, FALSE, 11, 'if_applicable', 'Straight Truck'),
+  ('TONU_TRUCKLOAD', 'Truck ordered not used: 53'' truckload', 350, FALSE, 12, 'if_applicable', 'Truckload')
+ON CONFLICT (code) DO NOTHING;
+
 -- Trial-run comparison: what the system would have charged at pricing time.
 ALTER TABLE public.email_quote_requests
   ADD COLUMN IF NOT EXISTS system_suggested_price NUMERIC(12,2),

@@ -24,6 +24,7 @@ import { syncCarrierPay } from '../services/carrierPay';
 import { requestExpediteAllCoverRate } from '../services/coverRates';
 import { addManualCarrierPrice } from '../services/manualCarrierPrice';
 import { getPricingSettings } from '../services/pricingSettings';
+import { listAccessorialCharges } from '../services/quoteExtras';
 import { buildPricingReport } from '../services/pricingReport';
 import { buildQuoteAdvisor } from '../services/quoteAdvisor';
 import { answerQuoteAdvisorQuestion } from '../services/quoteAdvisorChat';
@@ -239,8 +240,17 @@ router.get('/', async function(req: Request, res: Response, next: NextFunction) 
 router.get('/pricing-settings', async function(req: Request, res: Response, next: NextFunction) {
   try {
     if (!await requireOperationsUser(req, res)) return;
-    const settings = await getPricingSettings();
-    res.json({ minMarginAmount: settings.minMarginAmount, trialMode: settings.trialMode });
+    const [settings, charges] = await Promise.all([getPricingSettings(), listAccessorialCharges()]);
+    res.json({
+      minMarginAmount: settings.minMarginAmount,
+      trialMode: settings.trialMode,
+      // Charges billed only if they happen, listed on customer quotes as terms.
+      conditionalCharges: charges
+        .filter(function(charge) { return charge.isActive && charge.billing === 'if_applicable'; })
+        .map(function(charge) {
+          return { code: charge.code, label: charge.label, amount: charge.amount, perHour: charge.perHour, appliesTo: charge.appliesTo };
+        })
+    });
   } catch (err) {
     next(err);
   }

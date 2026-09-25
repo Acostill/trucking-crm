@@ -132,12 +132,16 @@ assert.strictEqual(clientPriceFor(3000, 10, 150), 3300);
 assert.strictEqual(buildCarrierRecommendation([{ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 350 }], 10, 150)!.suggestedClientPrice, 500);
 
 // Extras and urgency on estimates only.
+const charge = function(code: string, label: string, amount: number, extra: any = {}): any {
+  return { code, label, amount, perHour: false, isActive: true, billing: 'auto', includedFor: [], appliesTo: null, ...extra };
+};
 const charges = [
-  { code: 'LIFTGATE', label: 'Liftgate', amount: 100, perHour: false, isActive: true },
-  { code: 'RESIDENTIAL', label: 'Residential', amount: 100, perHour: false, isActive: true },
-  { code: 'HAZMAT', label: 'Hazmat', amount: 150, perHour: false, isActive: true },
-  { code: 'AFTER_HOURS', label: 'After hours', amount: 150, perHour: false, isActive: true },
-  { code: 'DETENTION', label: 'Detention', amount: 75, perHour: true, isActive: true }
+  charge('LIFTGATE', 'Liftgate', 100, { includedFor: ['Box Truck', 'Straight Truck'] }),
+  charge('RESIDENTIAL', 'Residential', 100),
+  charge('HAZMAT', 'Hazmat', 150),
+  charge('AFTER_HOURS', 'After hours', 150),
+  charge('DETENTION', 'Detention', 75, { perHour: true, billing: 'if_applicable' }),
+  charge('TONU_BOX_TRUCK', 'Truck ordered not used', 200, { billing: 'if_applicable', appliesTo: 'Box Truck' })
 ];
 const premiums = { sameDayPremiumPct: 50, nextDayPremiumPct: 15 };
 const monday = new Date('2099-06-01T15:00:00Z');
@@ -153,6 +157,15 @@ assert.strictEqual(computeQuoteExtras(shipment({ pickup: { location: {}, date: '
 const weekend = computeQuoteExtras(shipment({ pickup: { location: {}, date: '2099-06-13' } }), charges, premiums, monday);
 assert.deepStrictEqual(weekend.items.map(function(item) { return item.code; }), ['AFTER_HOURS']);
 assert.strictEqual(weekend.urgency, null);
+
+// Box and straight trucks carry a liftgate in their all-in rate (Jack, Sept 2026).
+const boxExtras = computeQuoteExtras(shipment({
+  truckType: 'Box Truck',
+  pickup: { location: {}, date: '2099-06-10' },
+  accessorialCodes: ['LIFTGATE_DELIVERY', 'RESIDENTIAL_DELIVERY']
+}), charges, premiums, monday);
+assert.deepStrictEqual(boxExtras.items.map(function(item) { return item.code; }), ['RESIDENTIAL']);
+assert.strictEqual(boxExtras.notes.length, 1);
 
 const withExtras = applyEstimateExtras([
   { key: 'rateTable', source: 'Rate table', available: true, selectable: true, benchmark: true, cost: 1000 },

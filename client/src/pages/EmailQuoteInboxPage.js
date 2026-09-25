@@ -1034,8 +1034,27 @@ export default function EmailQuoteInboxPage() {
     selected && selected.selection && selected.selection.carrierKey,
     selected && selected.selection && selected.selection.clientPrice
   ]);
-  const emailFuelSurcharge = (emailRateDrafts[emailRateDraftKey] || {}).fuelSurcharge || 'unconfirmed';
-  const emailIncludedServices = (emailRateDrafts[emailRateDraftKey] || {}).includedServices || '';
+  // Quotes are all-in by default (fuel and ticked extras included); staff can
+  // change either for a customer who wants fuel or extras listed separately.
+  const emailDraft = emailRateDrafts[emailRateDraftKey] || {};
+  const emailFuelSurcharge = emailDraft.fuelSurcharge || 'included';
+  const quoteShipment = (selected && selected.shipment) || {};
+  const quoteVehicle = String(quoteShipment.truckType || '').replace(/^Reefer\s+/i, '');
+  const tickedExtras = EXTRA_OPTIONS
+    .filter(function(option) { return (quoteShipment.accessorialCodes || []).indexOf(option[0]) > -1; })
+    .map(function(option) { return option[1]; });
+  const emailIncludedServices = emailDraft.includedServices !== undefined
+    ? emailDraft.includedServices
+    : tickedExtras.join(', ');
+  const tonuVehicle = ['Cargo Van', 'Box Truck', 'Straight Truck'].indexOf(quoteVehicle) > -1 ? quoteVehicle : quoteVehicle ? 'Truckload' : '';
+  const emailAdditionalCharges = (pricingSettings.conditionalCharges || [])
+    .filter(function(charge) { return !charge.appliesTo || charge.appliesTo === tonuVehicle; })
+    .map(function(charge) {
+      return charge.perHour
+        ? 'Detention and layover after 2 free hours, based on wait time'
+        : 'Truck ordered not used: $' + Number(charge.amount).toFixed(0);
+    })
+    .join('. ');
 
   function updateEmailRateDraft(changes) {
     setEmailRateDrafts(function(current) {
@@ -1057,10 +1076,11 @@ export default function EmailQuoteInboxPage() {
       recipientEmail: emailTo.trim(),
       fuelSurcharge: emailFuelSurcharge,
       includedServices: emailIncludedServices,
+      additionalCharges: emailAdditionalCharges,
       // Email recipients need an absolute, publicly served image URL.
       logoUrl: new URL('/brand/logo.png', window.location.origin).href
     });
-  }, [selected, emailNote, quoteValidUntil, emailTo, emailFuelSurcharge, emailIncludedServices]);
+  }, [selected, emailNote, quoteValidUntil, emailTo, emailFuelSurcharge, emailIncludedServices, emailAdditionalCharges]);
 
   function chooseCarrier(option) {
     if (!isPriceableOption(option)) return;

@@ -143,13 +143,17 @@ export default function PricingRules() {
           <h3 className="pricing-subtitle">Extras price list (what carriers charge you)</h3>
           <div className="pricing-table-wrap">
             <table className="pricing-table">
-              <thead><tr><th>Extra</th><th>Cost</th><th>Active</th><th /></tr></thead>
+              <thead><tr><th>Extra</th><th>Cost</th><th>How it's billed</th><th>Active</th><th /></tr></thead>
               <tbody>
                 {charges.map(function(charge) {
                   return (
                     <tr key={charge.code}>
                       <td>{charge.label}</td>
                       <td>$ <input type="number" min="0" step="5" value={charge.amount} onChange={function(e) { updateCharge(charge.code, 'amount', e.target.value); }} />{charge.perHour ? ' / hr' : ''}</td>
+                      <td className="pricing-card-help">
+                        {charge.billing === 'if_applicable' ? 'Listed on quotes; billed only if it happens' : 'Added to the buy rate'}
+                        {charge.includedFor && charge.includedFor.length ? ' · included for ' + charge.includedFor.join(' and ').toLowerCase() + 's' : ''}
+                      </td>
                       <td><input type="checkbox" checked={charge.isActive} onChange={function(e) { updateCharge(charge.code, 'isActive', e.target.checked); }} /></td>
                       <td><button className="primary-btn" onClick={function() { saveCharge(charge); }} disabled={saving === charge.code}>{saving === charge.code ? 'Saving…' : 'Save'}</button></td>
                     </tr>
@@ -158,7 +162,7 @@ export default function PricingRules() {
               </tbody>
             </table>
           </div>
-          <p className="pricing-card-help">Detention is shown on quotes as a note, since it only applies if the truck waits.</p>
+          <p className="pricing-card-help">Quotes are all-in by default: fuel and ticked extras are included in the sell rate. Detention, layover and truck-ordered-not-used are listed on the customer quote and billed only if they happen.</p>
         </>
       )}
       {error && <div className="admin-message error">{error}</div>}

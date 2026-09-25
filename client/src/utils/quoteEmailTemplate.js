@@ -71,7 +71,7 @@ function locationHtml(location) {
 
 // Inline styles and presentation tables keep the essential layout independent
 // of the CRM stylesheet. The same complete document is previewed and sent.
-export function buildQuoteEmailHtml({ quote, note, validUntil, recipientName, recipientEmail, logoUrl, fuelSurcharge = 'unconfirmed', includedServices = '' }) {
+export function buildQuoteEmailHtml({ quote, note, validUntil, recipientName, recipientEmail, logoUrl, fuelSurcharge = 'unconfirmed', includedServices = '', additionalCharges = '' }) {
   const shipment = (quote && quote.shipment) || {};
   const pickup = shipment.pickup || {};
   const delivery = shipment.delivery || {};
@@ -128,7 +128,8 @@ export function buildQuoteEmailHtml({ quote, note, validUntil, recipientName, re
   };
   const rateDetails = detailRows([
     ['Fuel surcharge', fuelLabels[fuelSurcharge] || fuelLabels.unconfirmed],
-    ['Included extra services', includedServices.trim() || 'No extra services confirmed as included']
+    ['Included extra services', includedServices.trim() || 'No extra services confirmed as included'],
+    ...(additionalCharges.trim() ? [['Billed only if they happen', additionalCharges.trim()]] : [])
   ]);
   const noteHtml = note && note.trim()
     ? '<p style="margin:8px 0 0;font-size:13px;line-height:1.7;color:#3c3c3c;overflow-wrap:break-word;">'
