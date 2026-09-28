@@ -64,6 +64,7 @@ test('uses explicit fuel and service declarations without changing the customer 
   expect(included.value('Included extra services')).toBe('Liftgate at delivery');
   expect(included.doc.body.textContent).toContain('$1,473.37');
   expect(read(makeEmail({ fuelSurcharge: 'excluded' })).value('Fuel surcharge')).toBe('Not included; quoted separately');
+  expect(read(makeEmail({ additionalCharges: 'Truck ordered not used: $200' })).value('Billed only if they happen')).toBe('Truck ordered not used: $200');
   expect(read(makeEmail({ fuelSurcharge: 'unexpected' })).value('Fuel surcharge')).toBe('Confirm before booking');
 });
 

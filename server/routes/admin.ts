@@ -5,6 +5,11 @@ import {
   getForwardAirConnectionStatus,
   saveForwardAirCredentials
 } from '../services/carrierConnectionCredentials';
+import { listExpediteRateRules } from '../services/expediteRateTable';
+import { getPricingSettings, updatePricingSettings } from '../services/pricingSettings';
+import { dieselOn, refreshDieselPrices } from '../services/marketData';
+import { listAccessorialCharges } from '../services/quoteExtras';
+import { applyRateSuggestion, buildMarketReport, recordRateChange } from '../services/marketReport';
 
 const router = express.Router();
 const SESSION_COOKIE = 'session_token';
@@ -162,6 +167,212 @@ router.put('/profit-margin/:id', async function(req: Request, res: Response, nex
     });
   } catch (err) {
     next(err);
+  }
+});
+
+// Expedite buy-rate table: what First Class expects to pay per loaded mile
+// for each vehicle, used to quote expedite loads without asking a carrier.
+const EXPEDITE_VEHICLE_TYPES = [
+  'Cargo Van', 'Box Truck', 'Straight Truck',
+  'Reefer Cargo Van', 'Reefer Box Truck', 'Reefer Straight Truck'
+];
+
+router.get('/pricing-settings', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await getPricingSettings());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/pricing-settings', async function(req: Request, res: Response, next: NextFunction) {
+  const body = req.body || {};
+  const changes: any = {};
+  for (const key of ['expediteAllBeforeAward', 'trialMode']) {
+    if (body[key] === undefined) continue;
+    if (typeof body[key] !== 'boolean') {
+      res.status(400).json({ error: `${key} must be true or false` });
+      return;
+    }
+    changes[key] = body[key];
+  }
+  const limits: Record<string, [number, number]> = {
+    minMarginAmount: [0, 5000],
+    sameDayPremiumPct: [0, 200],
+    nextDayPremiumPct: [0, 200]
+  };
+  for (const key of Object.keys(limits)) {
+    if (body[key] === undefined) continue;
+    const value = Number(body[key]);
+    if (!Number.isFinite(value) || value < limits[key][0] || value > limits[key][1]) {
+      res.status(400).json({ error: `${key} must be between ${limits[key][0]} and ${limits[key][1]}` });
+      return;
+    }
+    changes[key] = value;
+  }
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    res.json(await updatePricingSettings(changes, userId || null));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/accessorial-charges', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ charges: await listAccessorialCharges() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/accessorial-charges/:code', async function(req: Request, res: Response, next: NextFunction) {
+  const amount = Number(req.body && req.body.amount);
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10000) {
+    res.status(400).json({ error: 'amount must be between 0 and 10,000' });
+    return;
+  }
+  const isActive = !(req.body && req.body.isActive === false);
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    const result = await db.queryWithUser(
+      `UPDATE public.accessorial_charges SET amount = $2, is_active = $3, updated_at = NOW()
+       WHERE code = $1 RETURNING code`,
+      [String(req.params.code || ''), amount, isActive],
+      userId
+    );
+    if (!result.rows.length) {
+      res.status(404).json({ error: 'Unknown extra charge' });
+      return;
+    }
+    res.json({ charges: await listAccessorialCharges() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/expedite-rate-rules', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json({ vehicleTypes: EXPEDITE_VEHICLE_TYPES, rules: await listExpediteRateRules() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/expedite-rate-rules/:vehicleType', async function(req: Request, res: Response, next: NextFunction) {
+  const vehicleType = String(req.params.vehicleType || '');
+  if (EXPEDITE_VEHICLE_TYPES.indexOf(vehicleType) === -1) {
+    res.status(400).json({ error: 'Unknown expedite vehicle type' });
+    return;
+  }
+  const body = req.body || {};
+  const ratePerMile = Number(body.ratePerMile);
+  const baseCharge = Number(body.baseCharge != null && body.baseCharge !== '' ? body.baseCharge : 0);
+  const minimumCharge = Number(body.minimumCharge != null && body.minimumCharge !== '' ? body.minimumCharge : 0);
+  const milesPerGallon = body.milesPerGallon != null && body.milesPerGallon !== '' ? Number(body.milesPerGallon) : null;
+  const reeferSurchargePct = body.reeferSurchargePct != null && body.reeferSurchargePct !== '' ? Number(body.reeferSurchargePct) : 20;
+  if (!Number.isFinite(reeferSurchargePct) || reeferSurchargePct < 0 || reeferSurchargePct > 100) {
+    res.status(400).json({ error: 'reeferSurchargePct must be between 0 and 100' });
+    return;
+  }
+  if (!Number.isFinite(ratePerMile) || ratePerMile <= 0 || ratePerMile > 50) {
+    res.status(400).json({ error: 'ratePerMile must be between 0 and 50' });
+    return;
+  }
+  if (!Number.isFinite(baseCharge) || baseCharge < 0 || baseCharge > 100000) {
+    res.status(400).json({ error: 'baseCharge must be 0 or more' });
+    return;
+  }
+  if (!Number.isFinite(minimumCharge) || minimumCharge < 0 || minimumCharge > 100000) {
+    res.status(400).json({ error: 'minimumCharge must be 0 or more' });
+    return;
+  }
+  if (milesPerGallon != null && (!Number.isFinite(milesPerGallon) || milesPerGallon < 2 || milesPerGallon > 40)) {
+    res.status(400).json({ error: 'milesPerGallon must be between 2 and 40' });
+    return;
+  }
+  const isActive = !(body.isActive === false);
+  const notes = body.notes ? String(body.notes).slice(0, 1000) : null;
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    // Rates are entered at today's fuel price; later diesel moves are added
+    // to quotes automatically as a fuel adjustment.
+    const diesel = await dieselOn();
+    await db.transactionWithUser(async function(client) {
+      const previous = await client.query(
+        'SELECT base_charge, rate_per_mile, minimum_charge, miles_per_gallon, fuel_baseline_diesel FROM public.expedite_rate_rules WHERE vehicle_type = $1',
+        [vehicleType]
+      );
+      const prior = previous.rows[0];
+      const ratesChanged = !prior ||
+        Number(prior.base_charge) !== baseCharge ||
+        Number(prior.rate_per_mile) !== ratePerMile ||
+        Number(prior.minimum_charge) !== minimumCharge;
+      const fuelBaseline = ratesChanged
+        ? (diesel ? diesel.value : null)
+        : (prior.fuel_baseline_diesel == null ? null : Number(prior.fuel_baseline_diesel));
+      await client.query(
+        `INSERT INTO public.expedite_rate_rules (
+           vehicle_type, base_charge, rate_per_mile, minimum_charge, miles_per_gallon,
+           fuel_baseline_diesel, is_active, notes, updated_by, reefer_surcharge_pct
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (vehicle_type) DO UPDATE SET
+           base_charge = EXCLUDED.base_charge,
+           rate_per_mile = EXCLUDED.rate_per_mile,
+           minimum_charge = EXCLUDED.minimum_charge,
+           miles_per_gallon = EXCLUDED.miles_per_gallon,
+           fuel_baseline_diesel = EXCLUDED.fuel_baseline_diesel,
+           is_active = EXCLUDED.is_active,
+           notes = EXCLUDED.notes,
+           updated_by = EXCLUDED.updated_by,
+           reefer_surcharge_pct = EXCLUDED.reefer_surcharge_pct`,
+        [vehicleType, baseCharge, ratePerMile, minimumCharge, milesPerGallon, fuelBaseline, isActive, notes, userId || null, reeferSurchargePct]
+      );
+      if (ratesChanged) {
+        await recordRateChange(
+          client,
+          vehicleType,
+          prior ? { baseCharge: Number(prior.base_charge), ratePerMile: Number(prior.rate_per_mile), minimumCharge: Number(prior.minimum_charge) } : null,
+          { baseCharge, ratePerMile, minimumCharge, fuelBaselineDiesel: fuelBaseline },
+          'Edited on the Pricing page',
+          userId || null
+        );
+      }
+    }, userId);
+    res.json({ vehicleTypes: EXPEDITE_VEHICLE_TYPES, rules: await listExpediteRateRules() });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/expedite-rate-rules/:vehicleType/apply-suggestion', async function(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = (req as any).user && (req as any).user.id;
+    const applied = await applyRateSuggestion(String(req.params.vehicleType || ''), userId || null);
+    res.json({ applied, report: await buildMarketReport() });
+  } catch (err: any) {
+    if (err && err.status) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
+router.get('/market-report', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await buildMarketReport());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/market-data/refresh', async function(_req: Request, res: Response, next: NextFunction) {
+  try {
+    await refreshDieselPrices();
+    res.json(await buildMarketReport());
+  } catch (err: any) {
+    res.status(502).json({ error: err && err.message ? err.message : 'Unable to refresh market data' });
   }
 });
 

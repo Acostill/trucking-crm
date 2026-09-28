@@ -5,6 +5,8 @@ import http from 'http';
 import debugFactory from 'debug';
 import app from '../app';
 import { startGmailQuotePoller } from '../services/emailQuotePoller';
+import { startMarketDataRefresh } from '../services/marketData';
+import { startQuoteExpiry } from '../services/quoteExpiry';
 import { assertEnvironmentSafety } from '../config/environmentSafety';
 import { assertDatabaseIdentity } from '../config/databaseIdentity';
 
@@ -70,4 +72,6 @@ function onListening() {
     : 'port ' + (addr && (addr as any).port);
   debug('Listening on ' + bind);
   startGmailQuotePoller();
+  startMarketDataRefresh();
+  startQuoteExpiry();
 }

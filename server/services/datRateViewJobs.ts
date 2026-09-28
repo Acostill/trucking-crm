@@ -2,7 +2,13 @@ import crypto from 'crypto';
 import { isDeepStrictEqual } from 'util';
 import db from '../db';
 import { UnifiedQuoteRequest } from '../types/quote';
+import { pricingModeFor } from './quoteRouting';
+import { getDefaultProfitMarginPct } from './unifiedQuoteService';
+import { recordLaneObservation } from './laneHistory';
+import { applyEstimateExtras, loadQuoteExtras } from './quoteExtras';
+import { getPricingSettings } from './pricingSettings';
 import {
+  buildCarrierRecommendation,
   CarrierQuoteOption,
   mergeDatCarrierOptions
 } from './carrierQuoteOptions';
@@ -136,6 +142,15 @@ function cleanText(value: any): string {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
 
+// A RateView result for the same lane and equipment is reused across quotes
+// for this long instead of spending another DAT search.
+export const DAT_RATEVIEW_REUSE_HOURS = Number(process.env.DAT_RATEVIEW_REUSE_HOURS) || 48;
+
+/** DAT prices 53' equipment; expedite vehicles are priced from the rate table. */
+export function isDatApplicable(shipment: UnifiedQuoteRequest): boolean {
+  return pricingModeFor(shipment) !== 'expedite';
+}
+
 export function isDatWorkerEnabled(): boolean {
   return String(process.env.DAT_WORKER_ENABLED || '').toLowerCase() === 'true';
 }
@@ -167,7 +182,7 @@ export function buildDatRateViewRequest(
   const origin = locationLabel(shipment.pickup && shipment.pickup.location);
   const destination = locationLabel(shipment.delivery && shipment.delivery.location);
   const equipmentType = normalizeDatEquipment(shipment);
-  if (!origin || !destination || !equipmentType) return null;
+  if (!origin || !destination || !equipmentType || !isDatApplicable(shipment)) return null;
   const canonical = JSON.stringify({
     origin: origin.toLowerCase(),
     destination: destination.toLowerCase(),
@@ -229,7 +244,7 @@ export function buildDatSearchLoadsRequest(
   const destination = locationLabel(shipment.delivery && shipment.delivery.location);
   const equipmentType = searchLoadsEquipment(normalizeDatEquipment(shipment));
   const pickupDate = pickupCalendarDate(shipment);
-  if (!origin || !destination || !equipmentType || !pickupDate) return null;
+  if (!origin || !destination || !equipmentType || !pickupDate || !isDatApplicable(shipment)) return null;
   const canonical = JSON.stringify({
     workflowId: DAT_SEARCH_LOADS_WORKFLOW_ID,
     schemaVersion: DAT_SEARCH_LOADS_SCHEMA_VERSION,
@@ -330,8 +345,11 @@ function resultCard(
     key,
     source,
     available: true,
-    selectable: false,
+    // Spot average is the broker's estimate of the truck cost to quote from;
+    // contract rates stay reference-only.
+    selectable: key === 'datSpot',
     benchmark: true,
+    pricingBasis: key === 'datSpot' ? 'market_estimate' : undefined,
     status: 'completed',
     cost: card.averageTotalUsd,
     marketAverage: card.averageTotalUsd,
@@ -736,6 +754,9 @@ export async function prepareDatRateViewOptions(
   shipment: UnifiedQuoteRequest
 ): Promise<CarrierQuoteOption[]> {
   await cancelStalePendingDatJobs(emailQuoteRequestId, shipment);
+  if (!isDatApplicable(shipment)) {
+    return [datPlaceholder('not_applicable', 'DAT prices 53\' trucks. This expedite load is priced from the First Class rate table.')];
+  }
   const searchLoadsOptions = await prepareExistingSearchLoadsOption(emailQuoteRequestId, shipment);
   if (!isDatWorkerEnabled()) {
     return [datPlaceholder('disabled', 'DAT worker is not enabled on the server.')].concat(searchLoadsOptions);
@@ -758,6 +779,50 @@ export async function prepareDatRateViewOptions(
     return mapDatRateViewResult(validateDatRateViewResult(jsonValue(job.result_payload, null))).concat(searchLoadsOptions);
   }
   return [placeholderForJobStatus(job.status, job.error_message)].concat(searchLoadsOptions);
+}
+
+/**
+ * The RateView fingerprint covers only origin, destination, and equipment, so
+ * a recent completed lookup on another quote answers this one too. The copy
+ * is stored as a completed job for this quote; the worker never sees it.
+ */
+async function reuseRecentRateView(
+  client: any,
+  emailQuoteRequestId: string,
+  candidate: { request: DatRateViewRequest; fingerprint: string },
+  approvedBy: string | null
+): Promise<any | null> {
+  const recent = await client.query(
+    `SELECT id, result_payload, completed_at
+     FROM public.dat_rateview_jobs
+     WHERE request_fingerprint = $1
+       AND email_quote_request_id <> $2
+       AND status = 'completed'
+       AND result_payload IS NOT NULL
+       AND completed_at > NOW() - ($3::text || ' hours')::interval
+     ORDER BY completed_at DESC
+     LIMIT 1`,
+    [candidate.fingerprint, emailQuoteRequestId, String(DAT_RATEVIEW_REUSE_HOURS)]
+  );
+  if (!recent.rows.length) return null;
+  const source = recent.rows[0];
+  const inserted = await client.query(
+    `INSERT INTO public.dat_rateview_jobs (
+       id, email_quote_request_id, request_fingerprint, status,
+       input_payload, result_payload, approved_by, approved_at, completed_at
+     ) VALUES ($1, $2, $3, 'completed', $4::jsonb, $5::jsonb, $6, NOW(), $7)
+     RETURNING *`,
+    [
+      `dat-job-${crypto.randomUUID()}`,
+      emailQuoteRequestId,
+      candidate.fingerprint,
+      JSON.stringify({ ...candidate.request, reusedFromJobId: source.id }),
+      JSON.stringify(jsonValue(source.result_payload, null)),
+      approvedBy,
+      source.completed_at
+    ]
+  );
+  return inserted.rows[0];
 }
 
 export async function requestDatRateViewLookup(
@@ -801,6 +866,9 @@ export async function requestDatRateViewLookup(
       throw err;
     }
     if (!job) {
+      job = await reuseRecentRateView(client, emailQuoteRequestId, candidate, approvedBy);
+    }
+    if (!job) {
       const inserted = await client.query(
         `INSERT INTO public.dat_rateview_jobs (
            id, email_quote_request_id, request_fingerprint, status,
@@ -836,14 +904,12 @@ export async function requestDatRateViewLookup(
     const datOptions = job.status === 'completed' && job.result_payload
       ? mapDatRateViewResult(validateDatRateViewResult(jsonValue(job.result_payload, null)))
       : [placeholderForJobStatus(job.status, job.error_message)];
-    const updated = await client.query(
-      `UPDATE public.email_quote_requests
-       SET carrier_quotes = $2::jsonb
-       WHERE id = $1
-       RETURNING *`,
-      [emailQuoteRequestId, JSON.stringify(mergeDatCarrierOptions(currentOptions, datOptions))]
+    return writeDatOptionsAndRecommendation(
+      client,
+      emailQuoteRequestId,
+      shipment,
+      mergeDatCarrierOptions(currentOptions, datOptions)
     );
-    return updated.rows[0];
   }, approvedBy);
 }
 
@@ -1148,6 +1214,49 @@ export async function startDatRateViewJob(id: string, workerId: string): Promise
   });
 }
 
+/**
+ * DAT answers after rating finishes. Once the market rate lands, rebuild the
+ * suggested price so a truckload quote waiting on DAT becomes ready.
+ */
+async function writeDatOptionsAndRecommendation(
+  client: any,
+  emailQuoteRequestId: string,
+  shipment: UnifiedQuoteRequest,
+  options: CarrierQuoteOption[]
+): Promise<any> {
+  const [marginPct, settings, extras] = await Promise.all([
+    getDefaultProfitMarginPct(),
+    getPricingSettings(),
+    loadQuoteExtras(shipment)
+  ]);
+  options = applyEstimateExtras(options, extras);
+  const recommendation = buildCarrierRecommendation(options, marginPct, settings.minMarginAmount);
+  const updated = await client.query(
+    `UPDATE public.email_quote_requests
+     SET carrier_quotes = $2::jsonb,
+         recommendation = COALESCE($3::jsonb, recommendation),
+         status = CASE
+           WHEN $3::jsonb IS NOT NULL AND status = 'needs_review' AND processing_error = $4 THEN 'ready'
+           ELSE status
+         END,
+         processing_error = CASE
+           WHEN $3::jsonb IS NOT NULL AND status = 'needs_review' AND processing_error = $4 THEN NULL
+           ELSE processing_error
+         END
+     WHERE id = $1
+     RETURNING *`,
+    [
+      emailQuoteRequestId,
+      JSON.stringify(options),
+      recommendation ? JSON.stringify(recommendation) : null,
+      WAITING_FOR_DAT_MESSAGE
+    ]
+  );
+  return updated.rows[0];
+}
+
+export const WAITING_FOR_DAT_MESSAGE = 'Waiting for the DAT market rate. The suggested price appears when DAT finishes.';
+
 async function updateQuoteDatPlaceholder(
   client: any,
   job: any,
@@ -1284,13 +1393,28 @@ export async function completeDatRateViewJob(
     const datOptions = isSearchLoads
       ? [mapDatSearchLoadsResult(result as DatSearchLoadsResult)]
       : mapDatRateViewResult(result as DatRateViewResult);
-    await client.query(
-      `UPDATE public.email_quote_requests SET carrier_quotes = $2::jsonb WHERE id = $1`,
-      [
-        updated.rows[0].email_quote_request_id,
-        JSON.stringify(mergeDatCarrierOptions(options, datOptions))
-      ]
+    await writeDatOptionsAndRecommendation(
+      client,
+      updated.rows[0].email_quote_request_id,
+      jsonValue(quote.shipment_request, {}),
+      mergeDatCarrierOptions(options, datOptions)
     );
+    if (!isSearchLoads) {
+      const shipment = jsonValue(quote.shipment_request, {});
+      for (const option of datOptions) {
+        await recordLaneObservation({
+          observationType: 'market_rate',
+          source: option.key,
+          emailQuoteRequestId: updated.rows[0].email_quote_request_id,
+          shipment,
+          miles: option.miles,
+          totalUsd: option.cost,
+          ratePerMile: option.ratePerMile,
+          requestFingerprint: updated.rows[0].request_fingerprint,
+          payload: option
+        }, client);
+      }
+    }
   });
 }
 

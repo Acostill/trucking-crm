@@ -58,7 +58,10 @@ function run() {
   });
   const datOptions = mapDatRateViewResult(result);
   assert.strictEqual(datOptions.length, 2);
-  assert.strictEqual(datOptions[0].selectable, false);
+  // Spot average is the market-first price basis; contract stays reference-only.
+  assert.strictEqual(datOptions[0].selectable, true);
+  assert.strictEqual(datOptions[0].pricingBasis, 'market_estimate');
+  assert.strictEqual(datOptions[1].selectable, false);
   assert.strictEqual(datOptions[0].marketLow, 3197);
 
   const unavailableRange = validateDatRateViewResult({
@@ -114,8 +117,13 @@ function run() {
   ];
   const recommendation = buildCarrierRecommendation(options, 18);
   assert(recommendation);
-  assert.strictEqual(recommendation.carrierKey, 'forwardAir');
-  assert.strictEqual(recommendation.carrierCost, 4100);
+  // Market-first: the DAT spot estimate leads; DAT contract is never the basis.
+  assert.strictEqual(recommendation.carrierKey, 'datSpot');
+  assert.strictEqual(recommendation.carrierCost, datOptions[0].cost);
+  const withoutSpot = buildCarrierRecommendation(options.filter(function(option) { return option.key !== 'datSpot'; }), 18);
+  assert(withoutSpot);
+  assert.strictEqual(withoutSpot.carrierKey, 'forwardAir');
+  assert.strictEqual(withoutSpot.carrierCost, 4100);
 
   console.log('DAT RateView integration contract tests passed.');
 }

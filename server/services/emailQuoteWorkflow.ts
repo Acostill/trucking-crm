@@ -4,6 +4,7 @@ import { parseEmailWithOpenRouter } from '../routes/index';
 import { N8nEmailPasteResponse } from '../types/n8n';
 import { StandardizedQuote, UnifiedQuoteRequest } from '../types/quote';
 import {
+  ensureZipsAndStateInQuoteRequest,
   getDefaultProfitMarginPct,
   getUnifiedQuotes,
   UnifiedQuoteResponse
@@ -16,11 +17,24 @@ import {
 import {
   cancelStalePendingDatJobs,
   isDatSearchPickupDateCurrentOrFuture,
+  isDatWorkerEnabled,
   prepareDatRateViewOptions,
-  queueAutomaticDatLookups
+  queueAutomaticDatLookups,
+  WAITING_FOR_DAT_MESSAGE
 } from './datRateViewJobs';
+import { buildPricingPlan, pricingModeFor } from './quoteRouting';
+import { buildRateTableOption, findExpediteRateRule } from './expediteRateTable';
+import { getPricingSettings } from './pricingSettings';
+import { applyEstimateExtras, loadQuoteExtras } from './quoteExtras';
+import {
+  carrierRequestFingerprint,
+  findCachedCarrierOption,
+  laneHistoryOption,
+  recordCarrierOptions
+} from './laneHistory';
 import { assignTruckType } from './truckAssignment';
 import { adviseShipmentWithOpenAI } from './shipmentAIAdvisor';
+import { extrasFromEmailText } from './emailExtras';
 import {
   dimensionToInches,
   normalizeAirportLocation,
@@ -41,10 +55,28 @@ function finiteNumber(value: any): number | undefined {
   return Number.isFinite(number) && number > 0 ? number : undefined;
 }
 
-function normalizedDate(value: any): string | undefined {
+// Emails say "September 30" or "8/3" without a year. JavaScript reads those
+// as 2001, which made every such quote look like a past pickup date.
+const YEAR_PATTERN = /\b(19|20)\d{2}\b/;
+const YEARLESS_ROLLOVER_DAYS = 60;
+
+export function normalizedDate(value: any, now: Date = new Date()): string | undefined {
   if (!value) return undefined;
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+  const text = String(value).trim();
+  if (!text) return undefined;
+  if (!YEAR_PATTERN.test(text)) {
+    const slash = text.match(/^(\d{1,2})[\/-](\d{1,2})$/);
+    const base = slash ? `${slash[1]}/${slash[2]}` : text;
+    const thisYear = new Date(`${base} ${now.getFullYear()} 12:00`);
+    if (!Number.isNaN(thisYear.getTime())) {
+      // A date well in the past most likely means next year ("Jan 5" sent in December).
+      const stale = now.getTime() - thisYear.getTime() > YEARLESS_ROLLOVER_DAYS * 86400000;
+      const date = stale ? new Date(`${base} ${now.getFullYear() + 1} 12:00`) : thisYear;
+      return date.toISOString();
+    }
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? text : date.toISOString();
 }
 
 function normalizeAccessorial(value: string): string {
@@ -267,6 +299,11 @@ function carrierOption(
     ...(total ? { cost: total } : {}),
     ...(finiteNumber(quote && quote.lineHaul) ? { lineHaul: Number(quote!.lineHaul) } : {}),
     ...(finiteNumber(quote && quote.ratePerMile) ? { ratePerMile: Number(quote!.ratePerMile) } : {}),
+    // ExpediteAll reports rate per mile on its line haul; the trip miles it
+    // implies feed lane history (mileage and rate-table calibration).
+    ...(finiteNumber(quote && quote.lineHaul) && finiteNumber(quote && quote.ratePerMile)
+      ? { miles: Math.round(Number(quote!.lineHaul) / Number(quote!.ratePerMile)) }
+      : {}),
     truckType: quote && quote.additionalInfo && quote.additionalInfo.truckType
       ? quote.additionalInfo.truckType
       : key === 'forwardAir' ? 'LTL' : undefined,
@@ -280,10 +317,52 @@ function carrierOption(
 }
 
 export function mapCarrierQuotes(response: UnifiedQuoteResponse): CarrierQuoteOption[] {
-  return [
-    carrierOption('forwardAir', response.forwardAir),
-    carrierOption('expediteAll', response.expediteAll)
-  ];
+  // A carrier the pricing plan did not ask is left off instead of shown as an error.
+  const options: CarrierQuoteOption[] = [];
+  if (!(response.forwardAir && response.forwardAir.skipped)) {
+    options.push(carrierOption('forwardAir', response.forwardAir));
+  }
+  if (!(response.expediteAll && response.expediteAll.skipped)) {
+    options.push(carrierOption('expediteAll', response.expediteAll));
+  }
+  return options;
+}
+
+/**
+ * Ask only the carriers the pricing plan needs, reusing an identical recent
+ * carrier rate from lane history instead of calling the carrier again.
+ */
+async function connectedCarrierOptions(
+  shipment: UnifiedQuoteRequest,
+  plan: { callForwardAir: boolean; callExpediteAll: boolean }
+): Promise<{ live: CarrierQuoteOption[]; cached: CarrierQuoteOption[] }> {
+  const forwardAirFingerprint = plan.callForwardAir ? carrierRequestFingerprint('forwardAir', shipment) : null;
+  const expediteAllFingerprint = plan.callExpediteAll ? carrierRequestFingerprint('expediteAll', shipment) : null;
+  const [cachedForwardAir, cachedExpediteAll] = await Promise.all([
+    findCachedCarrierOption('forwardAir', forwardAirFingerprint),
+    findCachedCarrierOption('expediteAll', expediteAllFingerprint)
+  ]);
+  const needForwardAir = plan.callForwardAir && !cachedForwardAir;
+  const needExpediteAll = plan.callExpediteAll && !cachedExpediteAll;
+  let live: CarrierQuoteOption[] = [];
+  if (needForwardAir || needExpediteAll) {
+    const unified = await getUnifiedQuotes(shipment, {
+      includeDat: false,
+      applyDefaultMargin: false,
+      includeForwardAir: needForwardAir,
+      includeExpediteAll: needExpediteAll
+    });
+    live = mapCarrierQuotes(unified).map(function(option) {
+      const fingerprint = option.key === 'forwardAir' ? forwardAirFingerprint : expediteAllFingerprint;
+      return {
+        ...option,
+        pricingBasis: 'carrier_rate' as const,
+        ...(fingerprint ? { requestFingerprint: fingerprint } : {})
+      };
+    });
+  }
+  const cached = [cachedForwardAir, cachedExpediteAll].filter(Boolean) as CarrierQuoteOption[];
+  return { live, cached };
 }
 
 export async function rateEmailQuoteRequest(
@@ -343,7 +422,9 @@ export async function rateEmailQuoteRequest(
   // truckType/datEquipmentType is the same payload sent to connected carriers
   // and queued for DAT.
   const aiResult = await adviseShipmentWithOpenAI(shipment);
-  const advisedShipment = aiResult.shipment;
+  // Resolve ZIPs once up front: lane history, mileage, and the rate table all
+  // key on ZIP, and some loads never reach a carrier API that would resolve them.
+  const advisedShipment = await ensureZipsAndStateInQuoteRequest(aiResult.shipment);
 
   await db.query(
     `UPDATE public.email_quote_requests
@@ -354,11 +435,21 @@ export async function rateEmailQuoteRequest(
     [id, JSON.stringify(advisedShipment)]
   );
 
-  const unified = await getUnifiedQuotes(advisedShipment, {
-    includeDat: false,
-    applyDefaultMargin: false
+  const rateRule = pricingModeFor(advisedShipment) === 'expedite'
+    ? await findExpediteRateRule(advisedShipment)
+    : null;
+  const settings = await getPricingSettings();
+  const plan = buildPricingPlan(advisedShipment, {
+    hasRateTableRule: Boolean(rateRule),
+    expediteAllBeforeAward: settings.expediteAllBeforeAward
   });
-  const connectedCarrierQuotes = mapCarrierQuotes(unified);
+  const carriers = await connectedCarrierOptions(advisedShipment, plan);
+  const connectedCarrierQuotes = carriers.cached.concat(carriers.live);
+  const estimateOptions: CarrierQuoteOption[] = [];
+  if (rateRule) estimateOptions.push(await buildRateTableOption(advisedShipment, rateRule));
+  const history = await laneHistoryOption(advisedShipment);
+  if (history) estimateOptions.push(history);
+
   let datOptions: CarrierQuoteOption[];
   try {
     datOptions = await prepareDatRateViewOptions(id, advisedShipment);
@@ -375,16 +466,26 @@ export async function rateEmailQuoteRequest(
       error: 'DAT worker queue is unavailable. Connected carrier rates are still current.'
     }];
   }
-  const carrierQuotes = connectedCarrierQuotes.concat(datOptions);
+  // Extras (liftgate, residential, ...) and same/next-day urgency on estimates.
+  const extras = await loadQuoteExtras(advisedShipment);
+  const carrierQuotes = applyEstimateExtras(estimateOptions.concat(connectedCarrierQuotes, datOptions), extras);
+  await recordCarrierOptions(
+    id,
+    advisedShipment,
+    carrierQuotes.filter(function(option) { return option.key !== 'laneHistory' && !String(option.key).startsWith('dat'); })
+  );
   const defaultMarginPct = await getDefaultProfitMarginPct();
-  const recommendation = buildCarrierRecommendation(carrierQuotes, defaultMarginPct);
+  const recommendation = buildCarrierRecommendation(carrierQuotes, defaultMarginPct, settings.minMarginAmount);
+  const waitingForDat = !recommendation && plan.queueDat && isDatWorkerEnabled();
   const status = recommendation ? 'ready' : 'needs_review';
   const carrierErrors = connectedCarrierQuotes
     .filter(function(quote) { return !quote.available && quote.error; })
     .map(function(quote) { return `${quote.source}: ${quote.error}`; });
   const processingError = recommendation
     ? null
-    : carrierErrors.join(' ') || 'Forward Air and ExpediteAll did not return an available rate.';
+    : waitingForDat
+      ? WAITING_FOR_DAT_MESSAGE
+      : carrierErrors.concat(plan.reasons).join(' ') || 'No carrier, market, or rate-table price is available for this load.';
   const result = await db.query(
     `UPDATE public.email_quote_requests
      SET carrier_quotes = $2::jsonb,
@@ -431,6 +532,17 @@ export async function processEmailQuoteRequest(id: string): Promise<any> {
       parsedEmailToShipmentRequest(parsed),
       record.rows[0].raw_text
     );
+    // Extras named in the email (liftgate, residential…) so staff need not tick them.
+    const emailExtras = extrasFromEmailText(record.rows[0].raw_text);
+    if (emailExtras.length) {
+      // Keep the parser's other codes; drop any it found for a category the
+      // text match covers more precisely, so nothing is charged twice.
+      const category = function(code: string) { return String(code).replace(/_(PICKUP|DELIVERY)$/, '').slice(0, 5); };
+      const covered = emailExtras.map(category);
+      shipment.accessorialCodes = (shipment.accessorialCodes || [])
+        .filter(function(code) { return covered.indexOf(category(code)) === -1; })
+        .concat(emailExtras);
+    }
     const existingShipment = typeof record.rows[0].shipment_request === 'string'
       ? JSON.parse(record.rows[0].shipment_request)
       : record.rows[0].shipment_request || {};

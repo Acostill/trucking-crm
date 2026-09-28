@@ -34,6 +34,8 @@ export default function ShipmentDetailsModal({ shipment, onClose, onSave }) {
   const [customer, setCustomer] = useState('');
   const [type, setType] = useState('');
   const [rate, setRate] = useState('');
+  const [carrierPay, setCarrierPay] = useState('');
+  const [carrierName, setCarrierName] = useState('');
   const [equipmentType, setEquipmentType] = useState('');
   const [shipper, setShipper] = useState('');
   const [shipperLocation, setShipperLocation] = useState('');
@@ -54,6 +56,8 @@ export default function ShipmentDetailsModal({ shipment, onClose, onSave }) {
     setCustomer(shipment.customer || '');
     setType(shipment.type || '');
     setRate(shipment.rate != null ? String(shipment.rate) : '');
+    setCarrierPay(shipment.carrierPay != null ? String(shipment.carrierPay) : '');
+    setCarrierName(shipment.carrierName || '');
     setEquipmentType(shipment.equipmentType || '');
     setShipper(shipment.shipper || '');
     setShipperLocation(shipment.shipperLocation || '');
@@ -81,6 +85,8 @@ export default function ShipmentDetailsModal({ shipment, onClose, onSave }) {
         customer,
         type,
         rate: rate === '' ? null : Number(rate),
+        carrierPay: carrierPay === '' ? null : Number(carrierPay),
+        carrierName: carrierName.trim() || null,
         equipmentType,
         shipper,
         shipperLocation,
@@ -92,7 +98,15 @@ export default function ShipmentDetailsModal({ shipment, onClose, onSave }) {
       setSaved(true);
       setDirty(false);
     } catch (err) {
-      setError(err && err.message ? err.message : 'Failed to save changes');
+      // The API answers with {"error": "..."}; show the sentence, not the JSON.
+      let message = err && err.message ? err.message : 'Failed to save changes';
+      try {
+        const parsed = JSON.parse(message);
+        if (parsed && parsed.error) message = parsed.error;
+      } catch (_parseError) {
+        // Plain-text message; show as is.
+      }
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -215,13 +229,44 @@ export default function ShipmentDetailsModal({ shipment, onClose, onSave }) {
                   />
                 </label>
                 <label>
-                  Rate
+                  Sell rate (customer)
                   <input
                     type="number"
                     step="0.01"
                     value={rate}
                     onChange={(e) => {
                       setRate(e.target.value);
+                      setSaved(false);
+                      setDirty(true);
+                    }}
+                  />
+                </label>
+                <label>
+                  Carrier pay (buy rate)
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Required before In Transit"
+                    value={carrierPay}
+                    onChange={(e) => {
+                      setCarrierPay(e.target.value);
+                      setSaved(false);
+                      setDirty(true);
+                    }}
+                  />
+                  {rate !== '' && carrierPay !== '' && Number(rate) > 0 && (
+                    <small>
+                      Margin ${(Number(rate) - Number(carrierPay)).toFixed(2)} ({(((Number(rate) - Number(carrierPay)) / Number(rate)) * 100).toFixed(1)}%)
+                    </small>
+                  )}
+                </label>
+                <label>
+                  Carrier
+                  <input
+                    value={carrierName}
+                    placeholder="Carrier or driver name"
+                    onChange={(e) => {
+                      setCarrierName(e.target.value);
                       setSaved(false);
                       setDirty(true);
                     }}
