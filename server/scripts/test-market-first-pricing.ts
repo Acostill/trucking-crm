@@ -6,7 +6,7 @@ import { buildCarrierRecommendation, clientPriceFor, isPriceableOption } from '.
 import { applyEstimateExtras, computeQuoteExtras } from '../services/quoteExtras';
 import { extrasFromEmailText } from '../services/emailExtras';
 import { normalizedDate } from '../services/emailQuoteWorkflow';
-import { priceConfidence } from '../services/carrierQuoteOptions';
+import { buyRangeFor, priceConfidence, transitEstimate } from '../services/carrierQuoteOptions';
 import {
   buildDatRateViewRequest,
   mapDatRateViewResult,
@@ -201,6 +201,22 @@ assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', ava
 assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', available: true, cost: 700, truckType: 'Cargo Van' }).confidence, 'medium');
 assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', available: true, cost: 700, truckType: 'Box Truck', laneSamples: 3 }).confidence, 'high');
 assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', available: true, cost: 700, truckType: 'Cargo Van', laneSamples: 5, urgencyAmount: 300 }).confidence, 'low');
+
+// Transit: ~50 mph, ~500 mi/day solo, ~1,000 mi/day with a team.
+assert.strictEqual(transitEstimate(245)!.label, 'Same day, about 5 hr of driving');
+assert.strictEqual(transitEstimate(754)!.label, '2 days solo, 1 day with a team driver');
+assert.strictEqual(transitEstimate(2800)!.soloDays, 6);
+
+// Cover ranges: DAT's own range, a firm carrier ceiling, or a confidence band.
+assert.deepStrictEqual(buyRangeFor({ key: 'rateTable', source: 'Rate table', available: true, cost: 1000 }, 'low'), { low: 850, high: 1150, basis: 'estimate' });
+assert.deepStrictEqual(buyRangeFor({ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 600 }, 'high'), { low: 570, high: 600, basis: 'carrier' });
+assert.deepStrictEqual(buyRangeFor({ key: 'datSpot', source: 'DAT', available: true, cost: 2100, marketAverage: 2000, marketLow: 1800, marketHigh: 2300 }, 'high'), { low: 1890, high: 2415, basis: 'dat' });
+
+// The top of the cover range never eats into the minimum profit.
+const capped = buildCarrierRecommendation([{ key: 'rateTable', source: 'Rate table', available: true, selectable: true, benchmark: true, cost: 1072.14, truckType: 'Straight Truck' }], 10, 150)!;
+assert.strictEqual(capped.suggestedClientPrice, 1222.14);
+assert.strictEqual(capped.buyRange!.high, 1072.14);
+assert.strictEqual(capped.buyRange!.low, 911.32);
 
 // Plain carrier options stay priceable; unavailable ones do not.
 assert.strictEqual(isPriceableOption({ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 400 }), true);

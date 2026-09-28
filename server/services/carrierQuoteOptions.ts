@@ -56,7 +56,34 @@ export interface CarrierQuoteOption {
   extrasTotal?: number;
   urgencyAmount?: number;
   extrasNote?: string;
+  transitEstimate?: TransitEstimate;
   note?: string;
+}
+
+export interface TransitEstimate {
+  hours: number;
+  soloDays: number;
+  teamDays: number;
+  label: string;
+}
+
+// Solo drivers average ~50 mph including stops and can legally drive about
+// 10 hours a day (~500 miles); team drivers run close to around the clock.
+const SOLO_MILES_PER_DAY = 500;
+const TEAM_MILES_PER_DAY = 1000;
+const AVERAGE_MPH = 50;
+
+export function transitEstimate(miles: number): TransitEstimate | null {
+  if (!(miles > 0)) return null;
+  const hours = Math.max(1, Math.round(miles / AVERAGE_MPH));
+  const soloDays = Math.max(1, Math.ceil(miles / SOLO_MILES_PER_DAY));
+  const teamDays = Math.max(1, Math.ceil(miles / TEAM_MILES_PER_DAY));
+  const label = hours <= 10
+    ? `Same day, about ${hours} hr of driving`
+    : soloDays === teamDays
+      ? `${soloDays} day${soloDays === 1 ? '' : 's'}`
+      : `${soloDays} days solo, ${teamDays} day${teamDays === 1 ? '' : 's'} with a team driver`;
+  return { hours, soloDays, teamDays, label };
 }
 
 /**
@@ -82,6 +109,9 @@ export interface CarrierRecommendation {
   suggestedClientPrice: number;
   // Trip miles behind the buy rate, when known, for rate-per-mile display.
   miles?: number;
+  // What to pay the carrier: aim for the low end, never above the high end.
+  buyRange?: { low: number; high: number; basis: 'dat' | 'carrier' | 'estimate' };
+  transit?: TransitEstimate;
   reason: string;
   // One word staff act on: high = send it, medium = glance at it,
   // low = check with a carrier before sending.
@@ -148,18 +178,52 @@ export function buildCarrierRecommendation(
     available.find(function(option) { return option.key === 'rateTable'; }) ||
     available[0];
   const carrierCost = Number(recommended.cost);
+  const suggestedClientPrice = clientPriceFor(carrierCost, defaultMarginPct, minMarginAmount);
+  // Never pay more than the sell rate minus the minimum profit per load.
+  const range = buyRangeFor(recommended, priceConfidence(recommended).confidence);
+  const maxBuy = Number((suggestedClientPrice - (minMarginAmount || 0)).toFixed(2));
+  const buyRange = { ...range, high: Math.max(carrierCost, Math.min(range.high, maxBuy)) };
   return {
     carrierKey: recommended.key,
     carrierSource: recommended.source,
     carrierCost,
     defaultMarginPct,
     ...(minMarginAmount ? { minMarginAmount } : {}),
-    suggestedClientPrice: clientPriceFor(carrierCost, defaultMarginPct, minMarginAmount),
+    suggestedClientPrice,
     ...(Number(recommended.miles) > 0 ? { miles: Number(recommended.miles) } : {}),
+    buyRange,
+    ...(recommended.transitEstimate || transitEstimate(Number(recommended.miles))
+      ? { transit: recommended.transitEstimate || transitEstimate(Number(recommended.miles))! }
+      : {}),
     reason: recommendationReason(recommended, available.length),
     confidence: priceConfidence(recommended).confidence,
     confidenceReason: priceConfidence(recommended).reason
   };
+}
+
+const ESTIMATE_RANGE: Record<PriceConfidence, number> = { high: 0.05, medium: 0.10, low: 0.15 };
+
+/**
+ * A cover range like other broker tools show. DAT gives its own low/high for
+ * the lane; a firm carrier price is the ceiling; estimates get a band that
+ * widens as confidence drops.
+ */
+export function buyRangeFor(
+  option: CarrierQuoteOption,
+  confidence: PriceConfidence
+): { low: number; high: number; basis: 'dat' | 'carrier' | 'estimate' } {
+  const cost = Number(option.cost);
+  const round = function(value: number) { return Number(value.toFixed(2)); };
+  if (option.key === 'datSpot' && Number(option.marketLow) > 0 && Number(option.marketHigh) > 0 && Number(option.marketAverage) > 0) {
+    // Scale DAT's range to the all-in cost (extras and urgency included).
+    const average = Number(option.marketAverage);
+    return { low: round(cost * Number(option.marketLow) / average), high: round(cost * Number(option.marketHigh) / average), basis: 'dat' };
+  }
+  if (option.key === 'manualQuote' || option.key === 'expediteAll' || option.key === 'forwardAir') {
+    return { low: round(cost * 0.95), high: round(cost), basis: 'carrier' };
+  }
+  const width = ESTIMATE_RANGE[confidence];
+  return { low: round(cost * (1 - width)), high: round(cost * (1 + width)), basis: 'estimate' };
 }
 
 function recommendationReason(option: CarrierQuoteOption, count: number): string {

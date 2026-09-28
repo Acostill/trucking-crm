@@ -1,6 +1,6 @@
 import db from '../db';
 import { UnifiedQuoteRequest } from '../types/quote';
-import { CarrierQuoteOption } from './carrierQuoteOptions';
+import { CarrierQuoteOption, transitEstimate } from './carrierQuoteOptions';
 import { getPricingSettings, PricingSettings } from './pricingSettings';
 
 /**
@@ -150,7 +150,8 @@ export function applyEstimateExtras(options: CarrierQuoteOption[], extras: Quote
       cost: Number((baseCost + extrasTotal + urgencyAmount).toFixed(2)),
       extrasTotal: extrasTotal || undefined,
       urgencyAmount: urgencyAmount || undefined,
-      extrasNote: parts.length ? parts.join(' · ') : undefined
+      extrasNote: parts.length ? parts.join(' · ') : undefined,
+      ...(transitEstimate(Number(option.miles)) ? { transitEstimate: transitEstimate(Number(option.miles))! } : {})
     };
   });
 }

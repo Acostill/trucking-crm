@@ -1275,6 +1275,7 @@
 .eq-suggested strong { font-size: 22px; }
 .eq-suggested span { font-size: 12px; color: #475569; }
 .eq-suggested .eq-confidence-note { grid-column: 1 / -1; }
+.eq-suggested strong.eq-range { font-size: 17px; }
 .eq-suggested em { font-style: normal; font-weight: 700; font-size: 13px; }
 .eq-confidence-high { border-left-color: #15803d; background: #f0fdf4; }
 .eq-confidence-high em { color: #15803d; }

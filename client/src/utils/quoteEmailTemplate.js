@@ -87,9 +87,12 @@ export function buildQuoteEmailHtml({ quote, note, validUntil, recipientName, re
   const validity = formatDate(validUntil, 'To be confirmed');
   const quoteReference = (quote && quote.quoteId) || 'Reference pending';
   const issued = formatDate(quote && quote.pricedAt, 'Date pending');
+  // Carrier-quoted transit first; otherwise the mileage-based estimate.
   const transit = carrier && positiveNumber(carrier.transitTime)
     ? carrier.transitTime + ' business day' + (Number(carrier.transitTime) === 1 ? '' : 's')
-    : 'Confirm with dispatch';
+    : carrier && carrier.transitEstimate && carrier.transitEstimate.label
+      ? carrier.transitEstimate.label
+      : 'Confirm with dispatch';
   const pieces = shipment.pieces || {};
   const weight = shipment.weight || {};
   const service = carrier && carrier.truckType;

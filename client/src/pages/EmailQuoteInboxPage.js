@@ -1803,6 +1803,27 @@ export default function EmailQuoteInboxPage() {
                               + marginOfSell(selected.recommendation.carrierCost, selected.recommendation.suggestedClientPrice).toFixed(1) + '% margin'}
                           </span>
                         </div>
+                        {selected.recommendation.buyRange && (
+                          <div>
+                            <small>Cover range (pay the carrier)</small>
+                            <strong className="eq-range">{formatMoney(selected.recommendation.buyRange.low)} – {formatMoney(selected.recommendation.buyRange.high)}</strong>
+                            <span>
+                              {selected.recommendation.buyRange.basis === 'dat'
+                                ? 'DAT low to high for this lane · '
+                                : selected.recommendation.buyRange.basis === 'carrier'
+                                  ? 'Carrier price is the ceiling · '
+                                  : 'Aim low, never above the top · '}
+                              {formatMoney(selected.recommendation.suggestedClientPrice - selected.recommendation.buyRange.high)} profit at the top
+                            </span>
+                          </div>
+                        )}
+                        {selected.recommendation.transit && (
+                          <div>
+                            <small>Estimated transit</small>
+                            <strong className="eq-range">{selected.recommendation.transit.soloDays === 1 && selected.recommendation.transit.hours <= 10 ? 'Same day' : selected.recommendation.transit.soloDays + (selected.recommendation.transit.soloDays === 1 ? ' day' : ' days')}</strong>
+                            <span>{selected.recommendation.transit.label}</span>
+                          </div>
+                        )}
                         <div className="eq-confidence-note">
                           <em>{selected.recommendation.confidence === 'high' ? 'High confidence' : selected.recommendation.confidence === 'medium' ? 'Medium confidence' : 'Low confidence'}</em>
                           <span>
