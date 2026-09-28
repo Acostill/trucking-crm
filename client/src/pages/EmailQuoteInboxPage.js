@@ -230,6 +230,16 @@ function isPriceableOption(option) {
   return option.selectable !== false && option.benchmark !== true;
 }
 
+// Brokers quote margin as a share of the sell rate: sell = buy / (1 - margin).
+function sellFromMargin(cost, marginPct) {
+  const margin = Math.min(Math.max(Number(marginPct) || 0, 0), 90) / 100;
+  return Number(cost) / (1 - margin);
+}
+
+function marginOfSell(cost, sell) {
+  return Number(sell) > 0 ? ((Number(sell) - Number(cost)) / Number(sell)) * 100 : 0;
+}
+
 function daysAgo(value) {
   const time = new Date(value).getTime();
   if (!Number.isFinite(time)) return null;
@@ -893,7 +903,7 @@ export default function EmailQuoteInboxPage() {
         ? detail.recommendation.suggestedClientPrice
         : null;
     const calculatedPrice = carrier && carrier.cost != null
-      ? Number(carrier.cost) * (1 + Number(recommendedMargin || 0) / 100)
+      ? sellFromMargin(carrier.cost, recommendedMargin)
       : '';
     setClientPrice(
       storedPrice != null
@@ -907,7 +917,7 @@ export default function EmailQuoteInboxPage() {
     // The suggested price may include the minimum-profit floor, so show the
     // margin it actually represents rather than the default percentage.
     if (storedPrice == null && suggestedPrice != null && carrier && Number(carrier.cost) > 0) {
-      setMarginPct(String(Number((((Number(suggestedPrice) - Number(carrier.cost)) / Number(carrier.cost)) * 100).toFixed(2))));
+      setMarginPct(String(Number(marginOfSell(carrier.cost, suggestedPrice).toFixed(2))));
     }
     const forwarded = extractForwardedContacts(detail && detail.rawText);
     setEmailTo(
@@ -1098,17 +1108,17 @@ export default function EmailQuoteInboxPage() {
           ? Number(selected.recommendation.defaultMarginPct)
           : Number(marginPct || 0);
     // Margin % or the minimum profit per load, whichever is higher.
-    const byPct = Number(option.cost) * (1 + defaultMargin / 100);
+    const byPct = sellFromMargin(option.cost, defaultMargin);
     const price = Math.max(byPct, Number(option.cost) + Number(pricingSettings.minMarginAmount || 0));
     setClientPrice(String(Number(price.toFixed(2))));
-    setMarginPct(String(Number((((price - Number(option.cost)) / Number(option.cost)) * 100).toFixed(2))));
+    setMarginPct(String(Number(marginOfSell(option.cost, price).toFixed(2))));
     setNotice('');
   }
 
   function changeMargin(value) {
     setMarginPct(value);
     if (selectedCarrier && selectedCarrier.cost != null && value !== '') {
-      const price = Number(selectedCarrier.cost) * (1 + Number(value || 0) / 100);
+      const price = sellFromMargin(selectedCarrier.cost, value);
       setClientPrice(String(Number(price.toFixed(2))));
     }
     setNotice('');
@@ -1117,7 +1127,7 @@ export default function EmailQuoteInboxPage() {
   function changeClientPrice(value) {
     setClientPrice(value);
     if (selectedCarrier && selectedCarrier.cost && value !== '') {
-      const calculated = ((Number(value) - Number(selectedCarrier.cost)) / Number(selectedCarrier.cost)) * 100;
+      const calculated = marginOfSell(selectedCarrier.cost, value);
       setMarginPct(Number.isFinite(calculated) ? String(Number(calculated.toFixed(2))) : '');
     }
     setNotice('');
@@ -1775,12 +1785,23 @@ export default function EmailQuoteInboxPage() {
                         <div>
                           <small>Suggested buy rate</small>
                           <strong>{formatMoney(selected.recommendation.carrierCost)}</strong>
-                          <span>{selected.recommendation.carrierSource}</span>
+                          <span>
+                            {selected.recommendation.miles
+                              ? formatMoney(selected.recommendation.carrierCost / selected.recommendation.miles) + '/mi · ' + Number(selected.recommendation.miles).toLocaleString() + ' mi · '
+                              : ''}
+                            {selected.recommendation.carrierSource}
+                          </span>
                         </div>
                         <div>
                           <small>Suggested sell rate</small>
                           <strong>{formatMoney(selected.recommendation.suggestedClientPrice)}</strong>
-                          <span>{Number(selected.recommendation.defaultMarginPct || 0)}% margin{selected.recommendation.minMarginAmount ? ' (min ' + formatMoney(selected.recommendation.minMarginAmount) + ' profit)' : ''}</span>
+                          <span>
+                            {selected.recommendation.miles
+                              ? formatMoney(selected.recommendation.suggestedClientPrice / selected.recommendation.miles) + '/mi · '
+                              : ''}
+                            {formatMoney(selected.recommendation.suggestedClientPrice - selected.recommendation.carrierCost) + ' profit · '
+                              + marginOfSell(selected.recommendation.carrierCost, selected.recommendation.suggestedClientPrice).toFixed(1) + '% margin'}
+                          </span>
                         </div>
                         <div className="eq-confidence-note">
                           <em>{selected.recommendation.confidence === 'high' ? 'High confidence' : selected.recommendation.confidence === 'medium' ? 'Medium confidence' : 'Low confidence'}</em>

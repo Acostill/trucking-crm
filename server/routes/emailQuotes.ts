@@ -505,7 +505,8 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
     const inputClientPrice = numericValue(req.body && req.body.clientPrice);
     let clientPrice = inputClientPrice;
     if (clientPrice == null && inputMarginPct != null) {
-      clientPrice = Number((carrierCost * (1 + inputMarginPct / 100)).toFixed(2));
+      // Margin is a share of the sell rate, as brokers quote it.
+      clientPrice = Number((carrierCost / (1 - Math.min(Math.max(inputMarginPct, 0), 90) / 100)).toFixed(2));
     }
     if (clientPrice == null) {
       res.status(400).json({ error: 'Enter a margin or client price' });
@@ -516,8 +517,8 @@ router.put('/:id/pricing', async function(req: Request, res: Response, next: Nex
       return;
     }
     const marginAmount = Number((clientPrice - carrierCost).toFixed(2));
-    const marginPct = carrierCost > 0
-      ? Number(((marginAmount / carrierCost) * 100).toFixed(4))
+    const marginPct = clientPrice > 0
+      ? Number(((marginAmount / clientPrice) * 100).toFixed(4))
       : 0;
     const staffNotes = req.body && req.body.staffNotes
       ? String(req.body.staffNotes).slice(0, 4000)

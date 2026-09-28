@@ -112,7 +112,8 @@ const recommendation = buildCarrierRecommendation([
 ], 15);
 assert(recommendation);
 assert.strictEqual(recommendation!.carrierKey, 'datSpot');
-assert.strictEqual(recommendation!.suggestedClientPrice, 2415);
+// 15% margin of the sell rate: $2,100 / 0.85.
+assert.strictEqual(recommendation!.suggestedClientPrice, 2470.59);
 
 // For expedite, a live ExpediteAll price leads over the rate table.
 const vanRecommendation = buildCarrierRecommendation([
@@ -129,9 +130,11 @@ const manualRecommendation = buildCarrierRecommendation([
 ], 10);
 assert.strictEqual(manualRecommendation!.carrierKey, 'manualQuote');
 
-// Minimum profit per load: 10% of $350 is $35, so the $150 floor wins.
+// Margin is a share of the sell rate: 10% on a $900 buy is a $1,000 sell.
+assert.strictEqual(clientPriceFor(900, 10, 0), 1000);
+// Minimum profit per load: 10% margin on $350 is ~$39, so the $150 floor wins.
 assert.strictEqual(clientPriceFor(350, 10, 150), 500);
-assert.strictEqual(clientPriceFor(3000, 10, 150), 3300);
+assert.strictEqual(clientPriceFor(3000, 10, 150), 3333.33);
 assert.strictEqual(buildCarrierRecommendation([{ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 350 }], 10, 150)!.suggestedClientPrice, 500);
 
 // Extras and urgency on estimates only.

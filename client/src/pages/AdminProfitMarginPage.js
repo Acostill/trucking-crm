@@ -128,7 +128,7 @@ export default function AdminProfitMarginPage() {
           ) : (
             <div className="profit-margin-card">
               <div className="profit-margin-row">
-                <label htmlFor="profitMarginPct">Profit Margin %</label>
+                <label htmlFor="profitMarginPct">Default margin % (share of the sell rate)</label>
                 <input
                   id="profitMarginPct"
                   type="number"

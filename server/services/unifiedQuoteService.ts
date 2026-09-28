@@ -81,8 +81,9 @@ export async function getDefaultProfitMarginPct(): Promise<number> {
 
 function applyProfitMargin(total: number | undefined, marginPct: number): number | undefined {
   if (typeof total !== 'number' || Number.isNaN(total)) return total;
-  const multiplier = 1 + marginPct / 100;
-  return Number.isFinite(multiplier) ? total * multiplier : total;
+  // Margin as a share of the sell price (sell = cost / (1 - margin)).
+  const margin = Math.min(Math.max(marginPct, 0), 90) / 100;
+  return total / (1 - margin);
 }
 
 /**

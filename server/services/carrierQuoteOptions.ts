@@ -80,6 +80,8 @@ export interface CarrierRecommendation {
   defaultMarginPct: number;
   minMarginAmount?: number;
   suggestedClientPrice: number;
+  // Trip miles behind the buy rate, when known, for rate-per-mile display.
+  miles?: number;
   reason: string;
   // One word staff act on: high = send it, medium = glance at it,
   // low = check with a carrier before sending.
@@ -116,9 +118,14 @@ export function priceConfidence(option: CarrierQuoteOption): { confidence: Price
   return { confidence: 'medium', reason: 'Estimated price' };
 }
 
-/** Margin % or the minimum profit per load, whichever gives the higher price. */
+/**
+ * Broker margin is a share of the sell rate (sell = buy / (1 - margin)),
+ * not a markup on the buy rate: a 10% margin on a $900 truck is $1,000.
+ * The minimum profit per load wins when it gives the higher price.
+ */
 export function clientPriceFor(cost: number, marginPct: number, minMarginAmount = 0): number {
-  const byPct = cost * (1 + marginPct / 100);
+  const margin = Math.min(Math.max(marginPct, 0), 90) / 100;
+  const byPct = cost / (1 - margin);
   return Number(Math.max(byPct, cost + (minMarginAmount || 0)).toFixed(2));
 }
 
@@ -148,6 +155,7 @@ export function buildCarrierRecommendation(
     defaultMarginPct,
     ...(minMarginAmount ? { minMarginAmount } : {}),
     suggestedClientPrice: clientPriceFor(carrierCost, defaultMarginPct, minMarginAmount),
+    ...(Number(recommended.miles) > 0 ? { miles: Number(recommended.miles) } : {}),
     reason: recommendationReason(recommended, available.length),
     confidence: priceConfidence(recommended).confidence,
     confidenceReason: priceConfidence(recommended).reason
