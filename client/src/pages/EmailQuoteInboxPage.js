@@ -904,6 +904,11 @@ export default function EmailQuoteInboxPage() {
             ? String(Number(calculatedPrice.toFixed(2)))
             : ''
     );
+    // The suggested price may include the minimum-profit floor, so show the
+    // margin it actually represents rather than the default percentage.
+    if (storedPrice == null && suggestedPrice != null && carrier && Number(carrier.cost) > 0) {
+      setMarginPct(String(Number((((Number(suggestedPrice) - Number(carrier.cost)) / Number(carrier.cost)) * 100).toFixed(2))));
+    }
     const forwarded = extractForwardedContacts(detail && detail.rawText);
     setEmailTo(
       (detail && detail.quoteSentTo) ||
@@ -1475,7 +1480,10 @@ export default function EmailQuoteInboxPage() {
     (datLoadsOption && datLoadsOption.status === 'disabled');
   const expediteAllOption = carrierQuotes.find(function(option) { return option.key === 'expediteAll' && option.available; });
   const expediteAllCost = expediteAllOption ? Number(expediteAllOption.cost) : null;
-  const forwardAirHint = selected && selected.pricingMode !== 'truckload' &&
+  // Only small loads could realistically go LTL; skip the hint otherwise.
+  const smallLoad = Number(shipment && shipment.pieces && shipment.pieces.quantity || 0) <= 6 &&
+    Number(shipment && shipment.weight && shipment.weight.value || 0) <= 5000;
+  const forwardAirHint = selected && selected.pricingMode !== 'truckload' && smallLoad &&
     carrierQuotes.length > 0 &&
     !carrierQuotes.some(function(option) { return option.key === 'forwardAir'; }) &&
     !(shipment && shipment.forwardAirFreightClass);
@@ -1787,9 +1795,13 @@ export default function EmailQuoteInboxPage() {
                         </div>
                       </div>
                     )}
-                    {carrierCostOptions.length > 1 && (
+                    {carrierCostOptions.length > 0 && selected.recommendation && selected.recommendation.confidence && (
                       <button type="button" className="eq-link-button" onClick={function() { setShowAllPrices(!showAllPrices); }}>
-                        {showAllPrices ? 'Hide other prices' : 'Show all prices (' + carrierCostOptions.length + ')'}
+                        {showAllPrices
+                          ? 'Hide price details'
+                          : carrierCostOptions.length > 1
+                            ? 'Show all prices and details (' + carrierCostOptions.length + ')'
+                            : 'Show price details (miles, fuel, extras)'}
                       </button>
                     )}
                     {carrierCostOptions.length ? (

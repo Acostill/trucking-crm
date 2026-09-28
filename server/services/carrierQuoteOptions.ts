@@ -103,7 +103,7 @@ export function priceConfidence(option: CarrierQuoteOption): { confidence: Price
   if (option.key === 'rateTable') {
     const vehicle = String(option.truckType || '').replace(/^Reefer\s+/i, '');
     if (option.urgencyAmount) {
-      return { confidence: 'low', reason: 'Same-day or next-day: check truck availability with a carrier' };
+      return { confidence: 'low', reason: 'Same-day or next-day pickup, so truck availability is not confirmed' };
     }
     if (option.laneSamples && option.laneSamples >= 2) {
       return { confidence: 'high', reason: `Based on ${option.laneSamples} real prices on this lane` };
@@ -111,7 +111,7 @@ export function priceConfidence(option: CarrierQuoteOption): { confidence: Price
     if (vehicle === 'Cargo Van') {
       return { confidence: 'medium', reason: 'Van rate built from past ExpediteAll prices; no history on this lane yet' };
     }
-    return { confidence: 'low', reason: `No real ${vehicle.toLowerCase() || 'truck'} prices on this lane yet: check with a carrier` };
+    return { confidence: 'low', reason: `No real ${vehicle.toLowerCase() || 'truck'} prices on this lane yet` };
   }
   return { confidence: 'medium', reason: 'Estimated price' };
 }
