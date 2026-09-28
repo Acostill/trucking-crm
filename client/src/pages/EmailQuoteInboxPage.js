@@ -816,6 +816,7 @@ export default function EmailQuoteInboxPage() {
   const [truckCost, setTruckCost] = useState('');
   const [truckCarrierName, setTruckCarrierName] = useState('');
   const [requestingCoverRate, setRequestingCoverRate] = useState(false);
+  const [showAllPrices, setShowAllPrices] = useState(false);
   const [pricingSettings, setPricingSettings] = useState({ minMarginAmount: 0, trialMode: false });
   const pricingSettingsRef = useRef(pricingSettings);
   const [manualCarrier, setManualCarrier] = useState('');
@@ -1761,8 +1762,38 @@ export default function EmailQuoteInboxPage() {
                         </span>
                       )}
                     </div>
+                    {selected.recommendation && selected.recommendation.confidence && !(pricingSettings.trialMode && !(selected.selection && selected.selection.carrierKey)) && (
+                      <div className={'eq-suggested eq-confidence-' + selected.recommendation.confidence}>
+                        <div>
+                          <small>Suggested buy rate</small>
+                          <strong>{formatMoney(selected.recommendation.carrierCost)}</strong>
+                          <span>{selected.recommendation.carrierSource}</span>
+                        </div>
+                        <div>
+                          <small>Suggested sell rate</small>
+                          <strong>{formatMoney(selected.recommendation.suggestedClientPrice)}</strong>
+                          <span>{Number(selected.recommendation.defaultMarginPct || 0)}% margin{selected.recommendation.minMarginAmount ? ' (min ' + formatMoney(selected.recommendation.minMarginAmount) + ' profit)' : ''}</span>
+                        </div>
+                        <div className="eq-confidence-note">
+                          <em>{selected.recommendation.confidence === 'high' ? 'High confidence' : selected.recommendation.confidence === 'medium' ? 'Medium confidence' : 'Low confidence'}</em>
+                          <span>
+                            {selected.recommendation.confidence === 'high'
+                              ? 'Ready to send.'
+                              : selected.recommendation.confidence === 'medium'
+                                ? 'Give it a quick look before sending.'
+                                : 'Check with a carrier before sending, then use Add carrier price.'}
+                            {' '}{selected.recommendation.confidenceReason}.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {carrierCostOptions.length > 1 && (
+                      <button type="button" className="eq-link-button" onClick={function() { setShowAllPrices(!showAllPrices); }}>
+                        {showAllPrices ? 'Hide other prices' : 'Show all prices (' + carrierCostOptions.length + ')'}
+                      </button>
+                    )}
                     {carrierCostOptions.length ? (
-                      <div className="eq-carrier-grid">
+                      <div className="eq-carrier-grid" hidden={Boolean(selected.recommendation && selected.recommendation.confidence) && !showAllPrices}>
                         {carrierCostOptions.map(function(option) {
                           const active = carrierKey === option.key && isPriceableOption(option);
                           const benchmark = option.benchmark === true;

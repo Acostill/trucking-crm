@@ -34,6 +34,7 @@ import {
 } from './laneHistory';
 import { assignTruckType } from './truckAssignment';
 import { adviseShipmentWithOpenAI } from './shipmentAIAdvisor';
+import { extrasFromEmailText } from './emailExtras';
 import {
   dimensionToInches,
   normalizeAirportLocation,
@@ -54,10 +55,28 @@ function finiteNumber(value: any): number | undefined {
   return Number.isFinite(number) && number > 0 ? number : undefined;
 }
 
-function normalizedDate(value: any): string | undefined {
+// Emails say "September 30" or "8/3" without a year. JavaScript reads those
+// as 2001, which made every such quote look like a past pickup date.
+const YEAR_PATTERN = /\b(19|20)\d{2}\b/;
+const YEARLESS_ROLLOVER_DAYS = 60;
+
+export function normalizedDate(value: any, now: Date = new Date()): string | undefined {
   if (!value) return undefined;
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? String(value) : date.toISOString();
+  const text = String(value).trim();
+  if (!text) return undefined;
+  if (!YEAR_PATTERN.test(text)) {
+    const slash = text.match(/^(\d{1,2})[\/-](\d{1,2})$/);
+    const base = slash ? `${slash[1]}/${slash[2]}` : text;
+    const thisYear = new Date(`${base} ${now.getFullYear()} 12:00`);
+    if (!Number.isNaN(thisYear.getTime())) {
+      // A date well in the past most likely means next year ("Jan 5" sent in December).
+      const stale = now.getTime() - thisYear.getTime() > YEARLESS_ROLLOVER_DAYS * 86400000;
+      const date = stale ? new Date(`${base} ${now.getFullYear() + 1} 12:00`) : thisYear;
+      return date.toISOString();
+    }
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? text : date.toISOString();
 }
 
 function normalizeAccessorial(value: string): string {
@@ -513,6 +532,17 @@ export async function processEmailQuoteRequest(id: string): Promise<any> {
       parsedEmailToShipmentRequest(parsed),
       record.rows[0].raw_text
     );
+    // Extras named in the email (liftgate, residential…) so staff need not tick them.
+    const emailExtras = extrasFromEmailText(record.rows[0].raw_text);
+    if (emailExtras.length) {
+      // Keep the parser's other codes; drop any it found for a category the
+      // text match covers more precisely, so nothing is charged twice.
+      const category = function(code: string) { return String(code).replace(/_(PICKUP|DELIVERY)$/, '').slice(0, 5); };
+      const covered = emailExtras.map(category);
+      shipment.accessorialCodes = (shipment.accessorialCodes || [])
+        .filter(function(code) { return covered.indexOf(category(code)) === -1; })
+        .concat(emailExtras);
+    }
     const existingShipment = typeof record.rows[0].shipment_request === 'string'
       ? JSON.parse(record.rows[0].shipment_request)
       : record.rows[0].shipment_request || {};

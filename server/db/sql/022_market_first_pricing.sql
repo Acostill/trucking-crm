@@ -77,9 +77,10 @@ ALTER TABLE public.pricing_settings
   -- Added to rate-table and DAT truck costs when pickup is today / tomorrow.
   ADD COLUMN IF NOT EXISTS same_day_premium_pct NUMERIC(5,2) NOT NULL DEFAULT 50,
   ADD COLUMN IF NOT EXISTS next_day_premium_pct NUMERIC(5,2) NOT NULL DEFAULT 15,
-  -- Trial run: staff price as usual; the system's suggestion is recorded
-  -- next to theirs so the two can be compared before staff rely on it.
-  ADD COLUMN IF NOT EXISTS trial_mode BOOLEAN NOT NULL DEFAULT TRUE;
+  -- Optional trial run: hides the suggested price so staff price blind. Off
+  -- by default: the suggestion is always recorded next to the sent price, so
+  -- the comparison works without making staff do extra work.
+  ADD COLUMN IF NOT EXISTS trial_mode BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- What carriers charge First Class for extras, added to estimated truck
 -- costs (live carrier APIs price their own extras).

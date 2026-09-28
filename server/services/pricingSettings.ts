@@ -14,7 +14,7 @@ const DEFAULTS: PricingSettings = {
   minMarginAmount: 150,
   sameDayPremiumPct: 50,
   nextDayPremiumPct: 15,
-  trialMode: true,
+  trialMode: false,
   updatedAt: null
 };
 

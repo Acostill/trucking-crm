@@ -71,6 +71,8 @@ export function isPriceableOption(option: CarrierQuoteOption | null | undefined)
   return option.selectable !== false && option.benchmark !== true;
 }
 
+export type PriceConfidence = 'high' | 'medium' | 'low';
+
 export interface CarrierRecommendation {
   carrierKey: CarrierQuoteKey;
   carrierSource: string;
@@ -79,6 +81,39 @@ export interface CarrierRecommendation {
   minMarginAmount?: number;
   suggestedClientPrice: number;
   reason: string;
+  // One word staff act on: high = send it, medium = glance at it,
+  // low = check with a carrier before sending.
+  confidence: PriceConfidence;
+  confidenceReason: string;
+}
+
+/**
+ * How much to trust a suggested buy rate. Live carrier prices and DAT are
+ * real market numbers; the rate table is only as good as the real prices
+ * behind it on that lane and vehicle.
+ */
+export function priceConfidence(option: CarrierQuoteOption): { confidence: PriceConfidence; reason: string } {
+  if (option.key === 'manualQuote') return { confidence: 'high', reason: 'Price recorded from a carrier' };
+  if (option.key === 'expediteAll' || option.key === 'forwardAir') {
+    return option.fromCache
+      ? { confidence: 'medium', reason: `${option.source} price from a recent identical quote` }
+      : { confidence: 'high', reason: `Live ${option.source} price` };
+  }
+  if (option.key === 'datSpot') return { confidence: 'high', reason: 'DAT spot market for this lane this week' };
+  if (option.key === 'rateTable') {
+    const vehicle = String(option.truckType || '').replace(/^Reefer\s+/i, '');
+    if (option.urgencyAmount) {
+      return { confidence: 'low', reason: 'Same-day or next-day: check truck availability with a carrier' };
+    }
+    if (option.laneSamples && option.laneSamples >= 2) {
+      return { confidence: 'high', reason: `Based on ${option.laneSamples} real prices on this lane` };
+    }
+    if (vehicle === 'Cargo Van') {
+      return { confidence: 'medium', reason: 'Van rate built from past ExpediteAll prices; no history on this lane yet' };
+    }
+    return { confidence: 'low', reason: `No real ${vehicle.toLowerCase() || 'truck'} prices on this lane yet: check with a carrier` };
+  }
+  return { confidence: 'medium', reason: 'Estimated price' };
 }
 
 /** Margin % or the minimum profit per load, whichever gives the higher price. */
@@ -113,7 +148,9 @@ export function buildCarrierRecommendation(
     defaultMarginPct,
     ...(minMarginAmount ? { minMarginAmount } : {}),
     suggestedClientPrice: clientPriceFor(carrierCost, defaultMarginPct, minMarginAmount),
-    reason: recommendationReason(recommended, available.length)
+    reason: recommendationReason(recommended, available.length),
+    confidence: priceConfidence(recommended).confidence,
+    confidenceReason: priceConfidence(recommended).reason
   };
 }
 

@@ -1259,6 +1259,42 @@
   overflow-wrap: anywhere;
 }
 
+.eq-suggested {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px 20px;
+  border: 1px solid #cbd5e1;
+  border-left-width: 5px;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.eq-suggested > div { display: grid; gap: 2px; }
+.eq-suggested small { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; }
+.eq-suggested strong { font-size: 22px; }
+.eq-suggested span { font-size: 12px; color: #475569; }
+.eq-suggested .eq-confidence-note { grid-column: 1 / -1; }
+.eq-suggested em { font-style: normal; font-weight: 700; font-size: 13px; }
+.eq-confidence-high { border-left-color: #15803d; background: #f0fdf4; }
+.eq-confidence-high em { color: #15803d; }
+.eq-confidence-medium { border-left-color: #b45309; background: #fffbeb; }
+.eq-confidence-medium em { color: #b45309; }
+.eq-confidence-low { border-left-color: #b91c1c; background: #fef2f2; }
+.eq-confidence-low em { color: #b91c1c; }
+
+.eq-carrier-grid[hidden] { display: none; }
+
+.eq-link-button {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0 0 10px;
+  color: #1d4ed8;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .eq-trial-banner {
   border: 1px solid #bfdbfe;
   background: #eff6ff;

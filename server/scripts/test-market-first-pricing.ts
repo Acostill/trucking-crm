@@ -4,6 +4,9 @@ import { buildPricingPlan, pricingFingerprint, pricingModeFor } from '../service
 import { fuelAdjustment, priceFromRule } from '../services/expediteRateTable';
 import { buildCarrierRecommendation, clientPriceFor, isPriceableOption } from '../services/carrierQuoteOptions';
 import { applyEstimateExtras, computeQuoteExtras } from '../services/quoteExtras';
+import { extrasFromEmailText } from '../services/emailExtras';
+import { normalizedDate } from '../services/emailQuoteWorkflow';
+import { priceConfidence } from '../services/carrierQuoteOptions';
 import {
   buildDatRateViewRequest,
   mapDatRateViewResult,
@@ -176,6 +179,25 @@ assert.strictEqual(withExtras[0].cost, 1600);
 assert.strictEqual(withExtras[1].cost, 900);
 // Re-applying starts from the base cost, so it never stacks.
 assert.strictEqual(applyEstimateExtras(withExtras, extras)[0].cost, 1600);
+
+// Dates without a year use this year (or next year once well past).
+const sept27 = new Date('2026-09-27T15:00:00Z');
+assert.strictEqual(normalizedDate('September 30', sept27)!.slice(0, 10), '2026-09-30');
+assert.strictEqual(normalizedDate('10/1', sept27)!.slice(0, 10), '2026-10-01');
+assert.strictEqual(normalizedDate('January 5', new Date('2026-12-20T15:00:00Z'))!.slice(0, 10), '2027-01-05');
+assert.strictEqual(normalizedDate('2026-10-02T12:00:00.000Z', sept27), '2026-10-02T12:00:00.000Z');
+
+// Extras read from the email text; negations are ignored.
+assert.deepStrictEqual(extrasFromEmailText('Liftgate needed at delivery, receiver has no dock. Residential address.'), ['LIFTGATE_DELIVERY', 'RESIDENTIAL_DELIVERY']);
+assert.deepStrictEqual(extrasFromEmailText('Dock to dock, no liftgate needed.'), []);
+assert.deepStrictEqual(extrasFromEmailText('Need liftgate at pickup and an appointment for delivery'), ['LIFTGATE_PICKUP', 'APPOINTMENT']);
+
+// Confidence: one word staff act on.
+assert.strictEqual(priceConfidence({ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 600 }).confidence, 'high');
+assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', available: true, cost: 900, truckType: 'Straight Truck' }).confidence, 'low');
+assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', available: true, cost: 700, truckType: 'Cargo Van' }).confidence, 'medium');
+assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', available: true, cost: 700, truckType: 'Box Truck', laneSamples: 3 }).confidence, 'high');
+assert.strictEqual(priceConfidence({ key: 'rateTable', source: 'Rate table', available: true, cost: 700, truckType: 'Cargo Van', laneSamples: 5, urgencyAmount: 300 }).confidence, 'low');
 
 // Plain carrier options stay priceable; unavailable ones do not.
 assert.strictEqual(isPriceableOption({ key: 'expediteAll', source: 'ExpediteAll', available: true, cost: 400 }), true);
